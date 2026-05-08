@@ -1,0 +1,22 @@
+{
+    "name": "trianawms/shell-ckb",
+    "description": "TrianaWMS - Warehouse Management System for Shell CKB",
+    "type": "project",
+    "require": {
+        "php": ">=7.4",
+        "phpoffice/phpspreadsheet": "^5.5",
+        "phpmailer/phpmailer": "^7.0"
+    },
+    "autoload": {
+        "classmap": [
+            "classes/"
+        ]
+    },
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "TrianaWMS Team",
+            "email": "info@tianawms.com"
+        }
+    ]
+}
