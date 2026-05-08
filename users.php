@@ -99,7 +99,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$users = db()->query("SELECT id, username, full_name, email, role, created_at FROM users ORDER BY created_at DESC")->fetchAll();
+$perPage    = 25;
+$page       = max(1, intval($_GET['page'] ?? 1));
+$totalCount = (int)db()->query("SELECT COUNT(*) FROM users")->fetchColumn();
+$totalPages = max(1, (int)ceil($totalCount / $perPage));
+$page       = min($page, $totalPages);
+$offset     = ($page - 1) * $perPage;
+$usersStmt  = db()->prepare("SELECT id, username, full_name, email, role, created_at FROM users ORDER BY created_at DESC LIMIT " . intval($perPage) . " OFFSET " . intval($offset));
+$usersStmt->execute();
+$users         = $usersStmt->fetchAll();
+$roleCountRows = db()->query("SELECT role, COUNT(*) as cnt FROM users GROUP BY role")->fetchAll();
+$roleCounts    = [];
+foreach ($roleCountRows as $r) $roleCounts[$r['role']] = (int)$r['cnt'];
+$qs = [];
 require_once __DIR__ . '/includes/header.php';
 ?>
 <div class="space-y-5">
@@ -115,10 +127,10 @@ require_once __DIR__ . '/includes/header.php';
       </button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px">
-      <div class="stat-pill"><div class="num"><?= count($users) ?></div><div class="lbl">Total Users</div></div>
+      <div class="stat-pill"><div class="num"><?= $totalCount ?></div><div class="lbl">Total Users</div></div>
       <?php foreach ($ROLES as $rk => $rv): ?>
       <div class="stat-pill">
-        <div class="num"><?= count(array_filter($users, fn($u) => $u['role'] === $rk)) ?></div>
+        <div class="num"><?= $roleCounts[$rk] ?? 0 ?></div>
         <div class="lbl"><?= $rv['label'] ?></div>
       </div>
       <?php endforeach; ?>
@@ -184,6 +196,32 @@ require_once __DIR__ . '/includes/header.php';
         </tbody>
       </table>
     </div>
+    <?php if($totalCount > 0): ?>
+    <style>
+    .lm-pagination { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .pg-btn { border:1px solid #e5e7eb; border-radius:6px; padding:5px 10px; font-size:.8rem; cursor:pointer; background:#fff; color:#546e7a; transition:all .15s; text-decoration:none; display:inline-flex; align-items:center; }
+    .pg-btn:hover { border-color:#026766; color:#026766; }
+    .pg-btn.active { background:#026766; color:#fff; border-color:#026766; font-weight:700; }
+    .pg-btn.disabled { opacity:.4; pointer-events:none; }
+    .pg-info { font-size:.8rem; color:#90a4ae; margin-left:4px; }
+    </style>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:10px 16px;border-top:1px solid #e5e7eb;background:#f9fafb;border-radius:0 0 12px 12px">
+      <span style="font-size:.8rem;color:#6b7280">
+        Menampilkan <?= number_format(($page-1)*$perPage+1) ?>–<?= number_format(min($page*$perPage,$totalCount)) ?> dari <?= number_format($totalCount) ?> user
+      </span>
+      <?php if($totalPages > 1): ?>
+      <div class="lm-pagination">
+        <a href="?<?= http_build_query(array_merge($qs,['page'=>1])) ?>" class="pg-btn <?= $page<=1?'disabled':'' ?>"><i class="fas fa-angle-double-left"></i></a>
+        <a href="?<?= http_build_query(array_merge($qs,['page'=>max(1,$page-1)])) ?>" class="pg-btn <?= $page<=1?'disabled':'' ?>"><i class="fas fa-angle-left"></i></a>
+        <?php $start=max(1,$page-2);$end=min($totalPages,$page+2); for($p=$start;$p<=$end;$p++): ?>
+        <a href="?<?= http_build_query(array_merge($qs,['page'=>$p])) ?>" class="pg-btn <?= $p===$page?'active':'' ?>"><?= $p ?></a>
+        <?php endfor; if($end<$totalPages) echo '<span class="pg-info">…</span>'; ?>
+        <a href="?<?= http_build_query(array_merge($qs,['page'=>min($totalPages,$page+1)])) ?>" class="pg-btn <?= $page>=$totalPages?'disabled':'' ?>"><i class="fas fa-angle-right"></i></a>
+        <a href="?<?= http_build_query(array_merge($qs,['page'=>$totalPages])) ?>" class="pg-btn <?= $page>=$totalPages?'disabled':'' ?>"><i class="fas fa-angle-double-right"></i></a>
+      </div>
+      <?php endif; ?>
+    </div>
+    <?php endif; ?>
   </div>
 
 </div>

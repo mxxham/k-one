@@ -22,6 +22,53 @@ class Product {
         return $db->query($sql)->fetchAll();
     }
 
+    public static function getCount(string $search = ''): int {
+        $db = db();
+        if ($search) {
+            $term = "%$search%";
+            $stmt = $db->prepare("SELECT COUNT(*) FROM products WHERE product_code LIKE ? OR product_name LIKE ? OR category LIKE ?");
+            $stmt->execute([$term, $term, $term]);
+        } else {
+            $stmt = $db->query("SELECT COUNT(*) FROM products");
+        }
+        return (int)$stmt->fetchColumn();
+    }
+
+    public static function getStatsByUom(): array {
+        $db   = db();
+        $rows = $db->query("SELECT uom_type, COUNT(*) as cnt FROM products GROUP BY uom_type")->fetchAll();
+        $result = [];
+        foreach ($rows as $r) $result[$r['uom_type']] = (int)$r['cnt'];
+        return $result;
+    }
+
+    public static function getPaginated(string $search, int $perPage, int $offset): array {
+        $db     = db();
+        $where  = '';
+        $params = [];
+        if ($search) {
+            $term   = "%$search%";
+            $where  = " WHERE p.product_code LIKE ? OR p.product_name LIKE ? OR p.category LIKE ?";
+            $params = [$term, $term, $term];
+        }
+        $sql = "SELECT p.*,
+                COALESCE(SUM(s.quantity), 0) as total_drums,
+                COALESCE(SUM(s.quantity), 0) as total_qty,
+                COALESCE(SUM(CEILING(s.quantity / GREATEST(p.uom_per_pallet, 1))), 0) as total_pallets
+                FROM products p
+                LEFT JOIN stock s ON p.id = s.product_id
+                    AND (s.stock_status IN ('Available','Dues In') OR s.stock_status IS NULL OR s.stock_status = '')
+                    AND s.quantity > 0
+                    AND (s.location IS NULL OR s.location NOT IN ('QUA_SHELL','STAGING'))
+                {$where}
+                GROUP BY p.id
+                ORDER BY p.product_name
+                LIMIT " . intval($perPage) . " OFFSET " . intval($offset);
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
     public static function getById($id) {
         $db = db();
         $stmt = $db->prepare("SELECT * FROM products WHERE id = ?");
