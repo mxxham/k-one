@@ -860,11 +860,10 @@ if (!empty($_obWarnings)):
         </div>
         <div>
           <label class="ob-lbl">Status</label>
-          <select name="status" class="ob-sel">
-            <option value="Open">Open</option>
-            <option value="Picking">Picking</option>
-            <option value="Shipped">Shipped</option>
-          </select>
+          <input type="hidden" name="status" value="Open">
+          <div class="ob-inp" style="background:#f0fbfb;color:#026766;font-weight:700;display:flex;align-items:center;gap:7px;cursor:default">
+            <i class="fas fa-circle" style="font-size:.55rem;color:#16a34a"></i> Open
+          </div>
         </div>
       </div>
     </div>
