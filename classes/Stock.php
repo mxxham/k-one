@@ -1,15 +1,19 @@
 <?php
 
 class Stock {
-    public static function getAll($status = null, $expiring = false) {
+    public static function getAll($status = null, $expiring = false, $year = null) {
         $db = db();
-        $sql = "SELECT s.*, p.product_code, p.product_name, p.category, p.uom_type, p.uom_per_pallet
+        $sql = "SELECT s.*, p.product_code, p.product_name, p.category, p.uom_type, p.uom_per_pallet, p.velocity_class
                 FROM stock s
                 JOIN products p ON s.product_id = p.id
                 WHERE s.quantity > 0";
 
         if ($status) {
             $sql .= " AND s.stock_status = ?";
+        }
+
+        if ($year) {
+            $sql .= " AND YEAR(s.expiry_date) = " . intval($year);
         }
 
         if ($expiring) {
@@ -271,14 +275,17 @@ class Stock {
             $balance = $stmt->fetch()['balance'];
 
             $type = $difference > 0 ? 'IN' : 'OUT';
-            $stmt = $db->prepare("INSERT INTO stock_ledger (transaction_date, product_id, batch_number, transaction_type, quantity_in, quantity_out, uom, pallet, reference_number, reference_type, balance, location, notes) VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, 'ADJ-' . date('YmdHis'), 'Adjustment', ?, ?, ?)");
+            $refNo = 'ADJ-' . date('Ymd') . gmdate('His');
+            $stmt = $db->prepare("INSERT INTO stock_ledger (transaction_date, product_id, batch_number, transaction_type, quantity_in, quantity_out, uom, pallet, reference_number, reference_type, balance, location, notes) VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, 'Adjustment', ?, ?, ?)");
             $stmt->execute([
                 $stock['product_id'],
                 $stock['batch_number'],
+                $type,
                 $type === 'IN' ? $difference : 0,
                 $type === 'OUT' ? abs($difference) : 0,
                 $stock['uom_type'] ?? $stock['uom'],
                 $difference / $uomPerPallet,
+                $refNo,
                 $balance + ($type === 'IN' ? $difference : 0),
                 $stock['location'],
                 $reason
@@ -292,6 +299,172 @@ class Stock {
             }
             throw $e;
         }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* S19 — Stock Hold / Quarantine                                       */
+    /* ------------------------------------------------------------------ */
+
+    private const HOLD_STATUSES = ['on_hold', 'quarantine', 'damaged'];
+
+    /** Query filter snippet to EXCLUDE held stock from picking/allocation. */
+    public static function availableHoldClause(): string {
+        return "(hold_status = 'available' OR hold_status IS NULL)";
+    }
+
+    public static function hold(int $stockId, string $status, ?string $reason = null, ?int $userId = null): bool {
+        $status = strtolower(trim($status));
+        if (!in_array($status, self::HOLD_STATUSES)) {
+            throw new Exception("Status hold tidak valid. Gunakan: " . implode(', ', self::HOLD_STATUSES));
+        }
+        if ($status !== 'damaged' && empty(trim((string)$reason))) {
+            throw new Exception("Alasan (reason) wajib diisi untuk status '{$status}'.");
+        }
+        $userId = $userId ?? ($_SESSION['user_id'] ?? null);
+
+        $db = db();
+        $ownTx = !$db->inTransaction();
+        try {
+            if ($ownTx) $db->beginTransaction();
+
+            $stock = self::getById($stockId);
+            if (!$stock) throw new Exception("Stock tidak ditemukan");
+            if (($stock['hold_status'] ?? 'available') === $status) {
+                throw new Exception("Stock sudah berstatus {$status}.");
+            }
+
+            $db->prepare("UPDATE stock
+                    SET hold_status = ?, hold_reason = ?, hold_by = ?, hold_at = NOW(), updated_at = NOW()
+                    WHERE id = ?")
+               ->execute([$status, $reason, $userId, $stockId]);
+
+            self::_addHoldLedger($stock, 'HOLD', $status, $reason);
+
+            if ($ownTx) $db->commit();
+            return true;
+        } catch (Exception $e) {
+            if ($ownTx && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    public static function release(int $stockId, ?string $reason = null, ?int $userId = null): bool {
+        $userId = $userId ?? ($_SESSION['user_id'] ?? null);
+
+        $db = db();
+        $ownTx = !$db->inTransaction();
+        try {
+            if ($ownTx) $db->beginTransaction();
+
+            $stock = self::getById($stockId);
+            if (!$stock) throw new Exception("Stock tidak ditemukan");
+            if (($stock['hold_status'] ?? 'available') === 'available') {
+                throw new Exception("Stock sudah berstatus available.");
+            }
+
+            $db->prepare("UPDATE stock
+                    SET hold_status = 'available', hold_reason = NULL, hold_by = NULL, hold_at = NULL, updated_at = NOW()
+                    WHERE id = ?")
+               ->execute([$stockId]);
+
+            self::_addHoldLedger($stock, 'RELEASE', 'available', $reason);
+
+            if ($ownTx) $db->commit();
+            return true;
+        } catch (Exception $e) {
+            if ($ownTx && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    private static function _addHoldLedger(array $stock, string $txType, string $newStatus, ?string $reason): void {
+        $db = db();
+        $stmt = $db->prepare("SELECT COALESCE(SUM(quantity_in),0) - COALESCE(SUM(quantity_out),0) AS running_balance
+                FROM stock_ledger
+                WHERE product_id = ?
+                  AND (location IS NULL OR location != 'QUA_SHELL')
+                  AND transaction_type NOT IN ('TRANSFER_IN','TRANSFER_OUT')");
+        $stmt->execute([$stock['product_id']]);
+        $balance = floatval($stmt->fetch()['running_balance'] ?? 0);
+
+        $db->prepare("INSERT INTO stock_ledger
+                (transaction_date, product_id, transaction_type, reference_type,
+                 reference_id, batch_number, quantity_in, quantity_out, uom, balance, location, notes)
+                VALUES (CURDATE(), ?, ?, 'Stock', ?, ?, 0, 0, ?, ?, ?, ?)")
+           ->execute([
+               $stock['product_id'],
+               $txType,
+               $stock['id'],
+               $stock['batch_number'] ?? null,
+               $stock['uom_type'] ?? $stock['uom'] ?? 'Drum',
+               $balance,
+               $stock['location'],
+               $txType === 'HOLD'
+                   ? "Stock di-hold: {$newStatus}" . ($reason ? " — {$reason}" : '')
+                   : "Stock di-release" . ($reason ? " — {$reason}" : '')
+           ]);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* S21 — Barcode Scanning (stock::scan / stock::scan_override)         */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Single-query product lookup + FEFO-first expected location.
+     * Returns array with expected locations, or null when product unknown.
+     */
+    public static function scan(string $productCode): ?array {
+        $db = db();
+        $stmt = $db->prepare("SELECT p.id, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet
+                FROM products p
+                WHERE p.product_code = ? AND p.is_active = 1
+                LIMIT 1");
+        $stmt->execute([trim($productCode)]);
+        $product = $stmt->fetch();
+        if (!$product) return null;
+
+        $locStmt = $db->prepare("SELECT s.location, s.batch_number, s.expiry_date,
+                        COALESCE(SUM(s.quantity),0) AS qty
+                FROM stock s
+                WHERE s.product_id = ?
+                  AND s.quantity > 0
+                  AND (s.stock_status = 'Available' OR s.stock_status IS NULL OR s.stock_status = '')
+                  AND " . self::availableHoldClause() . "
+                  AND s.location NOT IN ('QUA_SHELL','STAGING','UNALLOCATED')
+                GROUP BY s.location, s.batch_number, s.expiry_date
+                ORDER BY CASE WHEN s.expiry_date IS NULL THEN 1 ELSE 0 END ASC, s.expiry_date ASC, s.location ASC
+                LIMIT 5");
+        $locStmt->execute([$product['id']]);
+        $locations = $locStmt->fetchAll();
+
+        return [
+            'product'   => $product,
+            'locations' => $locations,
+            'expected_location' => $locations[0]['location'] ?? null,
+        ];
+    }
+
+    /**
+     * Record a scan mismatch override with reason -> activity_log SCAN_OVERRIDE.
+     */
+    public static function scanOverride(int $productId, string $scannedLocation, string $expectedLocation, string $reason, ?int $userId = null): void {
+        $userId = $userId ?? ($_SESSION['user_id'] ?? null);
+        $db = db();
+        $db->prepare("INSERT INTO activity_log
+                (user_id, username, full_name, action, module, reference_type, reference_id,
+                 description, old_value, new_value, scan_override_reason, ip_address)
+                VALUES (?, ?, ?, 'SCAN_OVERRIDE', 'stock', 'Stock', ?, ?, ?, ?, ?, ?)")
+           ->execute([
+               $userId,
+               $_SESSION['username'] ?? null,
+               $_SESSION['full_name'] ?? null,
+               $productId,
+               "Scan override: {$scannedLocation} ≠ {$expectedLocation}",
+               $expectedLocation,
+               $scannedLocation,
+               $reason,
+               $_SERVER['REMOTE_ADDR'] ?? null
+           ]);
     }
 }
 ?>
