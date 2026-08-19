@@ -131,8 +131,8 @@ class StockTake {
             $scopeType  = ($scopeLocs !== null && $scopeLocs !== '[]') ? 'location' : 'full';
 
             $stmt = $pdo->prepare("INSERT INTO stock_take
-                    (take_number, take_date, status, notes, scope_locations, scope_type, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)");
+                    (take_number, take_date, status, notes, scope_locations, scope_type, schedule_id, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
 
             $stmt->execute([
                 $takeNumber,
@@ -141,6 +141,7 @@ class StockTake {
                 $data['notes'] ?? null,
                 $scopeLocs,
                 $scopeType,
+                $data['schedule_id'] ?? null,
                 $_SESSION['user_id'],
             ]);
 
