@@ -194,8 +194,9 @@ class BinTransfer {
             $stmt = $db->prepare("INSERT INTO bin_transfers
                     (transfer_number, transfer_date, product_id, stock_id,
                      batch_number, from_location, to_location,
-                     quantity, uom, reason, status, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?)");
+                     quantity, uom, reason, status, created_by,
+                     transfer_type, pick_face_target_id, is_breakdown)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?)");
 
             $stmt->execute([
                 $number,
@@ -209,6 +210,9 @@ class BinTransfer {
                 $data['uom'] ?? 'Drum',
                 $data['reason'] ?? null,
                 $_SESSION['user_id'] ?? null,
+                $data['transfer_type'] ?? 'MANUAL',
+                isset($data['pick_face_target_id']) ? (int)$data['pick_face_target_id'] : null,
+                isset($data['is_breakdown']) ? (int)$data['is_breakdown'] : 0,
             ]);
 
             $id = (int) $db->lastInsertId();
@@ -224,7 +228,7 @@ class BinTransfer {
 
     
 
-    public static function execute(int $transferId): bool {
+    public static function execute(int $transferId, ?int $userId = null): bool {
         $db    = db();
         $ownTx = !$db->inTransaction();
         try {
@@ -340,6 +344,8 @@ class BinTransfer {
                 $transfer['transfer_number'], $usedBatch, $qty, 0, $uom, $toLoc,
                 "Bin Transfer dari $fromLoc", $currentBalance);
 
+            self::_convertDestPalletFunction($db, $destStockId, $toLoc, $qty, $transfer, $uom, $usedBatch);
+
             
             $db->prepare("UPDATE bin_transfers SET
                     status       = 'Completed',
@@ -347,7 +353,7 @@ class BinTransfer {
                     completed_at = NOW(),
                     updated_at   = NOW()
                     WHERE id = ?")
-               ->execute([$_SESSION['user_id'] ?? null, $transferId]);
+               ->execute([$userId, $transferId]);
 
             if ($ownTx) $db->commit();
             return true;
@@ -403,6 +409,55 @@ class BinTransfer {
                $productId, $txType, $refType, $refId, $refNo,
                $batch, $qIn, $qOut, $uom, $balance, $location, $notes
            ]);
+    }
+
+    private static function _convertDestPalletFunction(
+        \PDO $db, int $destStockId, string $toLoc, float $qty,
+        array $transfer, string $uom, ?string $batchNumber
+    ): void {
+        $destLocStmt = $db->prepare(
+            "SELECT lm.is_pick_face, lm.row_name FROM location_master lm WHERE lm.location_code = ? LIMIT 1"
+        );
+        $destLocStmt->execute([$toLoc]);
+        $destLoc = $destLocStmt->fetch();
+        $isPickFace = (int)($destLoc['is_pick_face'] ?? 0) === 1
+                   || strtoupper(trim($destLoc['row_name'] ?? '')) === 'A';
+        if (!$isPickFace) return;
+
+        $upp = max(1, (int)($transfer['uom_per_pallet'] ?? 4) ?: 4);
+        $isFull = $qty >= $upp - 0.001;
+
+        $existingStmt = $db->prepare(
+            "SELECT id, quantity FROM stock_locations
+             WHERE stock_id = ? AND location_code = ? AND status = 'Available'
+             ORDER BY pallet_seq ASC LIMIT 1"
+        );
+        $existingStmt->execute([$destStockId, $toLoc]);
+        $existing = $existingStmt->fetch();
+
+        if ($existing) {
+            $db->prepare(
+                "UPDATE stock_locations
+                 SET quantity = ?, pallet_function = 'PICK_FACE',
+                     is_full_pallet = ?, updated_at = NOW()
+                 WHERE id = ?"
+            )->execute([
+                (float)$existing['quantity'] + $qty,
+                $isFull ? 1 : 0,
+                $existing['id'],
+            ]);
+            return;
+        }
+
+        $db->prepare(
+            "INSERT INTO stock_locations
+               (stock_id, location_code, pallet_seq, quantity, original_quantity, uom,
+                is_full_pallet, batch_number, status, pallet_function)
+             VALUES (?, ?, 1, ?, ?, ?, ?, ?, 'Available', 'PICK_FACE')"
+        )->execute([
+            $destStockId, $toLoc, $qty, $qty, $uom,
+            $isFull ? 1 : 0, $batchNumber,
+        ]);
     }
 }
 ?>
