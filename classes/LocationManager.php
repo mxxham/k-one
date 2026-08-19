@@ -8,16 +8,16 @@ class LocationManager {
 
     
 
-    public static function getAll($zone = null, $availableOnly = false) {
+    public static function getAll($zone = null, $availableOnly = false, $perPage = null, $offset = null) {
         $db = db();
 
         $sql = "SELECT lm.*,
                     COUNT(sl.id) as occupied_pallets,
                     SUM(CASE WHEN sl.status = 'Available' THEN sl.quantity ELSE 0 END) as current_qty,
-                    sl2.batch_number as current_batch,
-                    sl2.stock_id,
+                    MAX(sl2.batch_number) as current_batch,
+                    MAX(sl2.stock_id) as stock_id,
                     CASE
-                        WHEN COUNT(CASE WHEN sl.status = 'Available' THEN 1 END) > 0 THEN 'Occupied'
+                        WHEN COUNT(CASE WHEN sl.status IN ('Available','Reserved') THEN 1 END) > 0 THEN 'Occupied'
                         ELSE 'Available'
                     END AS availability
                 FROM location_master lm
@@ -45,9 +45,31 @@ class LocationManager {
 
         $sql .= " ORDER BY lm.aisle, lm.rack, lm.row_name, lm.position";
 
+        if ($perPage !== null) {
+            $sql .= " LIMIT " . intval($perPage);
+            if ($offset !== null) $sql .= " OFFSET " . intval($offset);
+        }
+
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
+    }
+
+    /** Mirrors v2 countLocations(): is_active=1, optional zone, availableOnly via NOT EXISTS. */
+    public static function countAll($zone = null, $availableOnly = false): int {
+        $db = db();
+        $where = ['lm.is_active = 1'];
+        $params = [];
+        if ($zone) {
+            $params[] = $zone;
+            $where[] = 'lm.zone = ?';
+        }
+        if ($availableOnly) {
+            $where[] = "NOT EXISTS (SELECT 1 FROM stock_locations slx WHERE slx.location_code = lm.location_code AND slx.status = 'Available')";
+        }
+        $stmt = $db->prepare("SELECT COUNT(*) FROM location_master lm WHERE " . implode(' AND ', $where));
+        $stmt->execute($params);
+        return (int)$stmt->fetchColumn();
     }
 
     
