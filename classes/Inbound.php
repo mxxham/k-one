@@ -41,7 +41,8 @@ class Inbound {
                 COUNT(DISTINCT ii.id) as total_items,
                 SUM(ii.actual_qty) as total_qty,
                 SUM(ii.pallet) as total_pallet,
-                GROUP_CONCAT(DISTINCT ii.od_number ORDER BY ii.id SEPARATOR ', ') as od_numbers
+                GROUP_CONCAT(DISTINCT ii.od_number ORDER BY ii.od_number SEPARATOR ', ') as od_numbers,
+                SUM(CASE WHEN ii.cross_dock_outbound_order_id IS NOT NULL THEN 1 ELSE 0 END) as cross_dock_count
                 FROM inbound_orders io
                 LEFT JOIN users u ON io.created_by = u.id
                 LEFT JOIN users r ON io.received_by = r.id
@@ -89,9 +90,11 @@ class Inbound {
     public static function getItems($inboundId) {
         $db = db();
         $stmt = $db->prepare("SELECT ii.*,
-                p.product_code, p.product_name, p.uom_type, p.uom_per_pallet
+                p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
+                ob.order_number AS cross_dock_order_number, ob.status AS cross_dock_order_status
                 FROM inbound_items ii
                 JOIN products p ON ii.product_id = p.id
+                LEFT JOIN outbound_orders ob ON ob.id = ii.cross_dock_outbound_order_id
                 WHERE ii.inbound_order_id = ?
                 ORDER BY ii.id");
         $stmt->execute([$inboundId]);
@@ -132,29 +135,38 @@ class Inbound {
         try {
             $db->beginTransaction();
 
-            
-            $inboundNumber = !empty($data['shipment_no'])
-                ? $data['shipment_no']
-                : self::generateNumber();
+            // TS parity: shipment_no is used as the order number when provided,
+            // otherwise an IN- number is generated (inbound.service.ts create()).
+            $inboundNumber = !empty($data['shipment_no']) ? $data['shipment_no'] : self::generateNumber();
 
             $stmt = $db->prepare("INSERT INTO inbound_orders
                     (order_number, order_date, carrier_name, po_number, shipment_no, do_number,
                      container_no, armada_no, production_date, expected_date,
-                     received_by, received_date, status, notes, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                     received_by, received_date, status, notes, created_by, asn_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
-            
+            // received_by accepts an id or a full name (resolved to a user id)
             $receivedBy = null;
             if (!empty($data['received_by'])) {
-                
-                if (is_numeric($data['received_by'])) {
+                if (preg_match('/^\d+$/', (string)$data['received_by'])) {
                     $receivedBy = (int)$data['received_by'];
                 } else {
-                    
                     $u = $db->prepare("SELECT id FROM users WHERE full_name = ? LIMIT 1");
                     $u->execute([$data['received_by']]);
                     $uRow = $u->fetch();
-                    $receivedBy = $uRow['id'] ?? null;
+                    $receivedBy = isset($uRow['id']) ? (int)$uRow['id'] : null;
+                }
+            }
+
+            // ASN linking: receiving staff may create an inbound against a Pending ASN.
+            $asnId = !empty($data['asn_id']) ? (int)$data['asn_id'] : null;
+            if ($asnId) {
+                $asnSt = $db->prepare("SELECT id, status FROM asn WHERE id = ?");
+                $asnSt->execute([$asnId]);
+                $asn = $asnSt->fetch();
+                if (!$asn) throw new Exception('ASN tidak ditemukan', 404);
+                if ($asn['status'] !== 'Pending') {
+                    throw new Exception('Hanya ASN berstatus Pending yang dapat dijadikan inbound.', 409);
                 }
             }
 
@@ -173,15 +185,32 @@ class Inbound {
                 ($data['received_date']   ?: null),
                 $data['status'] ?? 'Draft',
                 $data['notes']           ?? null,
-                $_SESSION['user_id']
+                $data['created_by']      ?? null,
+                $asnId
             ]);
 
             $inboundId = $db->lastInsertId();
 
-            if (isset($data['items']) && is_array($data['items'])) {
-                foreach ($data['items'] as $item) {
-                    self::addItem($inboundId, $item);
+            // Pre-fill items from the ASN's expected lines when none are provided,
+            // so receiving staff confirm against expectation rather than typing fresh.
+            $items = isset($data['items']) && is_array($data['items']) ? $data['items'] : [];
+            if (empty($items) && $asnId) {
+                $asnItems = $db->prepare("SELECT product_id, expected_qty, uom, batch_number, exp_date
+                        FROM asn_items WHERE asn_id = ? ORDER BY id");
+                $asnItems->execute([$asnId]);
+                foreach ($asnItems->fetchAll() as $ai) {
+                    $items[] = [
+                        'product_id'        => (int)$ai['product_id'],
+                        'quantity'          => (float)$ai['expected_qty'],
+                        'uom'               => $ai['uom'],
+                        'batch_number'      => $ai['batch_number'],
+                        'exp_date'          => $ai['exp_date'],
+                        'in_process_status' => 'Dues In',
+                    ];
                 }
+            }
+            foreach ($items as $item) {
+                self::addItem($inboundId, $item);
             }
 
             $db->commit();
@@ -207,7 +236,7 @@ class Inbound {
 
         if (!$productInfo) throw new Exception("Product not found");
 
-        $quantity = floatval($item['quantity']);
+        $quantity = floatval($item['quantity'] ?? 0);
         $uom      = $item['uom'] ?? $productInfo['uom_type'];
 
         
@@ -239,8 +268,9 @@ class Inbound {
         $stmt = $db->prepare("INSERT INTO inbound_items
                 (inbound_order_id, od_number, so_number, product_id, {$batchCol}, location,
                  quantity, uom, actual_qty, pallet, pallet_no,
-                 manufacture_date, exp_date, stock_status, in_process_status, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                 manufacture_date, exp_date, stock_status, in_process_status,
+                 cross_dock_outbound_order_id, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
         
         $firstLocation = $item['location'] ?? null;
@@ -264,6 +294,7 @@ class Inbound {
             $expDate,
             $item['stock_status'] ?? 'Pending',
             $item['in_process_status'] ?? 'Dues In',
+            $item['cross_dock_outbound_order_id'] ?? null,
             $item['notes'] ?? null
         ]);
 
@@ -422,7 +453,8 @@ class Inbound {
 
         $stmt = $db->prepare("UPDATE inbound_items SET
                 {$batchCol} = ?, location = ?, quantity = ?, uom = ?, actual_qty = ?,
-                manufacture_date = ?, exp_date = ?, stock_status = ?, notes = ?
+                manufacture_date = ?, exp_date = ?, stock_status = ?,
+                cross_dock_outbound_order_id = ?, notes = ?
                 WHERE id = ?");
 
         $ok = $stmt->execute([
@@ -434,6 +466,7 @@ class Inbound {
             $data['manufacture_date'] ?? null,
             $data['exp_date'] ?? null,
             $data['stock_status'] ?? 'Accepted',
+            $data['cross_dock_outbound_order_id'] ?? null,
             $data['notes'] ?? null,
             $itemId
         ]);
@@ -635,6 +668,14 @@ class Inbound {
         try {
             $db->beginTransaction();
 
+            // Gate: block manual complete while any putaway task still has pallets pending putaway
+            if (class_exists('Putaway')) {
+                $openTasks = Putaway::openTaskNumbers($id);
+                if (!empty($openTasks)) {
+                    throw new Exception('Selesaikan putaway task terlebih dahulu: ' . implode(', ', $openTasks) . ' masih memiliki pallet yang belum diputaway.', 409);
+                }
+            }
+
             $inbound = self::getById($id);
             $items   = self::getItems($id);
 
@@ -787,6 +828,15 @@ class Inbound {
                         }
                         $plt = max(1, $plt);
 
+                        // Per-group delete (v2 parity): remove any stale stock for this
+                        // product+batch+location before re-writing it.
+                        $db->prepare("DELETE s FROM stock s
+                            WHERE s.product_id = ? AND s.batch_number <=> ?
+                              AND s.location <=> ? AND s.stock_status IN ('Available','Dues In','Pending')
+                              AND NOT EXISTS (
+                                SELECT 1 FROM stock_locations sl4 WHERE sl4.stock_id = s.id
+                              )")->execute([$pid, $batch, $loc]);
+
                         $db->prepare("INSERT INTO stock
                             (product_id, batch_number, location, quantity, uom,
                              pallet, manufacture_date, expiry_date, stock_status)
@@ -833,6 +883,14 @@ class Inbound {
                     $plt = ($uomPerPlt > 0) ? (int)ceil($totalQty / $uomPerPlt) : 1;
                     $plt = max(1, $plt);
 
+                    // Per-group delete (v2 parity): remove stale stock for this loc before writing.
+                    $db->prepare("DELETE s FROM stock s
+                        WHERE s.product_id = ? AND s.batch_number <=> ?
+                          AND s.location <=> ? AND s.stock_status IN ('Available','Dues In','Pending')
+                          AND NOT EXISTS (
+                            SELECT 1 FROM stock_locations sl4 WHERE sl4.stock_id = s.id
+                          )")->execute([$pid, $batchVal, $loc]);
+
                     $db->prepare("INSERT INTO stock
                         (product_id, batch_number, location, quantity, uom,
                          pallet, manufacture_date, expiry_date, stock_status)
@@ -858,6 +916,12 @@ class Inbound {
             $db->prepare("UPDATE inbound_orders SET status='Completed' WHERE id=?")
                ->execute([$id]);
 
+            // ASN linkage: a Pending ASN flips to Received once its inbound completes.
+            if (!empty($inbound['asn_id'] ?? null)) {
+                $db->prepare("UPDATE asn SET status='Received', updated_at=NOW() WHERE id=? AND status='Pending'")
+                   ->execute([$inbound['asn_id']]);
+            }
+
             $db->commit();
             return true;
 
@@ -867,7 +931,338 @@ class Inbound {
         }
     }
 
-        private static function syncBatchToOutbound($productId, $batchNumber, $expDate) {
+        /**
+     * Centralized inbound item status transition (v2 inbound workflow).
+     *
+     * Goods Received writes NO stock/stock_locations — only the ledger plus an
+     * enqueued putaway task (deferred stock_locations write, v2 parity).
+     * Cross-dock staging + picklist happens at ATP.
+     */
+    public static function changeItemStatus(int $itemId, string $newProcess, ?int $createdBy = null): void {
+        $db = db();
+        $allowed = ['Dues In', 'Goods Received', 'Unserviceable', 'ATP'];
+        if (!in_array($newProcess, $allowed, true)) {
+            throw new Exception('Status tidak valid.');
+        }
+
+        $stockBadge = [
+            'Dues In'        => 'Pending',
+            'Goods Received' => 'Pending',
+            'ATP'            => 'Accepted',
+            'Unserviceable'  => 'Rejected',
+        ];
+        $newBadge = $stockBadge[$newProcess] ?? 'Pending';
+
+        $ownTx = !$db->inTransaction();
+        $ioId = 0;
+        try {
+            if ($ownTx) $db->beginTransaction();
+
+            // Fetch current item + inbound info BEFORE updating
+            $itRow = $db->prepare("SELECT ii.*, p.uom_per_pallet,
+                    io.order_number, io.order_date, io.id AS io_id
+                FROM inbound_items ii
+                JOIN products p ON p.id = ii.product_id
+                JOIN inbound_orders io ON io.id = ii.inbound_order_id
+                WHERE ii.id = ?");
+            $itRow->execute([$itemId]);
+            $it = $itRow->fetch();
+            if (!$it) throw new Exception('Item tidak ditemukan', 404);
+            $ioId       = (int)$it['io_id'];
+            $oldProcess = $it['in_process_status'] ?? 'Dues In';
+            $pid        = (int)$it['product_id'];
+            $batch      = $it['batch_number'] ?? $it['batch_no'] ?? null;
+            $totalQty   = floatval($it['actual_qty'] ?? $it['quantity'] ?? 0);
+            $uomPerPlt  = max(1, intval($it['uom_per_pallet'] ?? 4));
+            $plt        = (int)ceil($totalQty / $uomPerPlt);
+
+            // 1. Update inbound_items
+            if ($newProcess === 'Unserviceable') {
+                $db->prepare("UPDATE inbound_items SET in_process_status=?, stock_status=?, location='QUA_SHELL' WHERE id=?")
+                   ->execute([$newProcess, $newBadge, $itemId]);
+            } elseif ($oldProcess === 'Unserviceable') {
+                $db->prepare("UPDATE inbound_items SET in_process_status=?, stock_status=?, location=NULL WHERE id=?")
+                   ->execute([$newProcess, $newBadge, $itemId]);
+            } else {
+                $db->prepare("UPDATE inbound_items SET in_process_status=?, stock_status=? WHERE id=?")
+                   ->execute([$newProcess, $newBadge, $itemId]);
+            }
+
+            // Ledger helpers (real-time status-change flow; complete() never writes ledger)
+            $delLedger = function () use ($db, $ioId, $pid, $batch): void {
+                $db->prepare("DELETE FROM stock_ledger
+                    WHERE reference_type='Inbound' AND reference_id=? AND product_id=? AND batch_number<=>?")
+                   ->execute([$ioId, $pid, $batch]);
+            };
+            $runningBal = function () use ($db, $pid): float {
+                $balRow = $db->prepare("SELECT COALESCE(SUM(quantity_in),0) - COALESCE(SUM(quantity_out),0) AS bal
+                    FROM stock_ledger WHERE product_id=? AND (location IS NULL OR location != 'QUA_SHELL')
+                    AND transaction_type NOT IN ('TRANSFER_IN','TRANSFER_OUT')");
+                $balRow->execute([$pid]);
+                return floatval($balRow->fetchColumn() ?: 0);
+            };
+            $insertLedger = function (string $notes, float $qtyIn, ?string $loc, float $balance) use ($db, $pid, $it, $batch, $plt): void {
+                $db->prepare("INSERT INTO stock_ledger
+                    (transaction_date, product_id, transaction_type, reference_type, reference_id,
+                     reference_number, batch_number, quantity_in, quantity_out, uom, pallet, balance, location, notes)
+                    VALUES (?,?,'IN','Inbound',?,?,?,?,0,?,?,?,?,?)")
+                   ->execute([date('Y-m-d'), $pid, $it['io_id'], $it['order_number'], $batch,
+                              $qtyIn, $it['uom'] ?? 'Drum', $plt,
+                              $balance, $loc, $notes]);
+            };
+
+            $crossDockObId = !empty($it['cross_dock_outbound_order_id']) ? (int)$it['cross_dock_outbound_order_id'] : null;
+
+            if ($newProcess === 'ATP') {
+                // Manual ATP: remove any previously linked stock (rollback safety)
+                $db->prepare("DELETE s FROM stock s JOIN stock_locations sl ON sl.stock_id = s.id WHERE sl.inbound_item_id=?")
+                   ->execute([$itemId]);
+                $db->prepare("UPDATE stock_locations SET stock_id=NULL WHERE inbound_item_id=?")
+                   ->execute([$itemId]);
+                if ($oldProcess === 'Unserviceable') {
+                    $db->prepare("DELETE FROM stock WHERE product_id=? AND batch_number<=>? AND location='QUA_SHELL' AND stock_status='Rejected'")
+                       ->execute([$pid, $batch]);
+                }
+                $delLedger();
+                if ($crossDockObId) {
+                    // Cross-dock: bypass normal putaway/FEFO. Stage directly at
+                    // STAGING and attach a picklist item to the linked outbound.
+                    // No general stock row is created.
+                    $cur = $runningBal();
+                    $insertLedger('[Inbound] Cross-Dock | STAGING → Outbound | ' . $it['order_number'], $totalQty, 'STAGING', $cur + $totalQty);
+                    $db->prepare("INSERT INTO stock_locations
+                        (stock_id, location_code, pallet_seq, quantity, original_quantity, uom, is_full_pallet, batch_number, inbound_item_id, status)
+                        VALUES (NULL, 'STAGING', 1, ?, ?, ?, 1, ?, ?, 'Available')")
+                       ->execute([$totalQty, $totalQty, $it['uom'] ?? 'Drum', $batch, $itemId]);
+                    $slId = (int)$db->lastInsertId();
+                    $db->prepare("UPDATE inbound_items SET location='STAGING' WHERE id=?")
+                       ->execute([$itemId]);
+                    Picklist::addCrossDockItem($crossDockObId, $pid, $totalQty, $batch, $it['uom'] ?? 'Drum', $createdBy ?? ($it['created_by'] ?? 0), $slId);
+                } else {
+                    $cur = $runningBal();
+                    $insertLedger('[Inbound] ATP | In-Process: ATP | ' . $it['order_number'], $totalQty, $it['location'] ?? null, $cur + $totalQty);
+                }
+            } elseif ($newProcess === 'Goods Received') {
+                // Remove Available stock if rolling back from ATP
+                if ($oldProcess === 'ATP') {
+                    $db->prepare("DELETE s FROM stock s JOIN stock_locations sl ON sl.stock_id = s.id WHERE sl.inbound_item_id=?")
+                       ->execute([$itemId]);
+                    $db->prepare("UPDATE stock_locations SET stock_id=NULL WHERE inbound_item_id=?")
+                       ->execute([$itemId]);
+                    $db->prepare("DELETE FROM stock WHERE product_id=? AND batch_number<=>? AND stock_status='Available'")
+                       ->execute([$pid, $batch]);
+                }
+                if ($oldProcess === 'Unserviceable') {
+                    $db->prepare("DELETE FROM stock WHERE product_id=? AND batch_number<=>? AND location='QUA_SHELL' AND stock_status='Rejected'")
+                       ->execute([$pid, $batch]);
+                }
+                $delLedger();
+                $cur = $runningBal();
+                $insertLedger('[Inbound] Goods Received | In-Process: Goods Received | ' . $it['order_number'], $totalQty, $it['location'] ?? null, $cur + $totalQty);
+
+                // Putaway task queue: pallet suggestions go into the inbound's
+                // putaway task — stock_locations rows are only written when the
+                // operator completes the task. Deferred write (v2 parity).
+                $hasLocs = $db->prepare("SELECT 1 FROM stock_locations WHERE inbound_item_id=? LIMIT 1");
+                $hasLocs->execute([$itemId]);
+                if (!$hasLocs->fetch() && !$crossDockObId) {
+                    $palletLocs = [];
+                    if ($it['location']) {
+                        $dist = self::calculatePalletDistribution($totalQty, $uomPerPlt);
+                        foreach ($dist as $p) {
+                            $palletLocs[] = [
+                                'location_code' => $it['location'],
+                                'pallet_seq'    => $p['pallet_seq'],
+                                'quantity'      => $p['quantity'],
+                                'is_full'       => !empty($p['is_full']),
+                            ];
+                        }
+                    } else {
+                        // No item location: derive suggestions from the putaway
+                        // recommendation engine (full engine port = putaway module).
+                        try {
+                            $rec = Putaway::recommend(['product_id' => $pid, 'quantity' => $totalQty]);
+                        } catch (Throwable $e) {
+                            $rec = [];
+                        }
+                        $fullBin = $rec['full_pallet_bin']['location_code'] ?? null;
+                        $pickBin = $rec['pick_face_bin']['location_code'] ?? null;
+                        $dist = self::calculatePalletDistribution($totalQty, $uomPerPlt);
+                        foreach ($dist as $p) {
+                            $isFull = !empty($p['is_full']);
+                            $loc = $isFull ? $fullBin : $pickBin;
+                            if (!$loc) $loc = 'STAGING';
+                            $palletLocs[] = [
+                                'location_code' => $loc,
+                                'pallet_seq'    => $p['pallet_seq'],
+                                'quantity'      => $p['quantity'],
+                                'is_full'       => $isFull,
+                                'reason'        => null,
+                            ];
+                        }
+                    }
+                    if (!empty($palletLocs)) {
+                        Putaway::enqueueForPutaway($ioId, $itemId, $palletLocs, $createdBy ?? 0);
+                    }
+                }
+            } elseif ($newProcess === 'Unserviceable') {
+                $db->prepare("DELETE s FROM stock s JOIN stock_locations sl ON sl.stock_id = s.id WHERE sl.inbound_item_id=?")
+                   ->execute([$itemId]);
+                $db->prepare("DELETE FROM stock_locations WHERE inbound_item_id=?")
+                   ->execute([$itemId]);
+                $db->prepare("DELETE FROM stock WHERE product_id=? AND batch_number<=>? AND stock_status IN ('Available','Dues In','Pending')")
+                   ->execute([$pid, $batch]);
+                // Create Rejected stock at QUA_SHELL
+                $db->prepare("INSERT INTO stock
+                    (product_id,batch_number,location,quantity,uom,pallet,manufacture_date,expiry_date,stock_status)
+                    VALUES (?,?,'QUA_SHELL',?,?,?,?,?,'Rejected')")
+                   ->execute([$pid, $batch, $totalQty, $it['uom'] ?? 'Drum', $plt, $it['manufacture_date'], $it['exp_date']]);
+                $delLedger();
+                $cur = $runningBal();
+                $insertLedger('[Inbound] Unserviceable (QUA_SHELL) | In-Process: Unserviceable | ' . $it['order_number'], $totalQty, 'QUA_SHELL', $cur);
+            } else { // Dues In — full rollback
+                $db->prepare("DELETE s FROM stock s JOIN stock_locations sl ON sl.stock_id = s.id WHERE sl.inbound_item_id=?")
+                   ->execute([$itemId]);
+                $db->prepare("UPDATE stock_locations SET stock_id=NULL WHERE inbound_item_id=?")
+                   ->execute([$itemId]);
+                $db->prepare("DELETE FROM stock WHERE product_id=? AND batch_number<=>? AND stock_status IN ('Available','Dues In','Pending','Rejected')")
+                   ->execute([$pid, $batch]);
+                $delLedger();
+            }
+
+            if ($ownTx) $db->commit();
+        } catch (Throwable $e) {
+            if ($ownTx && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+
+        ActivityLogger::log('UPDATE_ITEM_STATUS', 'inbound', 'Inbound', $ioId, null,
+            "Status item ID $itemId: $oldProcess → $newProcess");
+    }
+
+    /** v2 — manual Manage Pallet Locations save with putaway-rule validation. */
+    public static function savePalletLocations(int $itemId, array $pallets, int $userId = 0): void {
+        $db = db();
+        $specialLocs = ['QUA_SHELL', 'STAGING'];
+        $invalidLocs = [];
+        $invalidRules = [];
+        foreach ($pallets as $p) {
+            $pLoc = strtoupper(trim((string)($p['location_code'] ?? '')));
+            if ($pLoc && !in_array($pLoc, $specialLocs, true)) {
+                $locCheck = $db->prepare("SELECT id FROM location_master WHERE location_code=? AND is_active=1 LIMIT 1");
+                $locCheck->execute([$pLoc]);
+                if (!$locCheck->fetch()) {
+                    $invalidLocs[] = $pLoc;
+                    continue;
+                }
+                $itInfo = $db->prepare("SELECT ii.product_id, ii.uom, p.uom_type
+                        FROM inbound_items ii JOIN products p ON p.id = ii.product_id WHERE ii.id = ?");
+                $itInfo->execute([$itemId]);
+                $info = $itInfo->fetch();
+                if ($info) {
+                    $val = Putaway::validatePlacement((int)$info['product_id'], $pLoc, floatval($p['quantity'] ?? 0), (string)($info['uom'] ?? $info['uom_type'] ?? 'Drum'));
+                    if (!$val['valid']) {
+                        $invalidRules[] = $pLoc . ': ' . implode('; ', $val['reasons']);
+                    }
+                }
+            }
+        }
+        if ($invalidLocs) throw new Exception('Lokasi tidak valid: ' . implode(', ', $invalidLocs));
+        if ($invalidRules) throw new Exception('Lokasi ditolak aturan putaway: ' . implode(' | ', $invalidRules));
+
+        $db->prepare("DELETE FROM stock_locations WHERE inbound_item_id=?")->execute([$itemId]);
+        $it = $db->prepare("SELECT * FROM inbound_items WHERE id=?");
+        $it->execute([$itemId]);
+        $itRow = $it->fetch();
+        if (!$itRow) throw new Exception('Item tidak ditemukan', 404);
+        $batch = $itRow['batch_number'] ?? $itRow['batch_no'] ?? null;
+        $firstLoc = $pallets[0]['location_code'] ?? null;
+        $db->prepare("UPDATE inbound_items SET location=? WHERE id=?")->execute([$firstLoc, $itemId]);
+        $ins = $db->prepare("INSERT INTO stock_locations
+            (inbound_item_id, location_code, pallet_seq, quantity, original_quantity, uom, is_full_pallet, batch_number, status, pallet_function)
+            VALUES (?,?,?,?,?,?,?,?,'Available',?)");
+        foreach ($pallets as $p) {
+            $pLoc = strtoupper(trim((string)($p['location_code'] ?? '')));
+            $pQty = floatval($p['quantity'] ?? 0);
+            $ins->execute([
+                $itemId,
+                $pLoc,
+                $p['pallet_seq'] ?? 1,
+                $pQty,
+                $pQty,
+                $itRow['uom'] ?? 'Drum',
+                !empty($p['is_full']) ? 1 : 0,
+                $batch,
+                Putaway::palletFunctionFor($pLoc),
+            ]);
+        }
+        // Manual Manage Pallet Locations path: mark the item's open putaway task
+        // rows resolved so an uncompleted task never blocks inbound completion.
+        Putaway::reconcileItemRows($itemId, $userId);
+    }
+
+    /** v2 — assign a single location to an item (updates stock when completed). */
+    public static function saveItemLocation(int $itemId, string $loc): void {
+        $specialLocs = ['QUA_SHELL', 'STAGING'];
+        if ($loc === '' || !$itemId) throw new Exception('Lokasi dan item wajib diisi.');
+        $db = db();
+        if (!in_array($loc, $specialLocs, true)) {
+            $locCheck = $db->prepare("SELECT id FROM location_master WHERE location_code=? AND is_active=1 LIMIT 1");
+            $locCheck->execute([$loc]);
+            if (!$locCheck->fetch()) throw new Exception("Lokasi '$loc' tidak ditemukan di master lokasi.");
+        }
+        $db->prepare("UPDATE inbound_items SET location=? WHERE id=?")->execute([$loc, $itemId]);
+        $db->prepare("UPDATE stock_locations SET location_code=? WHERE inbound_item_id=?")->execute([$loc, $itemId]);
+        $it = $db->prepare("SELECT ii.*, io.status AS ord_status
+                FROM inbound_items ii JOIN inbound_orders io ON io.id = ii.inbound_order_id WHERE ii.id=?");
+        $it->execute([$itemId]);
+        $row = $it->fetch();
+        if ($row && ($row['ord_status'] ?? '') === 'Completed') {
+            $batch = $row['batch_number'] ?? $row['batch_no'] ?? null;
+            $db->prepare("UPDATE stock SET location=? WHERE product_id=? AND batch_number<=>?")
+               ->execute([$loc, $row['product_id'], $batch]);
+        }
+    }
+
+    /**
+     * S42 — auto-complete the inbound when every item is ATP/Unserviceable and
+     * no putaway pallets remain open (v2 inbound workflow).
+     */
+    public static function autoComplete(int $id): bool {
+        $db = db();
+        $items = self::getItems($id);
+        foreach ($items as $item) {
+            $inProcess = $item['in_process_status'] ?? 'Dues In';
+            if (!in_array($inProcess, ['ATP', 'Unserviceable'], true)) {
+                return false;
+            }
+        }
+
+        // Block completion while any open putaway task still has Pending pallets
+        $palletStmt = $db->prepare("SELECT COUNT(*) FROM putaway_task_items pti
+                JOIN putaway_tasks pt ON pti.task_id = pt.id
+                WHERE pt.inbound_order_id = ?
+                  AND pt.status IN ('Open','In Progress')
+                  AND pti.status = 'Pending'");
+        $palletStmt->execute([$id]);
+        if ((int)$palletStmt->fetchColumn() > 0) {
+            return false;
+        }
+
+        $db->prepare("UPDATE inbound_orders SET status='Completed', updated_at=NOW() WHERE id=?")
+           ->execute([$id]);
+
+        // ASN linkage: a Pending ASN flips to Received once its inbound completes
+        // (v2 parity — putaway completeTask calls the full complete() which flips it).
+        $inbound = self::getById($id);
+        if (!empty($inbound['asn_id'] ?? null)) {
+            $db->prepare("UPDATE asn SET status='Received', updated_at=NOW() WHERE id=? AND status='Pending'")
+               ->execute([$inbound['asn_id']]);
+        }
+        return true;
+    }
+
+    private static function syncBatchToOutbound($productId, $batchNumber, $expDate) {
         if (empty($batchNumber)) return;
         $db = db();
 

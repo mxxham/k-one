@@ -49,6 +49,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id = Inbound::create($data);
             ActivityLogger::log('CREATE_INBOUND', 'inbound', 'Inbound', (int)$id,
                 null, "Buat inbound baru, PO: " . ($data['po_number'] ?? '—'));
+
+            // ASN prefill: salin item ASN menjadi item Dues In
+            $asnId = (int)($_POST['asn_id'] ?? 0);
+            if ($asnId > 0) {
+                $asnStmt = db()->prepare("SELECT ai.product_id, ai.expected_qty, ai.uom, ai.batch_number, ai.exp_date
+                        FROM asn_items ai WHERE ai.asn_id = ? ORDER BY ai.id");
+                $asnStmt->execute([$asnId]);
+                $asnItems = $asnStmt->fetchAll();
+                foreach ($asnItems as $ai) {
+                    $qty = (float)($ai['expected_qty'] ?? 0);
+                    if ($qty <= 0) continue;
+                    Inbound::addItem($id, [
+                        'product_id'        => (int)$ai['product_id'],
+                        'batch_number'      => $ai['batch_number'] ?? null,
+                        'quantity'          => $qty,
+                        'uom'               => $ai['uom'] ?? 'Carton',
+                        'actual_qty'        => $qty,
+                        'pallet'            => 0,
+                        'pallet_no'         => null,
+                        'cartons_per_pallet'=> null,
+                        'manufacture_date'  => null,
+                        'exp_date'          => $ai['exp_date'] ?? null,
+                        'stock_status'      => 'Pending',
+                        'in_process_status' => 'Dues In',
+                        'notes'             => 'Prefill dari ASN ' . $asnId,
+                        'pallet_locations'  => [],
+                    ]);
+                }
+                db()->prepare("UPDATE inbound_orders SET asn_id=? WHERE id=?")->execute([$asnId, $id]);
+                ActivityLogger::log('ASN_PREFILL', 'inbound', 'Inbound', (int)$id,
+                    $asnId, "Prefill " . count($asnItems) . " item dari ASN");
+            }
+
             header('Location: inbound.php?action=view&id=' . $id . '&success=created');
             exit;
         }
@@ -103,6 +136,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $location = 'QUA_SHELL';
             }
 
+            // v2 scanner-first: persist scan override reason (ASN mismatch) onto the item
+            $scanOverrideReason = trim($_POST['scan_override_reason'] ?? '');
+            if ($scanOverrideReason !== '') {
+                ActivityLogger::log('SCAN_OVERRIDE', 'inbound', 'Inbound', (int)$_POST['inbound_id'], null,
+                    "Scan override saat add item: " . $scanOverrideReason);
+            }
+
             Inbound::addItem($_POST['inbound_id'], [
                 'product_id'        => $_POST['product_id'],
                 'batch_number'      => $_POST['batch_number'],
@@ -119,7 +159,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'exp_date'          => $_POST['exp_date'] ?? null,
                 'stock_status'      => $autoStockStatus,
                 'in_process_status' => $inProcessStatus,
-                'notes'             => $_POST['notes'] ?? null,
+                'cross_dock_outbound_order_id' => !empty($_POST['cross_dock_outbound_order_id']) ? (int)$_POST['cross_dock_outbound_order_id'] : null,
+                'notes'             => ($_POST['notes'] ?? '') . ($scanOverrideReason !== '' ? ' [Scan override: ' . $scanOverrideReason . ']' : ''),
                 'pallet_locations'  => $palletLocations,
             ]);
             ActivityLogger::log('ADD_INBOUND_ITEM', 'inbound', 'Inbound', (int)$_POST['inbound_id'],
@@ -186,167 +227,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $allowedProcess = ['Dues In','Goods Received','Unserviceable','ATP'];
             $newProcess = trim($_POST['update_item_status'] ?? '');
             if (in_array($newProcess, $allowedProcess)) {
-                $db = db();
-
-                $stockBadge = [
-                    'Dues In'        => 'Pending',
-                    'Goods Received' => 'Pending',
-                    'ATP'            => 'Accepted',
-                    'Unserviceable'  => 'Rejected',
-                ];
-                $newBadge = $stockBadge[$newProcess] ?? 'Pending';
-
-                // Fetch current item + inbound info BEFORE updating
-                $itRow = $db->prepare("SELECT ii.*, p.uom_per_pallet,
-                        io.order_number, io.order_date, io.id AS io_id
-                    FROM inbound_items ii
-                    JOIN products p ON p.id = ii.product_id
-                    JOIN inbound_orders io ON io.id = ii.inbound_order_id
-                    WHERE ii.id = ?");
-                $itRow->execute([$_POST['item_id']]);
-                $it         = $itRow->fetch();
-                $oldProcess = $it['in_process_status'] ?? 'Dues In';
-                $pid        = $it['product_id'];
-                $batch      = $it['batch_number'] ?? $it['batch_no'] ?? null;
-                $totalQty   = floatval($it['actual_qty'] ?? $it['quantity'] ?? 0);
-                $uomPerPlt  = max(1, intval($it['uom_per_pallet'] ?? 4));
-
-                // 1. Update inbound_items
-                if ($newProcess === 'Unserviceable') {
-                    $db->prepare("UPDATE inbound_items
-                        SET in_process_status=?, stock_status=?, location='QUA_SHELL'
-                        WHERE id=?")
-                       ->execute([$newProcess, $newBadge, $_POST['item_id']]);
-                } elseif ($oldProcess === 'Unserviceable') {
-                    // Rolling back from Unserviceable — clear location
-                    $db->prepare("UPDATE inbound_items SET in_process_status=?, stock_status=?, location=NULL WHERE id=?")
-                       ->execute([$newProcess, $newBadge, $_POST['item_id']]);
-                } else {
-                    $db->prepare("UPDATE inbound_items SET in_process_status=?, stock_status=? WHERE id=?")
-                       ->execute([$newProcess, $newBadge, $_POST['item_id']]);
-                }
-
-                // 2. Stock + ledger operations (always, not gated by inbound status)
-                // Helper: get running balance for ledger
-                $balRow = $db->prepare("SELECT COALESCE(SUM(quantity_in),0) - COALESCE(SUM(quantity_out),0) AS bal
-                    FROM stock_ledger WHERE product_id=? AND (location IS NULL OR location != 'QUA_SHELL')
-                    AND transaction_type NOT IN ('TRANSFER_IN','TRANSFER_OUT')");
-                $balRow->execute([$pid]);
-                $currentBal = floatval($balRow->fetchColumn());
-                $plt = (int)ceil($totalQty / $uomPerPlt);
-
-                // Helper: delete existing ledger entry for this item (before re-writing)
-                $delLedger = $db->prepare("DELETE FROM stock_ledger
-                    WHERE reference_type='Inbound' AND reference_id=?
-                    AND product_id=? AND batch_number<=>?");
-
-                if ($newProcess === 'ATP') {
-                    // Remove any previously linked stock (rollback safety)
-                    $db->prepare("DELETE s FROM stock s
-                        JOIN stock_locations sl ON sl.stock_id = s.id
-                        WHERE sl.inbound_item_id=?")
-                       ->execute([$_POST['item_id']]);
-                    $db->prepare("UPDATE stock_locations SET stock_id=NULL WHERE inbound_item_id=?")
-                       ->execute([$_POST['item_id']]);
-                    if ($oldProcess === 'Unserviceable') {
-                        $db->prepare("DELETE FROM stock
-                            WHERE product_id=? AND batch_number<=>? AND location='QUA_SHELL' AND stock_status='Rejected'")
-                           ->execute([$pid, $batch]);
-                    }
-                    // Stock is created only when order is Completed
-                    // Replace any previous ledger entry (GR/Unserviceable) with ATP entry
-                    $delLedger->execute([$it['io_id'], $pid, $batch]);
-                    $balRow->execute([$pid]);
-                    $currentBal = floatval($balRow->fetchColumn());
-                    $db->prepare("INSERT INTO stock_ledger
-                        (transaction_date,product_id,transaction_type,reference_type,reference_id,
-                         reference_number,batch_number,quantity_in,quantity_out,uom,pallet,balance,location,notes)
-                        VALUES (?,?,'IN','Inbound',?,?,?,?,0,?,?,?,?,?)")
-                       ->execute([date('Y-m-d'),$pid,$it['io_id'],$it['order_number'],$batch,
-                                  $totalQty,$it['uom'],$plt,
-                                  $currentBal + $totalQty,
-                                  $it['location'] ?? null,
-                                  '[Inbound] ATP | In-Process: ATP | ' . $it['order_number']]);
-
-                } elseif ($newProcess === 'Goods Received') {
-                    // Remove Available stock if rolling back from ATP
-                    if ($oldProcess === 'ATP') {
-                        $db->prepare("DELETE s FROM stock s
-                            JOIN stock_locations sl ON sl.stock_id = s.id
-                            WHERE sl.inbound_item_id=?")
-                           ->execute([$_POST['item_id']]);
-                        $db->prepare("UPDATE stock_locations SET stock_id=NULL WHERE inbound_item_id=?")
-                           ->execute([$_POST['item_id']]);
-                        $db->prepare("DELETE FROM stock
-                            WHERE product_id=? AND batch_number<=>? AND stock_status='Available'")
-                           ->execute([$pid, $batch]);
-                    }
-                    if ($oldProcess === 'Unserviceable') {
-                        $db->prepare("DELETE FROM stock
-                            WHERE product_id=? AND batch_number<=>? AND location='QUA_SHELL' AND stock_status='Rejected'")
-                           ->execute([$pid, $batch]);
-                    }
-                    // Replace any previous ledger entry with GR entry
-                    $delLedger->execute([$it['io_id'], $pid, $batch]);
-                    $balRow->execute([$pid]);
-                    $currentBal = floatval($balRow->fetchColumn());
-                    $db->prepare("INSERT INTO stock_ledger
-                        (transaction_date,product_id,transaction_type,reference_type,reference_id,
-                         reference_number,batch_number,quantity_in,quantity_out,uom,pallet,balance,location,notes)
-                        VALUES (?,?,'IN','Inbound',?,?,?,?,0,?,?,?,?,?)")
-                       ->execute([date('Y-m-d'),$pid,$it['io_id'],$it['order_number'],$batch,
-                                  $totalQty,$it['uom'],$plt,
-                                  $currentBal + $totalQty,
-                                  $it['location'] ?? null,
-                                  '[Inbound] Goods Received | In-Process: Goods Received | ' . $it['order_number']]);
-
-                } elseif ($newProcess === 'Unserviceable') {
-                    // Remove linked Available stock
-                    $db->prepare("DELETE s FROM stock s
-                        JOIN stock_locations sl ON sl.stock_id = s.id
-                        WHERE sl.inbound_item_id=?")
-                       ->execute([$_POST['item_id']]);
-                    $db->prepare("DELETE FROM stock_locations WHERE inbound_item_id=?")
-                       ->execute([$_POST['item_id']]);
-                    $db->prepare("DELETE FROM stock
-                        WHERE product_id=? AND batch_number<=>? AND stock_status IN ('Available','Dues In','Pending')")
-                       ->execute([$pid, $batch]);
-                    // Create Rejected stock at QUA_SHELL
-                    $db->prepare("INSERT INTO stock
-                        (product_id,batch_number,location,quantity,uom,pallet,manufacture_date,expiry_date,stock_status)
-                        VALUES (?,?,'QUA_SHELL',?,?,?,?,?,'Rejected')")
-                       ->execute([$pid,$batch,$totalQty,$it['uom'],$plt,$it['manufacture_date'],$it['exp_date']]);
-                    // Replace any previous ledger entry with Unserviceable entry
-                    $delLedger->execute([$it['io_id'], $pid, $batch]);
-                    $balRow->execute([$pid]);
-                    $currentBal = floatval($balRow->fetchColumn());
-                    $db->prepare("INSERT INTO stock_ledger
-                        (transaction_date,product_id,transaction_type,reference_type,reference_id,
-                         reference_number,batch_number,quantity_in,quantity_out,uom,pallet,balance,location,notes)
-                        VALUES (?,?,'IN','Inbound',?,?,?,?,0,?,?,?,'QUA_SHELL',?)")
-                       ->execute([date('Y-m-d'),$pid,$it['io_id'],$it['order_number'],$batch,
-                                  $totalQty,$it['uom'],$plt,
-                                  $currentBal,
-                                  '[Inbound] Unserviceable (QUA_SHELL) | In-Process: Unserviceable | ' . $it['order_number']]);
-
-                } elseif ($newProcess === 'Dues In') {
-                    // Rollback: remove stock + delete ledger entry for this item
-                    $db->prepare("DELETE s FROM stock s
-                        JOIN stock_locations sl ON sl.stock_id = s.id
-                        WHERE sl.inbound_item_id=?")
-                       ->execute([$_POST['item_id']]);
-                    $db->prepare("UPDATE stock_locations SET stock_id=NULL WHERE inbound_item_id=?")
-                       ->execute([$_POST['item_id']]);
-                    $db->prepare("DELETE FROM stock
-                        WHERE product_id=? AND batch_number<=>?
-                        AND stock_status IN ('Available','Dues In','Pending','Rejected')")
-                       ->execute([$pid, $batch]);
-                    $delLedger->execute([$it['io_id'], $pid, $batch]);
-                }
-
-                ActivityLogger::log('UPDATE_ITEM_STATUS', 'inbound', 'Inbound',
-                    (int)$_POST['inbound_id'], null,
-                    "Status item ID {$_POST['item_id']}: $oldProcess → $newProcess");
+                Inbound::changeItemStatus(
+                    (int)$_POST['item_id'],
+                    $newProcess,
+                    (int)($_SESSION['user_id'] ?? 0)
+                );
             }
             header('Location: inbound.php?action=view&id=' . $_POST['inbound_id']);
             exit;
@@ -476,6 +361,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($pendingCount > 0) {
                 throw new Exception("Tidak dapat complete: masih ada $pendingCount item yang belum ATP atau Unserviceable. Update status setiap item terlebih dahulu.");
             }
+            if (Putaway::hasOpenPallets($cid)) {
+                throw new Exception("Tidak dapat complete: masih ada pallet putaway yang belum dikonfirmasi pada task open. Selesaikan task putaway terlebih dahulu.");
+            }
             set_time_limit(300);
             Inbound::complete($cid);
             ActivityLogger::log('COMPLETE_INBOUND', 'inbound', 'Inbound', $cid,
@@ -530,6 +418,10 @@ $page         = min($page, $totalPages);
 $inboundList  = Inbound::getAll(null, $perPage, $offset, $searchOdNo ?: null);
 $products     = Product::getAll();
 $usersList    = db()->query("SELECT id, full_name FROM users WHERE is_active=1 ORDER BY full_name")->fetchAll();
+$pendingAsns  = db()->query("SELECT a.id, a.asn_number, a.supplier_name, a.expected_arrival_date
+        FROM asn a WHERE a.status = 'Pending' ORDER BY a.id DESC")->fetchAll();
+$openOutbounds = db()->query("SELECT o.id, o.so_number, o.order_number
+        FROM outbound_orders o WHERE o.status IN ('Draft','Open') ORDER BY o.id DESC")->fetchAll();
 
 $hasEditableItems = true; 
 $canEdit = $canWrite && $inbound && !in_array($inbound['status'], ['Completed','Cancelled']);
@@ -1398,6 +1290,25 @@ function ibUomTag($uom) {
     <form method="POST" class="space-y-5">
 
         
+        <div class="ib-section" style="background:#eef8f8;border:1px dashed #9ed1d1">
+            <div class="ib-section-title"><i class="fas fa-clipboard-list"></i> Prefill dari ASN <small style="font-weight:400;color:#607d8b">(opsional)</small></div>
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;align-items:end">
+                <div>
+                    <label class="ib-label">Pilih ASN Pending</label>
+                    <select name="asn_id" id="asnSelect" class="ib-select">
+                        <option value="">— Tanpa ASN (isi manual) —</option>
+                        <?php foreach ($pendingAsns as $pa): ?>
+                        <option value="<?= $pa['id'] ?>"><?= htmlspecialchars($pa['asn_number']) ?> — <?= htmlspecialchars($pa['supplier_name']) ?> (<?= htmlspecialchars($pa['expected_arrival_date']) ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div>
+                    <label class="ib-label">&nbsp;</label>
+                    <div style="font-size:.76rem;color:#607d8b;line-height:1.5"><i class="fas fa-info-circle"></i> Item ASN otomatis disalin menjadi item Dues In setelah order dibuat.</div>
+                </div>
+            </div>
+        </div>
+
         <div class="ib-section">
             <div class="ib-section-title"><i class="fas fa-file-alt"></i> Order Information</div>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
@@ -1662,6 +1573,11 @@ if ($currentStepIdx === false) $currentStepIdx = 0;
                         <i class="fas fa-lock" style="color:#065f46;font-size:.9rem"></i>
                         <span style="font-size:.83rem;font-weight:700;color:#065f46">Order selesai — stok sudah tercatat</span>
                     </div>
+                    <a href="putaway_tasks.php?inbound_id=<?= $inbound['id'] ?>"
+                       class="ib-btn ib-btn-primary ib-btn-sm"
+                       title="Buat / lihat task putaway untuk order ini">
+                        <i class="fas fa-warehouse"></i> Putaway Task
+                    </a>
                     <?php if ($canAdmin): ?>
                     <form method="POST" onsubmit="return confirm('Regenerasi entri stock ledger untuk order ini?')">
                         <input type="hidden" name="id" value="<?= $inbound['id'] ?>">
@@ -1804,10 +1720,18 @@ if ($currentStepIdx === false) $currentStepIdx = 0;
 <div class="ib-card">
     <div class="ib-card-header"><h2><i class="fas fa-plus-circle mr-2"></i>Add Item</h2></div>
     <div class="ib-card-body">
-    <form method="POST" class="space-y-4" onsubmit="return ensureExpDateBeforeSubmit()">
+    <form method="POST" id="addItemForm" class="space-y-4" onsubmit="return ensureScanOverrideBeforeSubmit()">
         <input type="hidden" name="inbound_id" value="<?= $inbound['id'] ?>">
+        <input type="hidden" name="scan_override_reason" id="scanOverrideReasonInput" value="">
 
-        
+        <div style="background:#f0fdf9;border:2px dashed #b2dfdb;border-radius:10px;padding:14px 16px;margin-bottom:16px">
+            <label class="ib-label" style="margin-bottom:6px"><i class="fas fa-qrcode mr-1" style="color:#026766"></i> Scan Barcode Produk <small style="font-weight:400;color:#607d8b">(opsional — tekan Enter)</small></label>
+            <input type="text" id="scanCodeInput" class="ib-input" placeholder="Scan kode produk, mis. 530870992..."
+                   style="font-family:monospace;font-weight:700;font-size:1rem;text-transform:uppercase"
+                   autocomplete="off" onkeydown="handleScanEnter(event)">
+            <div class="ib-input-hint" id="scanFeedback" style="margin-top:6px"></div>
+        </div>
+
         <div style="background:#e6f7f7;border:1px solid #bbdefb;border-radius:8px;padding:12px 14px;margin-bottom:4px">
             <div style="font-size:.71rem;font-weight:700;color:#013d3c;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">
                 <i class="fas fa-hashtag mr-1"></i> Referensi Item (OD / SO)
@@ -1833,6 +1757,21 @@ if ($currentStepIdx === false) $currentStepIdx = 0;
                                style="padding-left:30px;font-family:monospace"
                                oninput="this.value=this.value.replace(/\s/g,'')">
                     </div>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
+                <div>
+                    <label class="ib-label">Cross-Dock ke Outbound <small style="font-weight:400;color:#607d8b">(opsional)</small></label>
+                    <select name="cross_dock_outbound_order_id" id="crossDockSelect" class="ib-select">
+                        <option value="">— Bukan cross-dock —</option>
+                        <?php foreach ($openOutbounds as $oo): ?>
+                        <option value="<?= $oo['id'] ?>"><?= htmlspecialchars($oo['so_number'] ?: $oo['order_number']) ?> (SO #<?= $oo['id'] ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="ib-input-hint"><i class="fas fa-info-circle"></i> Stok langsung dialokasikan ke outbound ini (dari STAGING)</div>
+                </div>
+                <div style="display:flex;align-items:flex-end;padding-bottom:4px">
+                    <div style="font-size:.76rem;color:#607d8b;line-height:1.5"><i class="fas fa-arrow-right-arrow-left"></i> Saat inbound di-<strong>Complete</strong>, barang cross-dock masuk lokasi <strong>STAGING</strong> dan otomatis dibuatkan picklist CROSS-DOCK.</div>
                 </div>
             </div>
         </div>
@@ -2014,6 +1953,16 @@ if ($currentStepIdx === false) $currentStepIdx = 0;
                 <?php endif; ?>
                 <?php if (empty($item['od_number']) && empty($item['so_number'])): ?>
                 <span style="color:#cbd5e1;font-size:.78rem">—</span>
+                <?php endif; ?>
+                <?php if (!empty($item['cross_dock_outbound_order_id'])): ?>
+                <div style="margin-top:4px">
+                    <span class="ib-badge" style="display:inline-flex;align-items:center;gap:4px;
+                          background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;
+                          font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:5px">
+                        <i class="fas fa-arrows-split-up-and-left" style="font-size:.62rem"></i>
+                        CROSS-DOCK → SO#<?= (int)$item['cross_dock_outbound_order_id'] ?>
+                    </span>
+                </div>
                 <?php endif; ?>
             </td>
 
@@ -2596,6 +2545,73 @@ function ensureExpDateBeforeSubmit() {
     return true;
 }
 
+/* ------------------------------------------------------------------ */
+/* Scanner-first receiving (v2)                                        */
+/* ------------------------------------------------------------------ */
+let ibScanMismatch = false;
+
+function handleScanEnter(evt) {
+    if (evt.key !== 'Enter') return;
+    evt.preventDefault();
+    const code = document.getElementById('scanCodeInput').value.trim();
+    const fb = document.getElementById('scanFeedback');
+    if (!code) { fb.innerHTML = '<span style="color:#e53935"><i class="fas fa-exclamation-circle mr-1"></i> Scan kode produk terlebih dahulu</span>'; return; }
+    const inboundId = document.querySelector('input[name="inbound_id"]').value;
+    fb.innerHTML = '<span style="color:#607d8b"><i class="fas fa-spinner fa-spin mr-1"></i> Mencari produk...</span>';
+    fetch(`api/index.php?module=inbound&action=scan&product_code=${encodeURIComponent(code)}&inbound_id=${inboundId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                fb.innerHTML = `<span style="color:#e53935"><i class="fas fa-exclamation-circle mr-1"></i>${data.message || 'Produk tidak ditemukan'}</span>`;
+                return;
+            }
+            const p = data.product;
+            selectProduct({
+                id: p.id,
+                product_code: p.product_code,
+                product_name: p.product_name,
+                uom: p.uom_type,
+                uom_per_pallet: p.uom_per_pallet,
+                stock_qty: 0
+            });
+            document.getElementById('scanCodeInput').value = p.product_code;
+            if (data.asn_expected_qty !== null && data.asn_expected_qty !== undefined) {
+                document.getElementById('quantityInput').value = data.asn_expected_qty;
+                calculatePallet();
+            }
+            ibScanMismatch = data.asn_linked && data.asn_expected_qty === null;
+            if (ibScanMismatch) {
+                fb.innerHTML = '<span style="color:#f57c00"><i class="fas fa-exclamation-triangle mr-1"></i> Produk tidak ada di daftar ASN — wajib isi alasan override sebelum submit</span>';
+            } else if (data.asn_expected_qty !== null && data.asn_expected_qty !== undefined) {
+                fb.innerHTML = `<span style="color:#026766"><i class="fas fa-check mr-1"></i> ${p.product_code} — ${p.product_name} (qty ASN: ${data.asn_expected_qty})</span>`;
+            } else {
+                fb.innerHTML = `<span style="color:#026766"><i class="fas fa-check mr-1"></i> ${p.product_code} — ${p.product_name}</span>`;
+            }
+            document.getElementById('batchInput').focus();
+        })
+        .catch(() => {
+            fb.innerHTML = '<span style="color:#e53935"><i class="fas fa-exclamation-circle mr-1"></i> Gagal menghubungi API scan</span>';
+        });
+}
+
+function ensureScanOverrideBeforeSubmit() {
+    if (ibScanMismatch && !document.getElementById('scanOverrideReasonInput').value.trim()) {
+        document.getElementById('ibScanOverrideModal').style.display = 'flex';
+        document.getElementById('ibScanOverrideReason').value = '';
+        setTimeout(() => document.getElementById('ibScanOverrideReason').focus(), 50);
+        return false;
+    }
+    return ensureExpDateBeforeSubmit();
+}
+
+function confirmIbScanOverride() {
+    const reason = document.getElementById('ibScanOverrideReason').value.trim();
+    if (!reason) { document.getElementById('ibScanOverrideReason').focus(); return; }
+    document.getElementById('scanOverrideReasonInput').value = reason;
+    document.getElementById('ibScanOverrideModal').style.display = 'none';
+    document.getElementById('addItemForm').submit();
+}
+
 const PROCESS_STATUS_MAP = {
     'Dues In':         { stock: 'Pending',  locHint: 'STAGING',   locForce: false },
     'Goods Received':  { stock: 'Pending',  locHint: '',          locForce: false },
@@ -2731,6 +2747,31 @@ document.querySelectorAll('.pallet-no-cancel').forEach(function(btn) {
     </div>
   </div>
 </div>
+<!-- Scan override modal (v2 scanner-first receiving) -->
+<div id="ibScanOverrideModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:#fff;border-radius:14px;width:min(480px,92vw);padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <div style="font-size:1rem;font-weight:700;color:#0d1f1f"><i class="fas fa-exclamation-triangle mr-2" style="color:#f57c00"></i>Override ASN</div>
+        <div style="font-size:.82rem;color:#607d8b">Produk tidak terdaftar pada daftar ASN order ini</div>
+      </div>
+      <button onclick="document.getElementById('ibScanOverrideModal').style.display='none'" style="background:none;border:none;font-size:1.2rem;color:#90a4ae;cursor:pointer"><i class="fas fa-times"></i></button>
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:.72rem;font-weight:600;color:#37474f;display:block;margin-bottom:4px">
+        Alasan override <span style="color:#e53935">*</span>
+      </label>
+      <input type="text" id="ibScanOverrideReason" placeholder="cth: pengganti produk, kode beda, dsb" style="width:100%;border:1.5px solid #b2dfdb;border-radius:8px;padding:11px;font-size:.95rem;outline:none">
+    </div>
+    <div style="display:flex;gap:10px">
+      <button onclick="confirmIbScanOverride()" style="flex:1;background:linear-gradient(135deg,#026766,#014f4e);color:#fff;border:none;border-radius:10px;padding:11px;font-weight:700;cursor:pointer;font-size:.9rem">
+        <i class="fas fa-check-double"></i> Konfirmasi & Submit
+      </button>
+      <button onclick="document.getElementById('ibScanOverrideModal').style.display='none'" style="background:#f3f4f6;color:#374151;border:none;border-radius:10px;padding:11px;font-weight:600;cursor:pointer;font-size:.9rem"><i class="fas fa-times"></i> Batal</button>
+    </div>
+  </div>
+</div>
+
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
 
 <!-- Modal: Start Receiving -->
