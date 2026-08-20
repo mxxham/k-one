@@ -77,6 +77,44 @@ final class ApiTestHelpers
         return $stmt->fetchAll();
     }
 
+    /** Port of v2 helpers.createProduct(): minimal product row, returns its id. */
+    public static function createProduct(array $overrides = []): int
+    {
+        $code = 'TST' . random_int(0, 999999);
+        $stmt = self::pdo()->prepare(
+            "INSERT INTO products (product_code, product_name, uom_type, uom_per_pallet, liters_per_unit, is_active)
+             VALUES (?, ?, ?, ?, 209.00, 1)"
+        );
+        $stmt->execute([
+            $overrides['product_code'] ?? $code,
+            $overrides['product_name'] ?? 'Test Product ' . $code,
+            $overrides['uom_type'] ?? 'Drum',
+            $overrides['uom_per_pallet'] ?? 4,
+        ]);
+        return (int) self::pdo()->lastInsertId();
+    }
+
+    /**
+     * Port of v2 helpers.putStock(): insert stock directly into a rack bin and
+     * mark the stock_locations row Available.
+     */
+    public static function putStock(int $productId, string $location, float $quantity, string $batch = 'BATCH1', string $expiry = '2030-12-31'): void
+    {
+        $pdo = self::pdo();
+        $stmt = $pdo->prepare(
+            "INSERT INTO stock (product_id, batch_number, location, quantity, uom, pallet, expiry_date, stock_status)
+             VALUES (?, ?, ?, ?, 'Drum', ?, ?, 'Available')"
+        );
+        $stmt->execute([$productId, $batch, $location, $quantity, (int) ceil($quantity / 4), $expiry]);
+        $stockId = (int) $pdo->lastInsertId();
+
+        $stmt = $pdo->prepare(
+            "INSERT INTO stock_locations (stock_id, location_code, pallet_seq, quantity, original_quantity, uom, is_full_pallet, batch_number, status)
+             VALUES (?, ?, 1, ?, ?, 'Drum', 1, ?, 'Available')"
+        );
+        $stmt->execute([$stockId, $location, $quantity, $quantity, $batch]);
+    }
+
     /**
      * Port of v2 helpers.controlledBins(): the default test rack map
      * (CA/CB, bays 1-3, levels A-E, 2 pos => 60 bins; Level A pick-face).
