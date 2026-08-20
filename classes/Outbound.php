@@ -146,7 +146,20 @@ class Outbound {
                 NULLIF(od.ship_to_street,'') AS item_ship_to_street,
                 COALESCE(NULLIF(od.kota,''), NULLIF(o.kota,'')) AS item_ship_to_kota,
                 COALESCE(ci.customer_name, co.customer_name) AS order_customer_name,
-                COALESCE(ci.customer_code, co.customer_code) AS order_customer_code
+                COALESCE(ci.customer_code, co.customer_code) AS order_customer_code,
+                (SELECT ii.id FROM inbound_items ii
+                 WHERE ii.cross_dock_outbound_order_id = oi.outbound_order_id
+                   AND ii.product_id = oi.product_id
+                 ORDER BY ii.id LIMIT 1) AS cross_dock_inbound_item_id,
+                (SELECT ii.batch_number FROM inbound_items ii
+                 WHERE ii.cross_dock_outbound_order_id = oi.outbound_order_id
+                   AND ii.product_id = oi.product_id
+                 ORDER BY ii.id LIMIT 1) AS cross_dock_batch,
+                (SELECT io.order_number FROM inbound_items ii2
+                 JOIN inbound_orders io ON io.id = ii2.inbound_order_id
+                 WHERE ii2.cross_dock_outbound_order_id = oi.outbound_order_id
+                   AND ii2.product_id = oi.product_id
+                 ORDER BY ii2.id LIMIT 1) AS cross_dock_inbound_number
                 FROM outbound_items oi
                 JOIN products p ON oi.product_id = p.id
                 LEFT JOIN outbound_destinations od ON oi.destination_id = od.id
@@ -166,6 +179,14 @@ class Outbound {
                AND stock_status = 'Available'
                AND quantity > 0
                AND (location IS NULL OR location NOT IN ('QUA_SHELL','STAGING'))"
+        );
+        $stmtStockCd = $db->prepare(
+            "SELECT COUNT(*) FROM stock
+             WHERE product_id = ?
+               AND batch_number <=> ?
+               AND stock_status = 'Available'
+               AND quantity > 0
+               AND (location IS NULL OR location NOT IN ('QUA_SHELL'))"
         );
         $stmtAutoAtp = $db->prepare(
             "UPDATE outbound_items SET in_process_status = 'ATP' WHERE id = ?"
@@ -201,8 +222,11 @@ class Outbound {
             $currentStatus = $row['in_process_status'] ?? 'Goods Received';
             if ($currentStatus !== 'Unserviceable') {
                 $batch = $row['batch_number'];
-                $stmtStock->execute([$row['product_id'], $batch]);
-                $inStock = (int)$stmtStock->fetchColumn() > 0;
+                // Cross-docked lines arrive staged at STAGING (bypassing putaway),
+                // so the stock-availability probe must consider STAGING for them.
+                $probe = !empty($row['cross_dock_inbound_item_id']) ? $stmtStockCd : $stmtStock;
+                $probe->execute([$row['product_id'], $batch]);
+                $inStock = (int)$probe->fetchColumn() > 0;
 
                 if ($inStock && $currentStatus !== 'ATP') {
                     $stmtAutoAtp->execute([$row['id']]);
@@ -268,6 +292,7 @@ class Outbound {
                 JOIN products p ON st.product_id = p.id
                 WHERE st.product_id = ?
                 AND (st.stock_status IN ('Available','Dues In') OR st.stock_status IS NULL OR st.stock_status = '')
+                AND (st.hold_status = 'available' OR st.hold_status IS NULL)
                 AND st.quantity > 0
                 AND (st.location IS NULL OR st.location NOT IN ('QUA_SHELL','STAGING'))
                 $locClause
@@ -286,6 +311,7 @@ class Outbound {
         $stmt = $db->prepare("SELECT COALESCE(SUM(quantity),0) FROM stock
                 WHERE product_id = ?
                 AND (stock_status IN ('Available','Dues In') OR stock_status IS NULL OR stock_status = '')
+                AND (hold_status = 'available' OR hold_status IS NULL)
                 AND quantity > 0
                 AND (location IS NULL OR location NOT IN ('QUA_SHELL','STAGING'))");
         $stmt->execute([$productId]);
@@ -358,6 +384,7 @@ class Outbound {
         $stmtAvail = $db->prepare(
             "SELECT COALESCE(SUM(quantity), 0) as total FROM stock WHERE product_id = ?
              AND (stock_status IN ('Available','Dues In') OR stock_status IS NULL OR stock_status = '')
+             AND (hold_status = 'available' OR hold_status IS NULL)
              AND quantity > 0
              AND (location IS NULL OR location NOT IN ('QUA_SHELL','STAGING'))"
         );
@@ -744,6 +771,12 @@ class Outbound {
             $destRow->execute([$itemId]);
             $destInfo = $destRow->fetch();
 
+            // S20 — Shipped deleteItem: hapus baris OUT ledger ship-time untuk produk ini
+            if (($item['order_status'] ?? '') === 'Shipped') {
+                $db->prepare("DELETE FROM stock_ledger WHERE reference_type='Outbound' AND reference_id=? AND product_id=?")
+                   ->execute([$destInfo['outbound_order_id'] ?? $item['outbound_order_id'], $pid]);
+            }
+
             $db->prepare("DELETE FROM outbound_item_locations WHERE outbound_item_id=?")->execute([$itemId]);
             $db->prepare("DELETE FROM outbound_items WHERE id=?")->execute([$itemId]);
 
@@ -773,6 +806,10 @@ class Outbound {
             if ($ownTx) $db->beginTransaction();
 
             $outbound = self::getById($outboundId);
+            if (!$outbound) throw new \Exception("Outbound tidak ditemukan");
+            if (($outbound['status'] ?? '') !== 'Open') {
+                throw new \Exception("Hanya order berstatus Open yang bisa di-pick");
+            }
             $items    = self::getItems($outboundId);
 
             // ── Lock: Block picking if any picking location is under active Stock Take ──
@@ -811,13 +848,19 @@ class Outbound {
                 
                 $preferBatch = $item['batch_number'] ?? $item['batch_no'] ?? null;
 
-                
+                // S25 — Cross-dock: lines fed from STAGING (inbound cross-dock) pick from STAGING only
+                $isCrossDock = !empty($item['cross_dock_inbound_item_id']);
+
+                $locFilter = $isCrossDock
+                    ? "AND location = 'STAGING'"
+                    : "AND location != 'QUA_SHELL' AND location != 'STAGING'";
+
                 $q = $db->prepare("SELECT * FROM stock
                         WHERE product_id = ?
                         AND (stock_status IN ('Available','Dues In') OR stock_status IS NULL OR stock_status = '')
+                        AND (hold_status = 'available' OR hold_status IS NULL)
                         AND quantity > 0
-                        AND location != 'QUA_SHELL'
-                        AND location != 'STAGING'
+                        $locFilter
                         ORDER BY
                             CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END ASC,
                             expiry_date ASC,
