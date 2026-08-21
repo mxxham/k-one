@@ -297,6 +297,7 @@ class LocationManager {
             WHERE st.product_id = ?
               AND sl.status = 'Available'
               AND sl.quantity > 0
+              AND (st.hold_status = 'available' OR st.hold_status IS NULL)
               AND (st.expiry_date IS NULL OR st.expiry_date > CURDATE())
             ORDER BY
                 CASE WHEN st.expiry_date IS NULL THEN 1 ELSE 0 END,
