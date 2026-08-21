@@ -171,28 +171,57 @@ class ActivityLogger {
             'BIN_TRANSFER'       => 'Transfer Bin-to-Bin',
             'COMPLETE_BIN_TRANSFER' => 'Selesai Bin Transfer',
             'CANCEL_BIN_TRANSFER'   => 'Batal Bin Transfer',
+            'SCAN_OVERRIDE'      => 'Override Scan (Mismatch)',
+            'CREATE_ASN'         => 'Buat ASN',
+            'UPDATE_ASN'         => 'Edit ASN',
+            'CANCEL_ASN'         => 'Batal ASN',
+            'RECOMPUTE_ABC'      => 'Recompute Analisis ABC',
+            'CREATE_CYCLECOUNT'  => 'Buat Jadwal Cycle Count',
+            'UPDATE_CYCLECOUNT'  => 'Edit Jadwal Cycle Count',
+            'DELETE_CYCLECOUNT'  => 'Hapus Jadwal Cycle Count',
+            'RUN_CYCLECOUNT'     => 'Run Cycle Count',
+            'CREATE_PUTAWAY_BLOCK'      => 'Blokir Lokasi Putaway',
+            'DEACTIVATE_PUTAWAY_BLOCK'  => 'Nonaktifkan Blokir Lokasi Putaway',
+            'TASK_ASSIGN'        => 'Ambil Putaway Task',
+            'TASK_UPDATE_PALLET' => 'Ubah Lokasi Pallet (Putaway)',
+            'TASK_COMPLETE_PALLET' => 'Selesai Putaway Pallet',
+            'TASK_COMPLETE'      => 'Selesaikan Putaway Task',
+            'TASK_CANCEL'        => 'Batalkan Putaway Task',
+            'TASK_TEAM_ASSIGN'   => 'Tugaskan Tim Putaway',
+            'TASK_TEAM_UNASSIGN' => 'Hapus Penugasan Tim Putaway',
+            'PRINT_LPN_LABEL'    => 'Cetak Label LPN',
+            'RESET_OPERATIONAL_DATA' => 'Reset Data Operasional',
+            'GENERATE_REPLENISHMENT'  => 'Generate Replenishment',
+            'DEMAND_REPLENISHMENT'    => 'Demand Replenishment',
+            'SAVE_PICK_FACE_TARGET'   => 'Simpan Target Pick-Face',
+            'DELETE_PICK_FACE_TARGET' => 'Hapus Target Pick-Face',
         ];
         return $labels[$action] ?? ucwords(strtolower(str_replace('_', ' ', $action)));
     }
 
     public static function moduleIcon(string $module): string {
         $icons = [
-            'inbound'      => 'fas fa-arrow-down',
-            'outbound'     => 'fas fa-arrow-up',
-            'bin_transfer' => 'fas fa-exchange-alt',
-            'stock'        => 'fas fa-boxes',
-            'user'         => 'fas fa-user',
+            'inbound'       => 'fas fa-arrow-down',
+            'outbound'      => 'fas fa-arrow-up',
+            'bin_transfer'  => 'fas fa-exchange-alt',
+            'stock'         => 'fas fa-boxes',
+            'user'          => 'fas fa-user',
+            'abc'           => 'fas fa-chart-pie',
+            'cyclecount'    => 'fas fa-calendar-check',
+            'system'        => 'fas fa-cog',
+            'replenishment' => 'fas fa-sync-alt',
         ];
         return $icons[$module] ?? 'fas fa-circle';
     }
 
     public static function moduleColor(string $module): string {
         $colors = [
-            'inbound'      => '#014f4e',
-            'outbound'     => '#026766',
-            'bin_transfer' => '#026766',
-            'stock'        => '#e65100',
-            'user'         => '#37474f',
+            'inbound'       => '#014f4e',
+            'outbound'      => '#026766',
+            'bin_transfer'  => '#026766',
+            'stock'         => '#e65100',
+            'user'          => '#37474f',
+            'replenishment' => '#6a1b9a',
         ];
         return $colors[$module] ?? '#607d8b';
     }
