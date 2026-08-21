@@ -1,5 +1,17 @@
 <?php
 
+/**
+ * ApiException — mirrors v2 common/api-exception.ts ApiException.badRequest / notFound.
+ * Used to return typed HTTP status codes instead of generic 500.
+ */
+class ApiException extends \Exception {
+    public int $statusCode;
+    public function __construct(string $message, int $statusCode = 400) {
+        parent::__construct($message);
+        $this->statusCode = $statusCode;
+    }
+}
+
 class Picklist {
 
     public static function generateNumber() {
@@ -26,8 +38,11 @@ class Picklist {
         return $prefix . date('His') . rand(10,99);
     }
 
-    
-
+    /**
+     * createFromOutbound — mirrors TS picklist.service.ts lines 37-63.
+     * Throws ApiException(400) on not-found (parity with TS badRequest).
+     * Delegates item insertion to shared insertPicklistItems.
+     */
     public static function createFromOutbound($outboundId) {
         $db = db();
         try {
@@ -40,9 +55,8 @@ class Picklist {
             $stmt->execute([$outboundId]);
             $outbound = $stmt->fetch();
 
-            if (!$outbound) throw new Exception("Outbound order not found");
+            if (!$outbound) throw new ApiException("Outbound order not found", 400);
 
-            
             $stmt = $db->prepare("SELECT id FROM picklists WHERE outbound_order_id = ?");
             $stmt->execute([$outboundId]);
             $existing = $stmt->fetch();
@@ -55,115 +69,7 @@ class Picklist {
             $stmt->execute([$outboundId, $picklistNumber, $_SESSION['user_id']]);
             $picklistId = $db->lastInsertId();
 
-            
-            $stmt = $db->prepare("SELECT oi.*,
-                    p.product_code, p.product_name, p.uom_type, p.uom_per_pallet
-                    FROM outbound_items oi
-                    JOIN products p ON oi.product_id = p.id
-                    WHERE oi.outbound_order_id = ?
-                    ORDER BY oi.exp_date ASC, oi.id ASC");
-            $stmt->execute([$outboundId]);
-            $items = $stmt->fetchAll();
-
-            foreach ($items as $item) {
-                $batchNumber = $item['batch_number'] ?? $item['batch_no'] ?? null;
-                
-                $uomPerPallet = max(1, intval($item['uom_per_pallet'] ?? 4));
-
-                
-                $stmt2 = $db->prepare("SELECT sl.*, oil.quantity as alloc_qty,
-                        lm.zone, lm.aisle
-                        FROM outbound_item_locations oil
-                        JOIN stock_locations sl ON oil.stock_location_id = sl.id
-                        LEFT JOIN location_master lm
-                               ON lm.location_code COLLATE utf8mb4_general_ci
-                                = sl.location_code  COLLATE utf8mb4_general_ci
-                        WHERE oil.outbound_item_id = ?
-                        ORDER BY sl.location_code, sl.pallet_seq");
-                $stmt2->execute([$item['id']]);
-                $locationRows = $stmt2->fetchAll();
-
-                if (!empty($locationRows)) {
-                    
-                    $palletSeq = 1;
-                    foreach ($locationRows as $lr) {
-                        $locBatch = $lr['batch_number'] ?? $batchNumber;
-                        $locCode  = $lr['location_code'] ?? '';
-                        $locLevel = isset($locCode[4]) ? strtoupper($locCode[4]) : 'B';
-                        $qty      = floatval($lr['alloc_qty']);
-                        
-                        $plt = $uomPerPallet > 0
-                             ? ($locLevel === 'A'
-                                ? round($qty / $uomPerPallet, 2)
-                                : (int)ceil($qty / $uomPerPallet))
-                             : 0;
-                        $stmt3 = $db->prepare("INSERT INTO picklist_items
-                                (picklist_id, outbound_item_id, product_id, batch_no, batch_number,
-                                 location, quantity, uom, pallet, pallet_seq,
-                                 stock_location_id, status)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')");
-                        $stmt3->execute([
-                            $picklistId,
-                            $item['id'],
-                            $item['product_id'],
-                            $locBatch, $locBatch,
-                            $locCode,
-                            $qty,
-                            $item['uom_type'],
-                            $plt,
-                            $palletSeq++,
-                            $lr['id']
-                        ]);
-                    }
-                } else {
-                    
-                    $distribution = self::calculatePalletDistribution(
-                        $item['actual_qty'] ?: $item['quantity'],
-                        $uomPerPallet
-                    );
-
-                    $palletSeq = 1;
-                    foreach ($distribution as $pallet) {
-                        $slId = null;
-                        if (!empty($item['location']) && !empty($batchNumber)) {
-                            $slStmt = $db->prepare("SELECT id FROM stock_locations
-                                    WHERE batch_number=? AND location_code=?
-                                    AND status IN ('Available','Reserved')
-                                    AND pallet_seq=? LIMIT 1");
-                            $slStmt->execute([$batchNumber, $item['location'], $palletSeq]);
-                            $slRow = $slStmt->fetch();
-                            $slId  = $slRow['id'] ?? null;
-                        }
-
-                        $locCode2  = $item['location'] ?? 'TBD';
-                        $locLevel2 = isset($locCode2[4]) ? strtoupper($locCode2[4]) : 'B';
-                        $qty2      = floatval($pallet['quantity']);
-                        $plt2      = $uomPerPallet > 0
-                                   ? ($locLevel2 === 'A'
-                                      ? round($qty2 / $uomPerPallet, 2)
-                                      : (int)ceil($qty2 / $uomPerPallet))
-                                   : 0;
-
-                        $stmt3 = $db->prepare("INSERT INTO picklist_items
-                                (picklist_id, outbound_item_id, product_id, batch_no, batch_number,
-                                 location, quantity, uom, pallet, pallet_seq,
-                                 stock_location_id, status)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')");
-                        $stmt3->execute([
-                            $picklistId,
-                            $item['id'],
-                            $item['product_id'],
-                            $batchNumber, $batchNumber,
-                            $locCode2,
-                            $qty2,
-                            $item['uom_type'],
-                            $plt2,
-                            $palletSeq++,
-                            $slId
-                        ]);
-                    }
-                }
-            }
+            self::insertPicklistItems($db, $picklistId, [$outboundId]);
 
             $db->commit();
             return $picklistId;
@@ -171,6 +77,158 @@ class Picklist {
         } catch (Exception $e) {
             if ($db->inTransaction()) $db->rollBack();
             throw $e;
+        }
+    }
+
+    /**
+     * createFromOrders — Wave Planning: builds ONE consolidated picklist across
+     * multiple outbound orders (TS lines 76-90). Header sets outbound_order_id = NULL
+     * and links wave_id. If a transaction $db is supplied it runs inside that
+     * transaction (the waves module wraps everything in one tx); otherwise own tx.
+     */
+    public static function createFromOrders(array $outboundIds, int $createdBy, int $waveId, $client = null): int {
+        $run = function ($db) use ($outboundIds, $createdBy, $waveId) {
+            $picklistNumber = self::generateNumber();
+            $ins = $db->prepare("INSERT INTO picklists
+                    (outbound_order_id, wave_id, picklist_number, created_date, status, created_by)
+                    VALUES (NULL, ?, ?, CURDATE(), 'Draft', ?)");
+            $ins->execute([$waveId, $picklistNumber, $createdBy]);
+            $picklistId = (int)$db->lastInsertId();
+
+            self::insertPicklistItems($db, $picklistId, $outboundIds);
+
+            return $picklistId;
+        };
+
+        if ($client) return $run($client);
+
+        $db = db();
+        try {
+            $db->beginTransaction();
+            $result = $run($db);
+            $db->commit();
+            return $result;
+        } catch (Exception $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * insertPicklistItems — shared by createFromOutbound and createFromOrders.
+     * Mirrors TS lines 98-173: FEFO exp_date order, allocations-based rows with
+     * S19 held-stock exclusion, fallback to decomposed pallets.
+     * Touches NO stock / NO ledger.
+     */
+    public static function insertPicklistItems($db, int $picklistId, array $outboundIds): void {
+        $ph = implode(',', array_fill(0, count($outboundIds), '?'));
+        $itemsStmt = $db->prepare("SELECT oi.*, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet
+                FROM outbound_items oi
+                JOIN products p ON oi.product_id = p.id
+                WHERE oi.outbound_order_id IN ($ph)
+                ORDER BY oi.exp_date ASC, oi.id ASC");
+        $itemsStmt->execute($outboundIds);
+        $items = $itemsStmt->fetchAll();
+
+        foreach ($items as $item) {
+            $batchNumber = $item['batch_number'] ?? $item['batch_no'] ?? null;
+            $uomPerPallet = max(1, intval($item['uom_per_pallet'] ?? 4));
+
+            // S19 held-stock exclusion: LEFT JOIN stock + hold_status filter
+            $locStmt = $db->prepare("SELECT sl.*, oil.quantity as alloc_qty,
+                    lm.zone, lm.aisle
+                    FROM outbound_item_locations oil
+                    JOIN stock_locations sl ON oil.stock_location_id = sl.id
+                    LEFT JOIN location_master lm
+                           ON lm.location_code COLLATE utf8mb4_general_ci
+                            = sl.location_code COLLATE utf8mb4_general_ci
+                    LEFT JOIN stock st ON st.id = sl.stock_id
+                    WHERE oil.outbound_item_id = ?
+                      AND (st.hold_status = 'available' OR st.hold_status IS NULL)
+                    ORDER BY sl.location_code, sl.pallet_seq");
+            $locStmt->execute([$item['id']]);
+            $locationRows = $locStmt->fetchAll();
+
+            if (!empty($locationRows)) {
+                $palletSeq = 1;
+                foreach ($locationRows as $lr) {
+                    $locBatch = $lr['batch_number'] ?? $batchNumber;
+                    $locCode  = $lr['location_code'] ?? '';
+                    $locLevel = isset($locCode[4]) ? strtoupper($locCode[4]) : 'B';
+                    $qty      = floatval($lr['alloc_qty']);
+                    $plt = $uomPerPallet > 0
+                         ? ($locLevel === 'A'
+                            ? round($qty / $uomPerPallet, 2)
+                            : (int)ceil($qty / $uomPerPallet))
+                         : 0;
+                    $insItem = $db->prepare("INSERT INTO picklist_items
+                            (picklist_id, outbound_item_id, product_id, batch_no, batch_number,
+                             location, quantity, uom, pallet, pallet_seq,
+                             stock_location_id, status)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')");
+                    $insItem->execute([
+                        $picklistId,
+                        $item['id'],
+                        $item['product_id'],
+                        $locBatch, $locBatch,
+                        $locCode,
+                        $qty,
+                        $item['uom_type'],
+                        $plt,
+                        $palletSeq++,
+                        $lr['id']
+                    ]);
+                }
+            } else {
+                // Fallback: decompose into pallets — S19 hold exclusion on lookup
+                $distribution = self::calculatePalletDistribution(
+                    $item['actual_qty'] ?: $item['quantity'],
+                    $uomPerPallet
+                );
+
+                $palletSeq = 1;
+                foreach ($distribution as $pallet) {
+                    $slId = null;
+                    if (!empty($item['location']) && !empty($batchNumber)) {
+                        $slStmt = $db->prepare("SELECT sl.id FROM stock_locations sl
+                                LEFT JOIN stock st ON st.id = sl.stock_id
+                                WHERE sl.batch_number = ? AND sl.location_code = ?
+                                  AND sl.status IN ('Available','Reserved') AND sl.pallet_seq = ?
+                                  AND (st.hold_status = 'available' OR st.hold_status IS NULL)
+                                LIMIT 1");
+                        $slStmt->execute([$batchNumber, $item['location'], $palletSeq]);
+                        $slRow = $slStmt->fetch();
+                        $slId  = $slRow['id'] ?? null;
+                    }
+
+                    $locCode2  = $item['location'] ?? 'TBD';
+                    $locLevel2 = isset($locCode2[4]) ? strtoupper($locCode2[4]) : 'B';
+                    $qty2      = floatval($pallet['quantity']);
+                    $plt2      = $uomPerPallet > 0
+                               ? ($locLevel2 === 'A'
+                                  ? round($qty2 / $uomPerPallet, 2)
+                                  : (int)ceil($qty2 / $uomPerPallet))
+                               : 0;
+
+                    $insItem = $db->prepare("INSERT INTO picklist_items
+                            (picklist_id, outbound_item_id, product_id, batch_no, batch_number,
+                             location, quantity, uom, pallet, pallet_seq,
+                             stock_location_id, status)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')");
+                    $insItem->execute([
+                        $picklistId,
+                        $item['id'],
+                        $item['product_id'],
+                        $batchNumber, $batchNumber,
+                        $locCode2,
+                        $qty2,
+                        $item['uom_type'],
+                        $plt2,
+                        $palletSeq++,
+                        $slId
+                    ]);
+                }
+            }
         }
     }
 
@@ -194,17 +252,17 @@ class Picklist {
                 o.so_number, o.do_number, o.shipment_number,
                 o.destination, o.kota, o.armada_no, o.container_no,
                 c.customer_name, c.address, c.city,
+                w.wave_number, w.carrier as wave_carrier, w.cutoff_time as wave_cutoff,
                 u.full_name as created_by_name
                 FROM picklists pkl
-                JOIN outbound_orders o ON pkl.outbound_order_id = o.id
+                LEFT JOIN outbound_orders o ON pkl.outbound_order_id = o.id
                 LEFT JOIN customers c ON o.customer_id = c.id
+                LEFT JOIN waves w ON pkl.wave_id = w.id
                 LEFT JOIN users u ON pkl.created_by = u.id
                 WHERE pkl.id = ?");
         $stmt->execute([$id]);
         return $stmt->fetch();
     }
-
-    
 
     public static function getItems($picklistId) {
         $db = db();
@@ -244,15 +302,18 @@ class Picklist {
                 o.order_number as outbound_number,
                 o.so_number, o.do_number, o.shipment_number,
                 c.customer_name,
+                w.wave_number,
                 COUNT(pki.id) as total_items,
                 SUM(pki.quantity) as total_qty,
                 CEIL(SUM(pki.pallet)) as total_pallet
                 FROM picklists pkl
-                JOIN outbound_orders o ON pkl.outbound_order_id = o.id
+                LEFT JOIN outbound_orders o ON pkl.outbound_order_id = o.id
                 LEFT JOIN customers c ON o.customer_id = c.id
+                LEFT JOIN waves w ON pkl.wave_id = w.id
                 LEFT JOIN picklist_items pki ON pkl.id = pki.picklist_id
                 $where
-                GROUP BY pkl.id
+                GROUP BY pkl.id, o.order_number, o.so_number, o.do_number, o.shipment_number,
+                         c.customer_name, w.wave_number
                 ORDER BY pkl.created_date DESC, pkl.created_at DESC";
 
         if ($limit) {
@@ -285,8 +346,6 @@ class Picklist {
         }
         return $s;
     }
-
-    
 
     public static function updateItem($itemId, $data) {
         $db = db();
@@ -340,6 +399,61 @@ class Picklist {
 
     public static function exportForPrint($picklistId) {
         return ['picklist' => self::getById($picklistId), 'items' => self::getItems($picklistId)];
+    }
+
+    /**
+     * S25 — Cross-dock: add a staged item to the outbound order's Draft picklist.
+     * Creates the picklist first if the order has none yet.
+     */
+    /** v2 — cross-dock: attach a STAGING picklist line to the linked outbound order. */
+    public static function addCrossDockItem(int $outboundOrderId, int $productId, float $quantity, ?string $batchNumber = null, string $uom = 'Drum', ?int $createdBy = null, ?int $stockLocationId = null): int {
+        $db = db();
+        $ownTx = !$db->inTransaction();
+        try {
+            if ($ownTx) $db->beginTransaction();
+
+            $plStmt = $db->prepare("SELECT id FROM picklists WHERE outbound_order_id = ? ORDER BY id LIMIT 1");
+            $plStmt->execute([$outboundOrderId]);
+            $pl = $plStmt->fetch();
+
+            if ($pl) {
+                $picklistId = (int)$pl['id'];
+            } else {
+                $picklistNumber = self::generateNumber();
+                $ins = $db->prepare("INSERT INTO picklists
+                        (outbound_order_id, picklist_number, created_date, status, created_by)
+                        VALUES (?, ?, CURDATE(), 'Draft', ?)");
+                $ins->execute([$outboundOrderId, $picklistNumber, $createdBy ?? ($_SESSION['user_id'] ?? null)]);
+                $picklistId = (int)$db->lastInsertId();
+            }
+
+            $obItemR = $db->prepare("SELECT oi.id, p.uom_per_pallet
+                    FROM outbound_items oi JOIN products p ON p.id = oi.product_id
+                    WHERE oi.outbound_order_id = ? AND oi.product_id = ?
+                    ORDER BY oi.id LIMIT 1");
+            $obItemR->execute([$outboundOrderId, $productId]);
+            $obItem = $obItemR->fetch();
+            $obItemId = $obItem ? (int)$obItem['id'] : null;
+            $uomPerPallet = max(1, intval($obItem['uom_per_pallet'] ?? 4));
+
+            $batch = $batchNumber ?? null;
+            $plt = max(1, (int)ceil($quantity / $uomPerPallet));
+            $stmt = $db->prepare("INSERT INTO picklist_items
+                    (picklist_id, outbound_item_id, product_id, batch_no, batch_number,
+                     location, quantity, uom, pallet, pallet_seq, stock_location_id, status)
+                    VALUES (?,?,?,?,?,'STAGING',?,?,?,1,?,'Pending')");
+            $stmt->execute([
+                $picklistId, $obItemId, $productId, $batch, $batch,
+                $quantity, $uom, $plt, $stockLocationId,
+            ]);
+            $itemId = (int)$db->lastInsertId();
+
+            if ($ownTx) $db->commit();
+            return $itemId;
+        } catch (Throwable $e) {
+            if ($ownTx && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
     }
 }
 ?>
