@@ -1062,6 +1062,272 @@ class Putaway {
         return (int)$stmt->fetchColumn() > 0;
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Zoning config CRUD                                                  */
+    /* ------------------------------------------------------------------ */
+
+    public static function listZones(): array {
+        $db = db();
+        return $db->query("SELECT z.*, COUNT(lm.id) AS location_count
+                FROM zones z
+                LEFT JOIN location_master lm ON lm.zone_code = z.zone_code
+                GROUP BY z.id
+                ORDER BY z.priority ASC, z.zone_code")->fetchAll();
+    }
+
+    public static function saveZone(array $data): int {
+        $db = db();
+        $code = strtoupper(trim($data['zone_code'] ?? ''));
+        if ($code === '') throw new Exception("zone_code wajib diisi.");
+        $zoneType = strtoupper($data['zone_type'] ?? 'RESERVE');
+        $validTypes = ['PICK_FAST','RESERVE','BULK','QUARANTINE','STAGING','UNALLOCATED'];
+        if (!in_array($zoneType, $validTypes, true)) throw new Exception("zone_type tidak valid.");
+        $priority = max(0, intval($data['priority'] ?? 10));
+        $isActive = $data['is_active'] ?? 1;
+        $id = intval($data['id'] ?? 0);
+
+        if ($id > 0) {
+            $db->prepare("UPDATE zones SET zone_code=?, zone_name=?, zone_type=?, priority=?, is_active=? WHERE id=?")
+               ->execute([$code, $data['zone_name'] ?? '', $zoneType, $priority, $isActive, $id]);
+            return $id;
+        }
+        $db->prepare("INSERT INTO zones (zone_code, zone_name, zone_type, priority, is_active) VALUES (?,?,?,?,?)")
+           ->execute([$code, $data['zone_name'] ?? '', $zoneType, $priority, $isActive]);
+        return (int)$db->lastInsertId();
+    }
+
+    public static function deleteZone(int $id): bool {
+        $db = db();
+        $stmt = $db->prepare("DELETE FROM zones WHERE id = ?");
+        $stmt->execute([$id]);
+        return $stmt->rowCount() > 0;
+    }
+
+    public static function listZoneAisles(): array {
+        $db = db();
+        return $db->query("SELECT za.*, z.zone_name, z.zone_type
+                FROM zone_aisles za
+                JOIN zones z ON z.zone_code = za.zone_code
+                ORDER BY za.zone_code, za.aisle, za.min_level, za.max_level")->fetchAll();
+    }
+
+    public static function saveZoneAisle(array $data): int {
+        $db = db();
+        $zoneCode = strtoupper(trim($data['zone_code'] ?? ''));
+        $aisle    = strtoupper(trim($data['aisle'] ?? ''));
+        $minLevel = strtoupper($data['min_level'] ?? 'A');
+        $maxLevel = strtoupper($data['max_level'] ?? 'E');
+        if ($zoneCode === '') throw new Exception("zone_code wajib diisi.");
+        if ($aisle === '')    throw new Exception("aisle wajib diisi.");
+        $levels = ['A'=>1,'B'=>2,'C'=>3,'D'=>4,'E'=>5];
+        if (!isset($levels[$minLevel]) || !isset($levels[$maxLevel])) throw new Exception("min_level / max_level tidak valid (A–E).");
+        if ($levels[$minLevel] > $levels[$maxLevel]) throw new Exception("min_level tidak boleh lebih tinggi dari max_level.");
+
+        $z = $db->prepare("SELECT id FROM zones WHERE zone_code = ? AND is_active = 1");
+        $z->execute([$zoneCode]);
+        if (!$z->fetch()) throw new Exception("Zone tidak ditemukan / nonaktif.");
+
+        $isActive = $data['is_active'] ?? 1;
+        $id = intval($data['id'] ?? 0);
+        if ($id > 0) {
+            $db->prepare("UPDATE zone_aisles SET zone_code=?, aisle=?, min_level=?, max_level=?, is_active=? WHERE id=?")
+               ->execute([$zoneCode, $aisle, $minLevel, $maxLevel, $isActive, $id]);
+            return $id;
+        }
+        $db->prepare("INSERT INTO zone_aisles (zone_code, aisle, min_level, max_level, is_active) VALUES (?,?,?,?,?)")
+           ->execute([$zoneCode, $aisle, $minLevel, $maxLevel, $isActive]);
+        return (int)$db->lastInsertId();
+    }
+
+    public static function deleteZoneAisle(int $id): bool {
+        $db = db();
+        $stmt = $db->prepare("DELETE FROM zone_aisles WHERE id = ?");
+        $stmt->execute([$id]);
+        return $stmt->rowCount() > 0;
+    }
+
+    public static function listUomLimits(): array {
+        $db = db();
+        return $db->query("SELECT * FROM uom_physical_limits ORDER BY uom_type")->fetchAll();
+    }
+
+    public static function saveUomLimit(array $data): string {
+        $db = db();
+        $uomType = trim($data['uom_type'] ?? '');
+        if ($uomType === '') throw new Exception("uom_type wajib diisi.");
+        $minLevel = strtoupper($data['min_level'] ?? 'A');
+        $maxLevel = strtoupper($data['max_level'] ?? 'E');
+        $levels = ['A'=>1,'B'=>2,'C'=>3,'D'=>4,'E'=>5];
+        if (!isset($levels[$minLevel]) || !isset($levels[$maxLevel])) throw new Exception("min_level / max_level tidak valid (A–E).");
+        if ($levels[$minLevel] > $levels[$maxLevel]) throw new Exception("min_level tidak boleh lebih tinggi dari max_level.");
+
+        $allowPick = $data['allow_pick_face'] ?? 1;
+        $maxWeight = ($data['max_weight_kg'] ?? '') !== '' ? floatval($data['max_weight_kg']) : null;
+        $maxHeight = ($data['max_height_cm'] ?? '') !== '' ? floatval($data['max_height_cm']) : null;
+        $reqEquip  = $data['requires_equipment'] ?? 0;
+
+        // UPSERT: check existing
+        $chk = $db->prepare("SELECT uom_type FROM uom_physical_limits WHERE UPPER(uom_type) = UPPER(?)");
+        $chk->execute([$uomType]);
+        if ($chk->fetch()) {
+            $db->prepare("UPDATE uom_physical_limits SET min_level=?, max_level=?, allow_pick_face=?, max_weight_kg=?, max_height_cm=?, requires_equipment=?, updated_at=NOW() WHERE UPPER(uom_type)=UPPER(?)")
+               ->execute([$minLevel, $maxLevel, $allowPick, $maxWeight, $maxHeight, $reqEquip, $uomType]);
+        } else {
+            $db->prepare("INSERT INTO uom_physical_limits (uom_type, min_level, max_level, allow_pick_face, max_weight_kg, max_height_cm, requires_equipment, updated_at) VALUES (?,?,?,?,?,?,?,NOW())")
+               ->execute([$uomType, $minLevel, $maxLevel, $allowPick, $maxWeight, $maxHeight, $reqEquip]);
+        }
+        return $uomType;
+    }
+
+    public static function listProductRules(?int $productId = null): array {
+        $db = db();
+        $where = '';
+        $args = [];
+        if ($productId && $productId > 0) {
+            $where = 'WHERE ppr.product_id = ?';
+            $args[] = $productId;
+        }
+        $sql = "SELECT ppr.*, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet
+                FROM product_putaway_rules ppr
+                JOIN products p ON p.id = ppr.product_id
+                {$where}
+                ORDER BY p.product_name";
+        $stmt = $db->prepare($sql);
+        $stmt->execute($args);
+        return $stmt->fetchAll();
+    }
+
+    public static function saveProductRule(array $data): int {
+        $db = db();
+        $productId = intval($data['product_id'] ?? 0);
+        if (!$productId) throw new Exception("product_id wajib diisi.");
+        $chk = $db->prepare("SELECT id FROM products WHERE id = ?");
+        $chk->execute([$productId]);
+        if (!$chk->fetch()) throw new Exception("Produk tidak ditemukan.");
+
+        $maxLevel = !empty($data['max_level']) ? strtoupper($data['max_level']) : null;
+        if ($maxLevel) {
+            $levels = ['A'=>1,'B'=>2,'C'=>3,'D'=>4,'E'=>5];
+            if (!isset($levels[$maxLevel])) throw new Exception("max_level tidak valid (A–E).");
+        }
+
+        $zoneCode  = strtoupper($data['preferred_zone_code'] ?? 'RESERVE');
+        $allowPick = ($data['allow_pick_face'] ?? '') !== '' ? intval($data['allow_pick_face']) : null;
+        $ftp       = $data['full_pallet_to_pick'] ?? 0;
+        $minPf     = $data['min_pick_face_qty'] ?? 0;
+        $maxPf     = $data['max_pick_face_qty'] ?? 0;
+        $consolid  = $data['consolidate'] ?? 1;
+
+        $chk2 = $db->prepare("SELECT product_id FROM product_putaway_rules WHERE product_id = ?");
+        $chk2->execute([$productId]);
+        if ($chk2->fetch()) {
+            $db->prepare("UPDATE product_putaway_rules SET preferred_zone_code=?, max_level=?, allow_pick_face=?, full_pallet_to_pick=?, min_pick_face_qty=?, max_pick_face_qty=?, consolidate=?, updated_at=NOW() WHERE product_id=?")
+               ->execute([$zoneCode, $maxLevel, $allowPick, $ftp, $minPf, $maxPf, $consolid, $productId]);
+        } else {
+            $db->prepare("INSERT INTO product_putaway_rules (product_id, preferred_zone_code, max_level, allow_pick_face, full_pallet_to_pick, min_pick_face_qty, max_pick_face_qty, consolidate, updated_at) VALUES (?,?,?,?,?,?,?,?,NOW())")
+               ->execute([$productId, $zoneCode, $maxLevel, $allowPick, $ftp, $minPf, $maxPf, $consolid]);
+        }
+        return $productId;
+    }
+
+    public static function deleteProductRule(int $productId): bool {
+        $db = db();
+        $stmt = $db->prepare("DELETE FROM product_putaway_rules WHERE product_id = ?");
+        $stmt->execute([$productId]);
+        return $stmt->rowCount() > 0;
+    }
+
+    public static function listAisleMap(?string $aisle = null, ?string $level = null): array {
+        $db = db();
+        $where = ['lm.is_active = 1'];
+        $args = [];
+        if ($aisle) { $where[] = 'lm.aisle = ?'; $args[] = $aisle; }
+        if ($level) { $where[] = 'lm.row_name = ?'; $args[] = $level; }
+
+        $sql = "SELECT lm.aisle,
+                       lm.row_name AS level,
+                       COUNT(lm.id) AS total,
+                       COUNT(CASE WHEN sl.id IS NOT NULL THEN 1 END) AS occupied,
+                       COUNT(CASE WHEN sl.id IS NULL THEN 1 END) AS free,
+                       COALESCE(lm.zone_code, lm.zone) AS zone_code,
+                       MAX(CASE WHEN lm.is_pick_face = 1 THEN 1 ELSE 0 END) AS is_pick_face,
+                       SUM(CASE WHEN lm.equipment_accessible = 1 THEN 1 ELSE 0 END) AS equip_accessible
+                FROM location_master lm
+                LEFT JOIN stock_locations sl ON sl.location_code = lm.location_code AND sl.status IN ('Available','Reserved')
+                WHERE " . implode(' AND ', $where) . "
+                GROUP BY lm.aisle, lm.row_name, COALESCE(lm.zone_code, lm.zone)
+                ORDER BY lm.aisle, lm.row_name";
+        $stmt = $db->prepare($sql);
+        $stmt->execute($args);
+        $rows = $stmt->fetchAll();
+
+        $locations = null;
+        if ($aisle && $level) {
+            $locSql = "SELECT lm.location_code, lm.aisle, lm.rack, lm.row_name AS level, lm.position,
+                              COALESCE(lm.zone_code, lm.zone) AS zone_code, lm.is_pick_face, lm.equipment_accessible,
+                              sl.quantity, sl.batch_number, sl.pallet_function,
+                              st.expiry_date, p.product_code, p.product_name
+                       FROM location_master lm
+                       LEFT JOIN stock_locations sl ON sl.location_code = lm.location_code AND sl.status IN ('Available','Reserved')
+                       LEFT JOIN stock st ON st.id = sl.stock_id
+                       LEFT JOIN products p ON p.id = st.product_id
+                       WHERE lm.is_active = 1 AND lm.aisle = ? AND lm.row_name = ?
+                       ORDER BY lm.rack, lm.position";
+            $locStmt = $db->prepare($locSql);
+            $locStmt->execute([$aisle, $level]);
+            $locations = $locStmt->fetchAll();
+        }
+
+        return ['rows' => $rows, 'locations' => $locations];
+    }
+
+    public static function listAllBins(): array {
+        $db = db();
+        $sql = "SELECT lm.location_code, lm.aisle, lm.rack, lm.row_name AS level, lm.position,
+                       COALESCE(lm.zone_code, lm.zone) AS zone_code, lm.is_pick_face, lm.equipment_accessible,
+                       SUM(sl.quantity) AS quantity,
+                       MAX(sl.pallet_function) AS pallet_function,
+                       MAX(sl.batch_number) AS batch_number,
+                       MAX(st.product_id) AS product_id,
+                       MAX(p.product_code) AS product_code,
+                       MAX(p.product_name) AS product_name,
+                       MAX(st.expiry_date) AS expiry_date
+                FROM location_master lm
+                LEFT JOIN stock_locations sl ON sl.location_code = lm.location_code AND sl.status IN ('Available','Reserved')
+                LEFT JOIN stock st ON st.id = sl.stock_id
+                LEFT JOIN products p ON p.id = st.product_id
+                WHERE lm.is_active = 1
+                GROUP BY lm.id, lm.location_code, lm.aisle, lm.rack, lm.row_name, lm.position,
+                         COALESCE(lm.zone_code, lm.zone), lm.is_pick_face, lm.equipment_accessible
+                ORDER BY lm.aisle, lm.rack, lm.row_name, lm.position";
+        $rows = $db->query($sql)->fetchAll();
+
+        $blocks = self::_blockedLocations();
+        foreach ($rows as &$x) {
+            $x['occupied'] = ($x['quantity'] != null && floatval($x['quantity']) > 0) ? 1 : 0;
+            $x['quantity'] = $x['quantity'] != null ? floatval($x['quantity']) : 0;
+            $x['is_pick_face'] = intval($x['is_pick_face']);
+            $x['equipment_accessible'] = intval($x['equipment_accessible']);
+            // Check block
+            $x['blocked'] = 0;
+            $x['block_reason'] = null;
+            $locCode = $x['location_code'];
+            foreach ($blocks as $b) {
+                if ($b['scope_type'] === 'location' && $b['location_code'] === $locCode) {
+                    $x['blocked'] = 1;
+                    $x['block_reason'] = $b['reason'];
+                    break;
+                }
+                if ($b['scope_type'] === 'aisle' && strpos($locCode, $b['aisle_prefix']) === 0) {
+                    $x['blocked'] = 1;
+                    $x['block_reason'] = $b['reason'];
+                    break;
+                }
+            }
+        }
+        return $rows;
+    }
+
     /** Cancel still-Pending pallets of an item across open tasks (rollback path). */
     public static function cancelItemPallets(int $itemId): void {
         $db = db();
