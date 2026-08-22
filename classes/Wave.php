@@ -2,78 +2,6 @@
 
 class Wave {
 
-    /* ------------------------------------------------------------------ */
-    /* S23 — Wave planning (multi-order consolidated picklist)             */
-    /* ------------------------------------------------------------------ */
-
-    public static function candidateOrders(): array {
-        $db = db();
-        $stmt = $db->prepare("SELECT o.*, c.customer_name,
-                        COUNT(oi.id) AS total_items
-                FROM outbound_orders o
-                LEFT JOIN customers c ON o.customer_id = c.id
-                LEFT JOIN outbound_items oi ON oi.outbound_order_id = o.id
-                WHERE o.status IN ('Open','Draft')
-                  AND NOT EXISTS (SELECT 1 FROM picklists p WHERE p.outbound_order_id = o.id)
-                GROUP BY o.id
-                ORDER BY o.order_date ASC, o.created_at ASC");
-        $stmt->execute();
-        $rows = $stmt->fetchAll();
-        foreach ($rows as &$r) {
-            $r['total_items'] = (int)$r['total_items'];
-        }
-        unset($r);
-        return $rows;
-    }
-
-    public static function create(array $data): array {
-        $orderIds = array_values(array_unique(array_map('intval', $data['order_ids'] ?? [])));
-        if (empty($orderIds)) throw new Exception("Pilih minimal satu outbound order.");
-        if (count($orderIds) > 50) throw new Exception("Maksimal 50 order per wave.");
-
-        $db = db();
-        $ownTx = !$db->inTransaction();
-        try {
-            if ($ownTx) $db->beginTransaction();
-
-            // Validate orders: exist, eligible, no existing picklist
-            $ph = implode(',', array_fill(0, count($orderIds), '?'));
-            $chk = $db->prepare("SELECT id FROM outbound_orders
-                    WHERE id IN ($ph) AND status IN ('Open','Draft')
-                    AND NOT EXISTS (SELECT 1 FROM picklists p WHERE p.outbound_order_id = outbound_orders.id)");
-            $chk->execute($orderIds);
-            $valid = array_column($chk->fetchAll(), 'id');
-            if (count($valid) !== count($orderIds)) {
-                throw new Exception("Beberapa order tidak eligible (status harus Open/Draft dan belum punya picklist).");
-            }
-
-            $waveNumber = self::generateNumber();
-            $stmt = $db->prepare("INSERT INTO waves
-                    (wave_number, status, carrier, cutoff_time, created_by)
-                    VALUES (?, 'Planning', ?, ?, ?)");
-            $stmt->execute([
-                $waveNumber,
-                $data['carrier'] ?? null,
-                !empty($data['cutoff_time']) ? $data['cutoff_time'] : null,
-                $_SESSION['user_id'] ?? null,
-            ]);
-            $waveId = (int)$db->lastInsertId();
-
-            $woStmt = $db->prepare("INSERT INTO wave_orders (wave_id, outbound_order_id) VALUES (?, ?)");
-            foreach ($valid as $oid) {
-                $woStmt->execute([$waveId, $oid]);
-            }
-
-            $picklistId = self::_buildConsolidatedPicklist($waveId, $valid);
-
-            if ($ownTx) $db->commit();
-            return ['wave_id' => $waveId, 'picklist_id' => $picklistId, 'wave_number' => $waveNumber];
-        } catch (Throwable $e) {
-            if ($ownTx && $db->inTransaction()) $db->rollBack();
-            throw $e;
-        }
-    }
-
     public static function generateNumber(): string {
         $db = db();
         $prefix = 'WAV-' . date('Ym') . '-';
@@ -92,82 +20,50 @@ class Wave {
         return $prefix . date('His') . rand(10, 99);
     }
 
-    /** One consolidated picklist for the wave — delegates to Picklist::createFromOrders (TS parity). */
-    private static function _buildConsolidatedPicklist(int $waveId, array $orderIds): int {
+    public static function countAll(?string $status = null): int {
         $db = db();
-        $picklistId = Picklist::createFromOrders(
-            $orderIds,
-            (int)($_SESSION['user_id'] ?? 0),
-            $waveId,
-            $db
-        );
-        return $picklistId;
-    }
-
-    public static function cancel(int $waveId): bool {
-        $db = db();
-        $ownTx = !$db->inTransaction();
-        try {
-            if ($ownTx) $db->beginTransaction();
-
-            $wave = self::getById($waveId);
-            if (!$wave) throw new Exception("Wave tidak ditemukan.");
-            if ($wave['status'] === 'Cancelled') throw new Exception("Wave sudah dibatalkan.");
-            if ($wave['status'] === 'Completed') throw new Exception("Wave sudah selesai, tidak bisa dibatalkan.");
-
-            // Delete only Draft picklists; preserve progressed ones
-            $plStmt = $db->prepare("SELECT id, status FROM picklists WHERE wave_id = ?");
-            $plStmt->execute([$waveId]);
-            $picklists = $plStmt->fetchAll();
-
-            $hasProgressed = false;
-            foreach ($picklists as $pl) {
-                if ($pl['status'] !== 'Draft') {
-                    $hasProgressed = true;
-                    continue;
-                }
-                $db->prepare("DELETE FROM picklist_items WHERE picklist_id = ?")->execute([$pl['id']]);
-                $db->prepare("DELETE FROM picklists WHERE id = ?")->execute([$pl['id']]);
-            }
-
-            $db->prepare("UPDATE waves SET status = 'Cancelled', updated_at = NOW() WHERE id = ?")
-               ->execute([$waveId]);
-
-            if ($ownTx) $db->commit();
-            return !$hasProgressed; // false = cancelled but some picklists preserved
-        } catch (Throwable $e) {
-            if ($ownTx && $db->inTransaction()) $db->rollBack();
-            throw $e;
+        if ($status) {
+            $stmt = $db->prepare("SELECT COUNT(*) FROM waves WHERE status = ?");
+            $stmt->execute([$status]);
+        } else {
+            $stmt = $db->prepare("SELECT COUNT(*) FROM waves");
+            $stmt->execute();
         }
+        return (int)$stmt->fetchColumn();
     }
 
-    public static function list(array $params = []): array {
+    public static function getAll(?string $status = null, ?int $limit = null, int $offset = 0): array {
         $db = db();
-        $sql = "SELECT w.*, u.full_name AS created_by_name,
-                       COUNT(DISTINCT wo.outbound_order_id) AS order_count,
-                       COUNT(DISTINCT pkl.id) AS picklist_count,
-                       COUNT(DISTINCT pki.id) AS total_items
-                FROM waves w
-                LEFT JOIN users u ON w.created_by = u.id
-                LEFT JOIN wave_orders wo ON wo.wave_id = w.id
-                LEFT JOIN picklists pkl ON pkl.wave_id = w.id
-                LEFT JOIN picklist_items pki ON pki.picklist_id = pkl.id";
+        $conditions = [];
         $args = [];
-        if (!empty($params['status'])) {
-            $sql .= " WHERE w.status = ?";
-            $args[] = $params['status'];
+        if ($status) {
+            $args[] = $status;
+            $conditions[] = 'w.status = ?';
         }
-        $sql .= " GROUP BY w.id ORDER BY w.created_at DESC";
+        $where = $conditions ? 'WHERE ' . implode(' AND ', $conditions) : '';
+        $sql = "SELECT w.*,
+                u.full_name AS created_by_name,
+                COUNT(DISTINCT wo.outbound_order_id) AS order_count,
+                COUNT(DISTINCT pki.id) AS item_count,
+                pkl.id AS picklist_id,
+                pkl.picklist_number,
+                pkl.status AS picklist_status
+           FROM waves w
+           LEFT JOIN users u ON w.created_by = u.id
+           LEFT JOIN wave_orders wo ON wo.wave_id = w.id
+           LEFT JOIN picklists pkl ON pkl.wave_id = w.id
+           LEFT JOIN picklist_items pki ON pki.picklist_id = pkl.id
+           $where
+           GROUP BY w.id, u.full_name, pkl.id, pkl.picklist_number, pkl.status
+           ORDER BY w.created_at DESC";
+        if ($limit) {
+            $args[] = $limit;
+            $args[] = $offset;
+            $sql .= " LIMIT ? OFFSET ?";
+        }
         $stmt = $db->prepare($sql);
         $stmt->execute($args);
-        $rows = $stmt->fetchAll();
-        foreach ($rows as &$r) {
-            $r['order_count']    = (int)$r['order_count'];
-            $r['picklist_count'] = (int)$r['picklist_count'];
-            $r['total_items']    = (int)$r['total_items'];
-        }
-        unset($r);
-        return $rows;
+        return $stmt->fetchAll();
     }
 
     public static function getById(int $id): ?array {
@@ -175,31 +71,140 @@ class Wave {
         $stmt = $db->prepare("SELECT w.*, u.full_name AS created_by_name
                 FROM waves w LEFT JOIN users u ON w.created_by = u.id WHERE w.id = ?");
         $stmt->execute([$id]);
-        return $stmt->fetch() ?: null;
+        $wave = $stmt->fetch() ?: null;
+        if (!$wave) return null;
+        $ordersR = $db->prepare("SELECT o.*, c.customer_name, c.customer_code, c.city,
+                COUNT(DISTINCT oi.id) AS total_items,
+                SUM(oi.actual_qty) AS total_qty
+            FROM wave_orders wo
+            JOIN outbound_orders o ON wo.outbound_order_id = o.id
+            LEFT JOIN customers c ON o.customer_id = c.id
+            LEFT JOIN outbound_items oi ON oi.outbound_order_id = o.id
+            WHERE wo.wave_id = ?
+            GROUP BY o.id, c.customer_name, c.customer_code, c.city
+            ORDER BY o.order_number");
+        $ordersR->execute([$id]);
+        $orders = $ordersR->fetchAll();
+        foreach ($orders as &$o) {
+            $o['id'] = (int)$o['id'];
+            $o['total_items'] = (int)($o['total_items'] ?? 0);
+        }
+        unset($o);
+        $plR = $db->prepare("SELECT id, picklist_number, status FROM picklists WHERE wave_id = ?");
+        $plR->execute([$id]);
+        $wave['orders'] = $orders;
+        $wave['picklist'] = $plR->fetch() ?: null;
+        return $wave;
     }
 
     public static function detail(int $id): array {
-        $db = db();
         $wave = self::getById($id);
-        if (!$wave) throw new Exception("Wave tidak ditemukan.");
+        if (!$wave) throw new \ApiException('Wave tidak ditemukan', 404);
+        return ['wave' => $wave];
+    }
 
-        $ordersStmt = $db->prepare("SELECT wo.outbound_order_id, o.order_number,
-                        c.customer_name, o.order_date
-                FROM wave_orders wo
-                JOIN outbound_orders o ON o.id = wo.outbound_order_id
-                LEFT JOIN customers c ON o.customer_id = c.id
-                WHERE wo.wave_id = ? ORDER BY o.order_date");
-        $ordersStmt->execute([$id]);
-        $orders = $ordersStmt->fetchAll();
+    public static function create(array $data, int $createdBy): array {
+        $rawIds = $data['order_ids'] ?? [];
+        $orderIds = array_values(array_unique(array_filter(array_map('intval', $rawIds), fn($n) => $n > 0)));
+        if (empty($orderIds)) throw new \ApiException('order_ids wajib diisi.', 400);
 
-        $picklistsStmt = $db->prepare("SELECT pkl.*, COUNT(pki.id) AS item_count
-                FROM picklists pkl
-                LEFT JOIN picklist_items pki ON pki.picklist_id = pkl.id
-                WHERE pkl.wave_id = ? GROUP BY pkl.id");
-        $picklistsStmt->execute([$id]);
-        $picklists = $picklistsStmt->fetchAll();
+        $db = db();
+        $ownTx = !$db->inTransaction();
+        try {
+            if ($ownTx) $db->beginTransaction();
 
-        return ['wave' => $wave, 'orders' => $orders, 'picklists' => $picklists];
+            $ph = implode(',', array_fill(0, count($orderIds), '?'));
+            $existStmt = $db->prepare("SELECT id FROM outbound_orders WHERE id IN ($ph)");
+            $existStmt->execute($orderIds);
+            $foundSet = array_flip(array_map('intval', array_column($existStmt->fetchAll(), 'id')));
+            $missing = array_filter($orderIds, fn($id) => !isset($foundSet[$id]));
+            if (!empty($missing)) {
+                throw new \ApiException('Terdapat outbound order tidak ditemukan: ' . implode(', ', $missing), 400);
+            }
+
+            $ineligStmt = $db->prepare("SELECT id FROM outbound_orders o
+                WHERE o.id IN ($ph)
+                  AND (o.status <> 'Open'
+                       OR EXISTS (SELECT 1 FROM picklists pl WHERE pl.outbound_order_id = o.id))");
+            $ineligStmt->execute($orderIds);
+            $ineligSet = array_flip(array_map('intval', array_column($ineligStmt->fetchAll(), 'id')));
+            $validIds = array_values(array_filter($orderIds, fn($id) => !isset($ineligSet[$id])));
+            if (empty($validIds)) {
+                throw new \ApiException('Tidak ada outbound order yang memenuhi syarat (status Open dan belum memiliki picklist).', 400);
+            }
+            $skipped = array_values(array_filter($orderIds, fn($id) => isset($ineligSet[$id])));
+
+            $waveNumber = self::generateNumber();
+            $stmt = $db->prepare("INSERT INTO waves (wave_number, status, carrier, cutoff_time, created_by)
+                    VALUES (?, 'Planning', ?, ?, ?)");
+            $stmt->execute([
+                $waveNumber,
+                $data['carrier'] ?? null,
+                !empty($data['cutoff_time']) ? $data['cutoff_time'] : null,
+                $createdBy,
+            ]);
+            $waveId = (int)$db->lastInsertId();
+
+            $woStmt = $db->prepare("INSERT INTO wave_orders (wave_id, outbound_order_id) VALUES (?, ?)");
+            foreach ($validIds as $oid) {
+                $woStmt->execute([$waveId, $oid]);
+            }
+
+            $picklistId = Picklist::createFromOrders($validIds, $createdBy, $waveId, $db);
+
+            if ($ownTx) $db->commit();
+            return ['wave_id' => $waveId, 'picklist_id' => $picklistId, 'skipped' => $skipped];
+        } catch (\Throwable $e) {
+            if ($ownTx && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    public static function cancel(int $waveId): void {
+        $db = db();
+        $ownTx = !$db->inTransaction();
+        try {
+            if ($ownTx) $db->beginTransaction();
+
+            $wave = self::getById($waveId);
+            if (!$wave) throw new \ApiException('Wave tidak ditemukan', 404);
+            if ($wave['status'] === 'Completed') {
+                throw new \ApiException('Wave yang sudah Completed tidak dapat dibatalkan.', 400);
+            }
+
+            $plStmt = $db->prepare("SELECT id, status FROM picklists WHERE wave_id = ?");
+            $plStmt->execute([$waveId]);
+            foreach ($plStmt->fetchAll() as $pl) {
+                if ($pl['status'] === 'Draft') {
+                    $db->prepare("DELETE FROM picklist_items WHERE picklist_id = ?")->execute([$pl['id']]);
+                    $db->prepare("DELETE FROM picklists WHERE id = ?")->execute([$pl['id']]);
+                }
+            }
+
+            $db->prepare("UPDATE waves SET status = 'Cancelled' WHERE id = ?")->execute([$waveId]);
+
+            if ($ownTx) $db->commit();
+        } catch (\Throwable $e) {
+            if ($ownTx && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    public static function candidateOrders(): array {
+        $db = db();
+        $stmt = $db->prepare("SELECT o.id, o.order_number, o.order_date, o.so_number, o.do_number,
+                o.destination, o.kota, o.armada_no, o.container_no, o.expected_date,
+                c.customer_name, c.customer_code, c.city,
+                COUNT(DISTINCT oi.id) AS total_items,
+                SUM(oi.actual_qty) AS total_qty
+           FROM outbound_orders o
+           JOIN customers c ON o.customer_id = c.id
+           LEFT JOIN outbound_items oi ON oi.outbound_order_id = o.id
+           WHERE o.status = 'Open'
+             AND NOT EXISTS (SELECT 1 FROM picklists pl WHERE pl.outbound_order_id = o.id)
+           GROUP BY o.id, c.customer_name, c.customer_code, c.city
+           ORDER BY o.order_number");
+        $stmt->execute();
+        return $stmt->fetchAll();
     }
 }
-?>
