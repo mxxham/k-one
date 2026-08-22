@@ -191,7 +191,7 @@ final class ApiTestHelpers
             'outbound_orders', 'outbound_items', 'outbound_item_locations', 'picklists',
             'picklist_items', 'bin_transfers', 'stock_take', 'stock_take_items', 'asn',
             'asn_items', 'cycle_count_schedules', 'putaway_location_blocks', 'putaway_tasks',
-            'putaway_task_items',
+            'putaway_task_items', 'waves', 'wave_orders', 'pick_face_targets',
         ];
         $pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
         foreach ($tables as $t) {
