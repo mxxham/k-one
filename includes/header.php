@@ -185,6 +185,45 @@ $_isViewer = $_authUser && $_authUser['role'] === 'viewer';
             <span>Bin Transfer</span>
         </a>
 
+        <?php if (Auth::canWrite() || true): ?>
+        <div style="padding:12px 8px 4px;font-size:.62rem;color:rgba(2,200,180,.5);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-top:6px">WMS Pro</div>
+
+        <a href="<?= BASE_URL ?>/replenishment.php" class="sidebar-link" onclick="autoCloseSidebar()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,.75);text-decoration:none;font-size:.85rem;transition:all .15s <?= ($currentPage??'')==='replenishment'?';background:linear-gradient(90deg,#026766,#014f4e);color:#fff':'' ?>">
+            <i class="fas fa-sync-alt" style="width:16px;text-align:center;opacity:.8"></i>
+            <span>Replenishment</span>
+        </a>
+
+        <a href="<?= BASE_URL ?>/waves.php" class="sidebar-link" onclick="autoCloseSidebar()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,.75);text-decoration:none;font-size:.85rem;transition:all .15s <?= ($currentPage??'')==='waves'?';background:linear-gradient(90deg,#026766,#014f4e);color:#fff':'' ?>">
+            <i class="fas fa-wave-square" style="width:16px;text-align:center;opacity:.8"></i>
+            <span>Waves</span>
+        </a>
+
+        <a href="<?= BASE_URL ?>/asn.php" class="sidebar-link" onclick="autoCloseSidebar()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,.75);text-decoration:none;font-size:.85rem;transition:all .15s <?= ($currentPage??'')==='asn'?';background:linear-gradient(90deg,#026766,#014f4e);color:#fff':'' ?>">
+            <i class="fas fa-file-invoice" style="width:16px;text-align:center;opacity:.8"></i>
+            <span>ASN (Advance Notice)</span>
+        </a>
+
+        <a href="<?= BASE_URL ?>/cyclecount.php" class="sidebar-link" onclick="autoCloseSidebar()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,.75);text-decoration:none;font-size:.85rem;transition:all .15s <?= ($currentPage??'')==='cyclecount'?';background:linear-gradient(90deg,#026766,#014f4e);color:#fff':'' ?>">
+            <i class="fas fa-recycle" style="width:16px;text-align:center;opacity:.8"></i>
+            <span>Cycle Count</span>
+        </a>
+
+        <a href="<?= BASE_URL ?>/putaway_tasks.php" class="sidebar-link" onclick="autoCloseSidebar()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,.75);text-decoration:none;font-size:.85rem;transition:all .15s <?= ($currentPage??'')==='putaway_tasks'?';background:linear-gradient(90deg,#026766,#014f4e);color:#fff':'' ?>">
+            <i class="fas fa-arrow-circle-down" style="width:16px;text-align:center;opacity:.8"></i>
+            <span>Putaway Tasks</span>
+        </a>
+
+        <a href="<?= BASE_URL ?>/putaway_scan.php" class="sidebar-link" onclick="autoCloseSidebar()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,.75);text-decoration:none;font-size:.85rem;transition:all .15s <?= ($currentPage??'')==='putaway_scan'?';background:linear-gradient(90deg,#026766,#014f4e);color:#fff':'' ?>">
+            <i class="fas fa-qrcode" style="width:16px;text-align:center;opacity:.8"></i>
+            <span>Putaway Scan</span>
+        </a>
+
+        <a href="<?= BASE_URL ?>/abc.php" class="sidebar-link" onclick="autoCloseSidebar()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,.75);text-decoration:none;font-size:.85rem;transition:all .15s <?= ($currentPage??'')==='abc'?';background:linear-gradient(90deg,#026766,#014f4e);color:#fff':'' ?>">
+            <i class="fas fa-chart-line" style="width:16px;text-align:center;opacity:.8"></i>
+            <span>ABC Analysis</span>
+        </a>
+        <?php endif; ?>
+
         <?php if (Auth::canWrite()): ?>
         <div style="padding:12px 8px 4px;font-size:.62rem;color:rgba(2,200,180,.5);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-top:6px">Master Data</div>
 
@@ -220,6 +259,11 @@ $_isViewer = $_authUser && $_authUser['role'] === 'viewer';
         <a href="<?= BASE_URL ?>/import_outbound.php" class="sidebar-link" onclick="autoCloseSidebar()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,.75);text-decoration:none;font-size:.85rem;transition:all .15s <?= ($currentPage??'')==='import_outbound'?';background:linear-gradient(90deg,#026766,#014f4e);color:#fff':'' ?>">
             <i class="fas fa-file-export" style="width:16px;text-align:center;opacity:.8"></i>
             <span>Import Outbound</span>
+        </a>
+
+        <a href="<?= BASE_URL ?>/import_auto.php" class="sidebar-link" onclick="autoCloseSidebar()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,.75);text-decoration:none;font-size:.85rem;transition:all .15s <?= ($currentPage??'')==='import_auto'?';background:linear-gradient(90deg,#026766,#014f4e);color:#fff':'' ?>">
+            <i class="fas fa-magic" style="width:16px;text-align:center;opacity:.8"></i>
+            <span>Auto Import</span>
         </a>
         <?php endif; ?>
 

@@ -134,25 +134,25 @@ class Picklist {
             $batchNumber = $item['batch_number'] ?? $item['batch_no'] ?? null;
             $uomPerPallet = max(1, intval($item['uom_per_pallet'] ?? 4));
 
-            // S19 held-stock exclusion: LEFT JOIN stock + hold_status filter
-            $locStmt = $db->prepare("SELECT sl.*, oil.quantity as alloc_qty,
-                    lm.zone, lm.aisle
-                    FROM outbound_item_locations oil
-                    JOIN stock_locations sl ON oil.stock_location_id = sl.id
-                    LEFT JOIN location_master lm
-                           ON lm.location_code COLLATE utf8mb4_general_ci
-                            = sl.location_code COLLATE utf8mb4_general_ci
-                    LEFT JOIN stock st ON st.id = sl.stock_id
-                    WHERE oil.outbound_item_id = ?
-                      AND (st.hold_status = 'available' OR st.hold_status IS NULL)
-                    ORDER BY sl.location_code, sl.pallet_seq");
+            // Aggregate outbound_item_locations by location to avoid duplicates
+            $locStmt = $db->prepare("SELECT MIN(oil.stock_location_id) as stock_location_id,
+                    SUM(oil.quantity) as alloc_qty,
+                    sl.location_code,
+                    MIN(sl.batch_number) as sl_batch
+                FROM outbound_item_locations oil
+                JOIN stock_locations sl ON oil.stock_location_id = sl.id
+                LEFT JOIN stock st ON st.id = sl.stock_id
+                WHERE oil.outbound_item_id = ?
+                  AND (st.hold_status = 'available' OR st.hold_status IS NULL)
+                GROUP BY sl.location_code
+                ORDER BY sl.location_code");
             $locStmt->execute([$item['id']]);
             $locationRows = $locStmt->fetchAll();
 
             if (!empty($locationRows)) {
                 $palletSeq = 1;
                 foreach ($locationRows as $lr) {
-                    $locBatch = $lr['batch_number'] ?? $batchNumber;
+                    $locBatch = $lr['sl_batch'] ?? $batchNumber;
                     $locCode  = $lr['location_code'] ?? '';
                     $locLevel = isset($locCode[4]) ? strtoupper($locCode[4]) : 'B';
                     $qty      = floatval($lr['alloc_qty']);
@@ -176,32 +176,42 @@ class Picklist {
                         $item['uom_type'],
                         $plt,
                         $palletSeq++,
-                        $lr['id']
+                        $lr['stock_location_id']
                     ]);
                 }
             } else {
-                // Fallback: decompose into pallets — S19 hold exclusion on lookup
+                // Fallback: no outbound_item_locations — pick from available stock per pallet
                 $distribution = self::calculatePalletDistribution(
                     $item['actual_qty'] ?: $item['quantity'],
                     $uomPerPallet
                 );
 
+                $availStmt = $db->prepare("SELECT sl.id, sl.location_code, sl.pallet_seq
+                        FROM stock_locations sl
+                        LEFT JOIN stock st ON st.id = sl.stock_id
+                        WHERE sl.batch_number = ?
+                          AND sl.status IN ('Available','Reserved')
+                          AND (st.hold_status = 'available' OR st.hold_status IS NULL)
+                          AND sl.id NOT IN (
+                              SELECT DISTINCT stock_location_id
+                              FROM picklist_items
+                              WHERE batch_number = ? AND stock_location_id IS NOT NULL
+                          )
+                        ORDER BY sl.location_code, sl.pallet_seq");
+                $availStmt->execute([$batchNumber, $batchNumber]);
+                $available = $availStmt->fetchAll();
+
+                $availIdx = 0;
                 $palletSeq = 1;
                 foreach ($distribution as $pallet) {
                     $slId = null;
-                    if (!empty($item['location']) && !empty($batchNumber)) {
-                        $slStmt = $db->prepare("SELECT sl.id FROM stock_locations sl
-                                LEFT JOIN stock st ON st.id = sl.stock_id
-                                WHERE sl.batch_number = ? AND sl.location_code = ?
-                                  AND sl.status IN ('Available','Reserved') AND sl.pallet_seq = ?
-                                  AND (st.hold_status = 'available' OR st.hold_status IS NULL)
-                                LIMIT 1");
-                        $slStmt->execute([$batchNumber, $item['location'], $palletSeq]);
-                        $slRow = $slStmt->fetch();
-                        $slId  = $slRow['id'] ?? null;
+                    $locCode2 = $item['location'] ?? 'TBD';
+                    if ($availIdx < count($available)) {
+                        $slId    = $available[$availIdx]['id'];
+                        $locCode2 = $available[$availIdx]['location_code'];
+                        $availIdx++;
                     }
 
-                    $locCode2  = $item['location'] ?? 'TBD';
                     $locLevel2 = isset($locCode2[4]) ? strtoupper($locCode2[4]) : 'B';
                     $qty2      = floatval($pallet['quantity']);
                     $plt2      = $uomPerPallet > 0

@@ -202,3 +202,53 @@ set_module_departments('stocktake', ['inventory']);
 set_permission('waves', 'create', 'write');
 set_permission('waves', 'cancel', 'write');
 set_module_departments('waves', ['outbound']);
+
+// wave (outbound-module): extend with add_order/release; ['outbound','ops']
+set_permission('wave', 'add_order', 'write');
+set_permission('wave', 'release', 'write');
+
+// order (outbound-module): create write, get/list any; ['outbound','ops']
+set_permission('order', 'create', 'write');
+set_permission('order', 'get', 'any');
+set_permission('order', 'list', 'any');
+set_module_departments('order', ['outbound', 'ops']);
+
+// task_assignment (outbound-module): assign/create_operator/list_operators; ['outbound']
+set_permission('task_assignment', 'assign', 'write');
+set_permission('task_assignment', 'create_operator', 'write');
+set_permission('task_assignment', 'list_operators', 'any');
+set_module_departments('task_assignment', ['outbound']);
+
+// picklist (outbound-module): extend with generate_for_wave; ['outbound','ops']
+set_permission('picklist', 'generate_for_wave', 'write');
+
+// picking (outbound-module): confirm_pick write, pending_picks any; ['outbound']
+set_permission('picking', 'confirm_pick', 'write');
+set_permission('picking', 'pending_picks', 'any');
+set_module_departments('picking', ['outbound']);
+
+// staging (outbound-module): scan_staging write, staged_items any; ['outbound']
+set_permission('staging', 'scan_staging', 'write');
+set_permission('staging', 'staged_items', 'any');
+set_module_departments('staging', ['outbound']);
+
+// consolidation (outbound-module): consolidate write, status any; ['outbound']
+set_permission('consolidation', 'consolidate', 'write');
+set_permission('consolidation', 'status', 'any');
+set_module_departments('consolidation', ['outbound']);
+
+// dispatch (outbound-module): scan_dispatch write, get/list any; ['outbound']
+set_permission('dispatch', 'scan_dispatch', 'write');
+set_permission('dispatch', 'get', 'any');
+set_permission('dispatch', 'list', 'any');
+set_module_departments('dispatch', ['outbound']);
+
+// gi_export (outbound-module): export write; ['outbound']
+set_permission('gi_export', 'export', 'any');
+set_module_departments('gi_export', ['outbound']);
+
+// discrepancy (outbound-module): log write, get/list any; ['outbound']
+set_permission('discrepancy', 'log', 'write');
+set_permission('discrepancy', 'get', 'any');
+set_permission('discrepancy', 'list', 'any');
+set_module_departments('discrepancy', ['outbound']);

@@ -664,6 +664,7 @@ class Inbound {
     
 
     public static function complete($id) {
+        file_put_contents('D:/K-one/k-one/asn_debug.log', date('H:i:s') . " Inbound::complete START for id=$id\n", FILE_APPEND);
         $db = db();
         try {
             $db->beginTransaction();
@@ -918,9 +919,22 @@ class Inbound {
 
             // ASN linkage: a Pending ASN flips to Received once its inbound completes.
             if (!empty($inbound['asn_id'] ?? null)) {
+                $asnId = $inbound['asn_id'];
+                file_put_contents('D:/K-one/k-one/asn_debug.log', date('H:i:s') . " Inbound::complete: Attempting to mark ASN $asnId as Received\n", FILE_APPEND);
                 $db->prepare("UPDATE asn SET status='Received', updated_at=NOW() WHERE id=? AND status='Pending'")
-                   ->execute([$inbound['asn_id']]);
+                   ->execute([$asnId]);
+                $check = $db->prepare("SELECT status FROM asn WHERE id = ?");
+                $check->execute([$asnId]);
+                $result = $check->fetch();
+                file_put_contents('D:/K-one/k-one/asn_debug.log', date('H:i:s') . " Inbound::complete: ASN $asnId status after update = " . ($result['status'] ?? 'NOT FOUND') . "\n", FILE_APPEND);
+            } else {
+                file_put_contents('D:/K-one/k-one/asn_debug.log', date('H:i:s') . " Inbound::complete: No asn_id in inbound data. inbound keys: " . implode(', ', array_keys($inbound)) . "\n", FILE_APPEND);
             }
+            
+            file_put_contents('D:/K-one/k-one/asn_debug.log', date('H:i:s') . " Inbound::complete: Before commit\n", FILE_APPEND);
+            $db->commit();
+            file_put_contents('D:/K-one/k-one/asn_debug.log', date('H:i:s') . " Inbound::complete: After commit\n", FILE_APPEND);
+            return true;
 
             $db->commit();
             return true;
@@ -1081,24 +1095,37 @@ class Inbound {
                         // No item location: derive suggestions from the putaway
                         // recommendation engine (full engine port = putaway module).
                         try {
-                            $rec = Putaway::recommend(['product_id' => $pid, 'quantity' => $totalQty]);
+                            $rec = Putaway::recommendLocations([
+                                'product_id' => $pid,
+                                'quantity'   => $totalQty,
+                                'uom'        => $uomType,
+                            ]);
                         } catch (Throwable $e) {
-                            $rec = [];
+                            $rec = ['pallets' => []];
                         }
-                        $fullBin = $rec['full_pallet_bin']['location_code'] ?? null;
-                        $pickBin = $rec['pick_face_bin']['location_code'] ?? null;
-                        $dist = self::calculatePalletDistribution($totalQty, $uomPerPlt);
-                        foreach ($dist as $p) {
-                            $isFull = !empty($p['is_full']);
-                            $loc = $isFull ? $fullBin : $pickBin;
-                            if (!$loc) $loc = 'STAGING';
-                            $palletLocs[] = [
-                                'location_code' => $loc,
-                                'pallet_seq'    => $p['pallet_seq'],
-                                'quantity'      => $p['quantity'],
-                                'is_full'       => $isFull,
-                                'reason'        => null,
-                            ];
+                        $pallets = $rec['pallets'] ?? [];
+                        if (!empty($pallets)) {
+                            foreach ($pallets as $p) {
+                                $palletLocs[] = [
+                                    'location_code' => $p['location_code'] ?? 'STAGING',
+                                    'pallet_seq'    => $p['pallet_seq'],
+                                    'quantity'      => $p['quantity'],
+                                    'is_full'       => !empty($p['is_full']),
+                                    'reason'        => $p['reason'] ?? null,
+                                ];
+                            }
+                        } else {
+                            // Fallback: all to STAGING
+                            $dist = self::calculatePalletDistribution($totalQty, $uomPerPlt);
+                            foreach ($dist as $p) {
+                                $palletLocs[] = [
+                                    'location_code' => 'STAGING',
+                                    'pallet_seq'    => $p['pallet_seq'],
+                                    'quantity'      => $p['quantity'],
+                                    'is_full'       => !empty($p['is_full']),
+                                    'reason'        => null,
+                                ];
+                            }
                         }
                     }
                     if (!empty($palletLocs)) {

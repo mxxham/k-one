@@ -4,7 +4,9 @@ require_once __DIR__ . '/../config/database.php';
 
 $db = db();
 
+$db->exec("SET FOREIGN_KEY_CHECKS=0");
 $db->exec("DELETE FROM location_allocations");
+$db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 $stockStmt = $db->query("SELECT id, product_id, batch_number, quantity, pallet, location FROM stock LIMIT 20");
 $stockItems = $stockStmt->fetchAll();
@@ -21,32 +23,30 @@ $inboundItems = $inboundStmt->fetchAll();
 $allocationCount = 0;
 
 foreach ($stockItems as $stock) {
-    $db->prepare("INSERT INTO location_allocations (reference_type, reference_id, product_id, batch_number, location, quantity, pallet, allocated_date, status) VALUES ('STOCK', ?, ?, ?, ?, ?, ?, CURDATE(), 'Active')")->execute([
-        $stock['id'],
+    $db->prepare("INSERT INTO location_allocations (reference_type, reference_id, item_id, pallet_number, location, quantity, uom, is_full) VALUES ('STOCK', ?, ?, ?, ?, ?, 'Drum', 1)")->execute([
         $stock['product_id'],
-        $stock['batch_number'],
+        $stock['id'],
+        ceil($stock['pallet']),
         $stock['location'],
-        $stock['quantity'],
-        $stock['pallet']
+        $stock['quantity']
     ]);
     $allocationCount++;
     echo "✓ Stock allocated: Product ID {$stock['product_id']} | Batch: {$stock['batch_number']} | Loc: {$stock['location']}\n";
 }
 
-$aZoneLocations = ['A01', 'A02', 'A03', 'A04', 'A05'];
+$aZoneLocations = ['CA01A01', 'CA01A02', 'CA01B01', 'CA01B02', 'CA01C01'];
 $aIndex = 0;
 
 foreach ($inboundItems as $item) {
     $location = $aZoneLocations[$aIndex % count($aZoneLocations)];
     $aIndex++;
 
-    $db->prepare("INSERT INTO location_allocations (reference_type, reference_id, product_id, batch_number, location, quantity, pallet, allocated_date, status) VALUES ('INBOUND', ?, ?, ?, ?, ?, ?, CURDATE(), 'Reserved')")->execute([
+    $db->prepare("INSERT INTO location_allocations (reference_type, reference_id, item_id, pallet_number, location, quantity, uom, is_full) VALUES ('INBOUND', ?, ?, ?, ?, ?, 'Drum', 0)")->execute([
+        $item['inbound_order_id'],
         $item['id'],
-        $item['product_id'],
-        $item['batch_no'],
+        ceil($item['pallet']),
         $location,
-        $item['quantity'],
-        $item['pallet']
+        $item['quantity']
     ]);
     $allocationCount++;
     echo "✓ Inbound allocated: Product ID {$item['product_id']} | Batch: {$item['batch_no']} | Loc: {$location} (Reserved)\n";

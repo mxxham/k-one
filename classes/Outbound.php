@@ -39,26 +39,42 @@ class Outbound {
 
     
 
-    public static function generateNumber() {
+public static function generateNumber(): string {
         $db = db();
         $year  = date('Y');
         $month = date('m');
         $prefix = "OUT-{$year}{$month}-";
 
+        // Track generated numbers within this request to avoid duplicates
+        static $generated = [];
+        if (!isset($generated[$prefix])) {
+            $generated[$prefix] = [];
+        }
+
+        // Find the highest existing sequence in DB
         $stmt = $db->prepare("SELECT order_number FROM outbound_orders
                                WHERE order_number LIKE ?
                                ORDER BY order_number DESC LIMIT 1");
         $stmt->execute([$prefix . '%']);
         $last = $stmt->fetchColumn();
 
-        $seq = $last ? ((int) substr($last, strrpos($last, '-') + 1)) + 1 : 1;
+        $baseSeq = $last ? ((int) substr($last, strrpos($last, '-') + 1)) : 0;
+
+        // Start from baseSeq + 1, then increment for each generated in this request
+        $seq = max($baseSeq + 1, count($generated[$prefix]) + 1);
+        while (in_array($seq, $generated[$prefix])) {
+            $seq++;
+        }
 
         $maxTries = 20;
         while ($maxTries-- > 0) {
             $number = $prefix . str_pad($seq, 4, '0', STR_PAD_LEFT);
             $chk = $db->prepare("SELECT id FROM outbound_orders WHERE order_number = ? LIMIT 1");
             $chk->execute([$number]);
-            if (!$chk->fetch()) return $number;
+            if (!$chk->fetch() && !in_array($seq, $generated[$prefix])) {
+                $generated[$prefix][] = $seq;
+                return $number;
+            }
             $seq++;
         }
         return $prefix . date('His') . rand(10,99);
@@ -495,9 +511,8 @@ class Outbound {
             if ($ownTransaction) $db->beginTransaction();
 
             
-            $outboundNumber = !empty($data['shipment_number'])
-                ? $data['shipment_number']
-                : self::generateNumber();
+            // Always generate a unique order number; store shipment_number separately
+            $outboundNumber = self::generateNumber();
 
             $stmt = $db->prepare("INSERT INTO outbound_orders
                     (order_number, order_date, customer_id, so_number, do_number,

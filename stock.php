@@ -6,6 +6,40 @@ require_once __DIR__ . '/classes/Product.php';
 
 Auth::requireAuth();
 
+// Hold / Release stock (S38) — via form POST from the per-location table
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    Auth::requireWrite();
+    require_once __DIR__ . '/classes/Stock.php';
+    require_once __DIR__ . '/classes/ActivityLogger.php';
+    try {
+        if (isset($_POST['hold_stock'])) {
+            $stockId = (int)$_POST['stock_id'];
+            $reason  = trim($_POST['hold_reason'] ?? '');
+            Stock::hold($stockId, $reason);
+            ActivityLogger::log('HOLD_STOCK', 'stock', 'Stock', $stockId, null, "Stok di-hold: {$reason}");
+            header('Location: stock.php?view=location&success=held'); exit;
+        }
+        if (isset($_POST['release_stock'])) {
+            $stockId = (int)$_POST['stock_id'];
+            Stock::release($stockId);
+            ActivityLogger::log('RELEASE_STOCK', 'stock', 'Stock', $stockId, null, "Hold stok dilepas");
+            header('Location: stock.php?view=location&success=released'); exit;
+        }
+        if (isset($_POST['scan_override'])) {
+            $stockId = (int)$_POST['stock_id'];
+            Stock::scanOverride(
+                (int)$_POST['product_id'],
+                (string)$_POST['location'],
+                (string)$_POST['suggested_location'],
+                (string)$_POST['reason']
+            );
+            header('Location: stock.php?view=location&success=overridden'); exit;
+        }
+    } catch (Throwable $e) {
+        $holdError = $e->getMessage();
+    }
+}
+
 $pageTitle = 'Stock';
 $currentPage = 'stock';
 
@@ -64,6 +98,7 @@ $sql = "SELECT
                  MAX(s.expiry_date)
                ) AS expiry_date,
                s.stock_status,
+               s.hold_status, s.hold_reason,
                s.uom,
                SUM(s.quantity) AS quantity,
                SUM(CEIL(s.quantity / GREATEST(COALESCE(p.uom_per_pallet, 1), 1))) AS pallet,
@@ -232,6 +267,7 @@ $detailSql = "SELECT
       s.expiry_date
     ) AS expiry_date,
     s.stock_status, s.uom,
+    s.hold_status, s.hold_reason,
     COALESCE(s.location,'') AS location,
     s.quantity,
     CEIL(s.quantity / GREATEST(COALESCE(p.uom_per_pallet, 1), 1)) AS pallet,
@@ -475,6 +511,26 @@ $_baseGet = array_diff_key($_GET, array_flip(['page','export']));
   </div>
   <?php endif; ?>
 
+  <?php if (isset($_GET['success'])): ?>
+  <?php $skMsg = $_GET['success'];
+        $skOk  = in_array($skMsg, ['held','released','overridden'], true); ?>
+  <div style="background:<?= $skOk?'#e8f5e9':'#ffebee' ?>;border:1px solid <?= $skOk?'#a5d6a7':'#fca5a5' ?>;border-radius:10px;padding:11px 16px;display:flex;align-items:center;gap:10px">
+    <i class="fas fa-<?= $skOk?'check-circle':'exclamation-circle' ?>" style="color:<?= $skOk?'#2e7d32':'#c62828' ?>;flex-shrink:0"></i>
+    <div style="font-size:.84rem;color:#1b4332;font-weight:600">
+      <?php if ($skMsg==='held') echo 'Stok di-hold. Stok yang di-hold tidak akan ikut FEFO picking.';
+            elseif ($skMsg==='released') echo 'Hold dilepas — stok kembali tersedia untuk picking.';
+            elseif ($skMsg==='overridden') echo 'Lokasi override dicatat.';
+            else echo htmlspecialchars($skMsg); ?>
+    </div>
+  </div>
+  <?php endif; ?>
+  <?php if (!empty($holdError)): ?>
+  <div style="background:#ffebee;border:1px solid #fca5a5;border-radius:10px;padding:11px 16px;display:flex;align-items:center;gap:10px">
+    <i class="fas fa-exclamation-circle" style="color:#c62828;flex-shrink:0"></i>
+    <div style="font-size:.84rem;color:#7f1d1d;font-weight:600"><?= htmlspecialchars($holdError) ?></div>
+  </div>
+  <?php endif; ?>
+
   <!-- Filters -->
   <div class="sk-card">
     <form method="GET">
@@ -625,6 +681,8 @@ $_baseGet = array_diff_key($_GET, array_flip(['page','export']));
             <th style="text-align:center">Exp. Date</th>
             <th style="text-align:center">Sisa Waktu</th>
             <th style="text-align:center">Status</th>
+            <th style="text-align:center">Hold</th>
+            <th style="text-align:center">Aksi</th>
           </tr>
         </thead>
         <tbody>
@@ -637,6 +695,7 @@ $_baseGet = array_diff_key($_GET, array_flip(['page','export']));
             $_dPlt  = floatval($d['pallet']??0);
             if ($_dPlt <= 0) { $_dUpp = max(1, intval($d['uom_per_pallet']??4)); $_dPlt = ceil(floatval($d['quantity'])/$_dUpp); }
             $_dLoc  = $d['location'] !== '' ? $d['location'] : 'UNALLOCATED';
+            $_held  = ($d['hold_status'] ?? '') === 'held';
           ?>
           <tr style="background:<?= $rowBg ?>">
             <td style="color:var(--sk-muted);font-size:.75rem"><?= $_no+1 ?></td>
@@ -694,10 +753,39 @@ $_baseGet = array_diff_key($_GET, array_flip(['page','export']));
               else echo '<span class="sk-badge" style="background:#f1f5f9;color:#475569">'.htmlspecialchars($ss).'</span>';
               ?>
             </td>
+            <td style="text-align:center">
+              <?php if ($_held): ?>
+              <span class="sk-badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5"
+                    title="<?= htmlspecialchars($d['hold_reason'] ?? '') ?>"><i class="fas fa-pause-circle"></i> HELD</span>
+              <?php else: ?>
+              <span style="color:#d1d5db;font-size:.75rem">—</span>
+              <?php endif; ?>
+            </td>
+            <td style="text-align:center;white-space:nowrap">
+              <?php if ($_held): ?>
+              <form method="POST" onsubmit="return confirm('Lepaskan hold untuk stok ini?')" style="display:inline">
+                <input type="hidden" name="stock_id" value="<?= (int)$d['stock_id'] ?>">
+                <button type="submit" name="release_stock" title="Release hold"
+                  style="background:#e8f5e9;border:1px solid #a5d6a7;color:#013d3c;border-radius:6px;padding:3px 9px;font-size:.72rem;font-weight:600;cursor:pointer">
+                  <i class="fas fa-play"></i> Release
+                </button>
+              </form>
+              <?php else: ?>
+              <form method="POST" style="display:inline">
+                <input type="hidden" name="stock_id" value="<?= (int)$d['stock_id'] ?>">
+                <input type="hidden" name="hold_reason" value="Manual hold dari stock page">
+                <button type="submit" name="hold_stock" title="Hold stok"
+                  style="background:#fff8e1;border:1px solid #ffcc80;color:#92400e;border-radius:6px;padding:3px 9px;font-size:.72rem;font-weight:600;cursor:pointer"
+                  onclick="return promptHoldReason(this)">
+                  <i class="fas fa-pause"></i> Hold
+                </button>
+              </form>
+              <?php endif; ?>
+            </td>
           </tr>
           <?php endforeach; ?>
           <?php if (empty($detailRows)): ?>
-          <tr><td colspan="12" style="padding:48px;text-align:center;color:var(--sk-muted)">
+          <tr><td colspan="14" style="padding:48px;text-align:center;color:var(--sk-muted)">
             <i class="fas fa-box-open" style="font-size:2.5rem;display:block;margin-bottom:10px;opacity:.4"></i>
             <div style="font-weight:500">Tidak ada data stock</div>
           </td></tr>
@@ -809,7 +897,16 @@ $_baseGet = array_diff_key($_GET, array_flip(['page','export']));
               elseif ($ss==='Rejected') echo '<span class="sk-badge" style="background:#fee2e2;color:#991b1b">Rejected</span>';
               elseif ($ss==='Dues In')  echo '<span class="sk-badge" style="background:#e0f7f7;color:#026766;border:1px solid #b2e5e5">Dues In</span>';
               else echo '<span class="sk-badge" style="background:#f1f5f9;color:#475569">'.htmlspecialchars($ss).'</span>';
+              $_heldCount = 0;
+              foreach ($_locDetails as $_ld) {
+                  if (($_ld['hold_status'] ?? '') === 'held') $_heldCount++;
+              }
+              if ($_heldCount > 0):
               ?>
+              <div style="margin-top:3px">
+                <span class="sk-badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5"><i class="fas fa-pause-circle"></i> <?= $_heldCount ?> HELD</span>
+              </div>
+              <?php endif; ?>
             </td>
           </tr>
           <?php if (!empty($_locDetails)): ?>
@@ -908,6 +1005,13 @@ $_baseGet = array_diff_key($_GET, array_flip(['page','export']));
 </div>
 
 <script>
+function promptHoldReason(btn) {
+  var reason = prompt('Alasan hold stok:');
+  if (reason === null) return false;
+  if (reason.trim() === '') { alert('Alasan hold wajib diisi.'); return false; }
+  btn.parentElement.querySelector('input[name="hold_reason"]').value = reason.trim();
+  return true;
+}
 function toggleDetail(rowId, btn) {
   var row = document.getElementById(rowId);
   var icon = btn.querySelector('i');

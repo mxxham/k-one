@@ -8,11 +8,15 @@ function handle_putaway($action) {
                 $data = body();
                 if (empty($data)) {
                     $data = [
-                        'product_id' => (int)query('product_id'),
-                        'quantity'   => (float)query('quantity'),
+                        'product_id'     => (int)query('product_id'),
+                        'quantity'       => (float)query('quantity'),
+                        'uom'            => query('uom'),
+                        'uom_per_pallet' => query('uom_per_pallet') ? (int)query('uom_per_pallet') : null,
+                        'prefer_pick'    => query('prefer_pick') === '1' || query('prefer_pick') === 'true',
+                        'force_level'    => query('force_level'),
                     ];
                 }
-                json_out(Putaway::recommend($data));
+                json_out(Putaway::recommendLocations($data));
             } catch (Throwable $e) {
                 json_err($e->getMessage(), 409);
             }
@@ -21,15 +25,14 @@ function handle_putaway($action) {
         case 'validate':
             api_require_auth();
             try {
-                $result = Putaway::validate(
-                    (string)(query('location') ?: body()['location'] ?? ''),
-                    (int)(query('product_id') ?: body()['product_id'] ?? 0),
-                    (float)(query('quantity') ?: body()['quantity'] ?? 0)
-                );
+                $productId = (int)(query('product_id') ?: body()['product_id'] ?? 0);
+                $location  = strtoupper(trim((string)(query('location') ?: body()['location'] ?? '')));
+                $qty       = floatval(query('quantity') ?: body()['quantity'] ?? 0);
+                $uom       = (string)(query('uom') ?: body()['uom'] ?? 'Drum');
+                json_out(Putaway::validatePlacement($productId, $location, $qty, $uom));
             } catch (Throwable $e) {
                 json_err($e->getMessage(), 409);
             }
-            json_out($result);
             break;
 
         case 'list_blocks':
@@ -38,6 +41,7 @@ function handle_putaway($action) {
             break;
 
         case 'add_block':
+        case 'create_block':
             api_require_admin();
             try {
                 $id = Putaway::addBlock(body());
@@ -49,8 +53,9 @@ function handle_putaway($action) {
             break;
 
         case 'remove_block':
+        case 'deactivate_block':
             api_require_admin();
-            $id = (int)query('id');
+            $id = (int)(body()['id'] ?? query('id'));
             Putaway::removeBlock($id);
             ActivityLogger::log('REMOVE_PUTAWAY_BLOCK', 'putaway', 'PutawayBlock', $id);
             json_out(['id' => $id]);
@@ -64,76 +69,6 @@ function handle_putaway($action) {
                 json_err($e->getMessage(), 409);
             }
             ActivityLogger::log('CREATE_PUTAWAY_TASK', 'putaway', 'PutawayTask', $id);
-            json_out(['id' => $id]);
-            break;
-
-        case 'list_tasks':
-            api_require_auth();
-            json_out(['rows' => Putaway::listTasks([
-                'status' => query('status'),
-                'mine'   => query('mine'),
-            ])]);
-            break;
-
-        case 'task_detail':
-            api_require_auth();
-            $id = (int)query('id');
-            try {
-                json_out(Putaway::taskDetail($id));
-            } catch (Throwable $e) {
-                json_err($e->getMessage(), 404);
-            }
-            break;
-
-        case 'assign':
-            api_require_write();
-            $data = body();
-            $id = (int)($data['id'] ?? query('id'));
-            try {
-                Putaway::assignTask($id, $data);
-            } catch (Throwable $e) {
-                json_err($e->getMessage(), 409);
-            }
-            ActivityLogger::log('ASSIGN_PUTAWAY_TASK', 'putaway', 'PutawayTask', $id);
-            json_out(['id' => $id]);
-            break;
-
-        case 'confirm_pallet':
-            api_require_write();
-            $data = body();
-            try {
-                Putaway::confirmPallet(
-                    (int)($data['item_id'] ?? 0),
-                    (string)($data['scanned_location'] ?? ''),
-                    $data['scan_override_reason'] ?? null
-                );
-            } catch (Throwable $e) {
-                json_err($e->getMessage(), 409);
-            }
-            json_out(['ok' => true]);
-            break;
-
-        case 'complete_task':
-            api_require_write();
-            $id = (int)query('id');
-            try {
-                Putaway::completeTask($id);
-            } catch (Throwable $e) {
-                json_err($e->getMessage(), 409);
-            }
-            ActivityLogger::log('COMPLETE_PUTAWAY_TASK', 'putaway', 'PutawayTask', $id);
-            json_out(['id' => $id]);
-            break;
-
-        case 'cancel_task':
-            api_require_write();
-            $id = (int)query('id');
-            try {
-                Putaway::cancelTask($id);
-            } catch (Throwable $e) {
-                json_err($e->getMessage(), 409);
-            }
-            ActivityLogger::log('CANCEL_PUTAWAY_TASK', 'putaway', 'PutawayTask', $id);
             json_out(['id' => $id]);
             break;
 
@@ -227,6 +162,141 @@ function handle_putaway($action) {
         case 'bins':
             api_require_auth();
             json_out(['rows' => Putaway::listAllBins()]);
+            break;
+
+        // ── v2 task queue actions (S49) ────────────────────────────────
+
+        case 'task_list':
+            api_require_auth();
+            json_out(['rows' => Putaway::listTasks([
+                'status' => query('status'),
+                'search' => query('search'),
+                'mine'   => query('mine'),
+            ])]);
+            break;
+
+        case 'task_detail':
+            api_require_auth();
+            $id = (int)(query('id') ?: body()['id'] ?? 0);
+            try { json_out(Putaway::taskDetail($id)); }
+            catch (Throwable $e) { json_err($e->getMessage(), 404); }
+            break;
+
+        case 'task_assign':
+            // Self-claim: current user becomes assigned_to
+            api_require_write();
+            $id = (int)(query('id') ?: body()['id'] ?? 0);
+            try { Putaway::assignTask($id, ['assigned_to' => $_SESSION['user_id'] ?? 0]); }
+            catch (Throwable $e) { json_err($e->getMessage(), 409); }
+            ActivityLogger::log('TASK_SELF_ASSIGN', 'putaway', 'PutawayTask', $id);
+            json_out(['id' => $id]);
+            break;
+
+        case 'assign_task':
+            // Admin assigns 2-person team
+            api_require_write();
+            $data = body();
+            $id = (int)($data['id'] ?? query('id') ?? 0);
+            $forklift = (int)($data['forklift_operator_id'] ?? 0);
+            $partner  = (int)($data['checklist_partner_id'] ?? 0);
+            try { Putaway::assignTeam($id, $forklift, $partner); }
+            catch (Throwable $e) { json_err($e->getMessage(), 409); }
+            ActivityLogger::log('TASK_TEAM_ASSIGN', 'putaway', 'PutawayTask', $id);
+            json_out(['id' => $id]);
+            break;
+
+        case 'unassign_task':
+            api_require_write();
+            $id = (int)(query('id') ?: body()['id'] ?? 0);
+            try { Putaway::unassignTeam($id); }
+            catch (Throwable $e) { json_err($e->getMessage(), 409); }
+            ActivityLogger::log('TASK_UNASSIGN', 'putaway', 'PutawayTask', $id);
+            json_out(['id' => $id]);
+            break;
+
+        case 'task_update_pallet':
+            api_require_write();
+            $data = body();
+            $itemId = (int)($data['id'] ?? 0);
+            $loc    = (string)($data['location_code'] ?? $data['location'] ?? '');
+            try { Putaway::updateTaskPallet($itemId, $loc, $data['reason'] ?? null); }
+            catch (Throwable $e) { json_err($e->getMessage(), 409); }
+            json_out(['ok' => true]);
+            break;
+
+        case 'task_complete_pallet':
+            // Partner confirms pallet via dual-scan — open to ANY department
+            api_require_write();
+            $data = body();
+            try {
+                Putaway::completeTaskPallet(
+                    (int)($data['id'] ?? 0),
+                    $data['scan_override_reason'] ?? null
+                );
+            } catch (Throwable $e) { json_err($e->getMessage(), 409); }
+            json_out(['ok' => true]);
+            break;
+
+        case 'task_complete':
+            api_require_write();
+            $id = (int)(query('id') ?: body()['id'] ?? 0);
+            try { Putaway::completeTask($id); }
+            catch (Throwable $e) { json_err($e->getMessage(), 409); }
+            ActivityLogger::log('TASK_COMPLETE', 'putaway', 'PutawayTask', $id);
+            json_out(['id' => $id]);
+            break;
+
+        case 'task_cancel':
+            api_require_write();
+            $id = (int)(query('id') ?: body()['id'] ?? 0);
+            try { Putaway::cancelTask($id); }
+            catch (Throwable $e) { json_err($e->getMessage(), 409); }
+            ActivityLogger::log('TASK_CANCEL', 'putaway', 'PutawayTask', $id);
+            json_out(['id' => $id]);
+            break;
+
+        case 'assignable_users':
+            api_require_auth();
+            json_out(['rows' => Putaway::listAssignableUsers()]);
+            break;
+
+        case 'get_lpn_label_data':
+            api_require_auth();
+            $id = (int)(query('id') ?: body()['id'] ?? 0);
+            $data = Putaway::getLpnLabelData($id);
+            if (!$data) json_err('Item tidak ditemukan.', 404);
+            json_out($data);
+            break;
+
+        case 'print_lpn_label':
+            api_require_write();
+            $id = (int)(query('id') ?: body()['id'] ?? 0);
+            $labelData = Putaway::getLpnLabelData($id);
+            if (!$labelData) json_err('Item tidak ditemukan.', 404);
+            // Return label data for client-side barcode rendering (LpnLabel.tsx)
+            $labelData['task_number'] = $labelData['task_number'] ?? null;
+            $labelData['order_number'] = $labelData['order_number'] ?? null;
+            $labelData['expiry_date'] = $labelData['expiry_date'] ?? null;
+            json_out(['label' => $labelData]);
+            break;
+
+        case 'my_tasks':
+            // Mobile: tasks for current user — open to ANY department
+            api_require_auth();
+            json_out(['rows' => Putaway::myTasks()]);
+            break;
+
+        case 'scan_override':
+            // Scan mismatch with typed reason — open to ANY department
+            api_require_write();
+            $data = body();
+            $itemId = (int)($data['id'] ?? 0);
+            $loc    = (string)($data['location_code'] ?? '');
+            $reason = (string)($data['reason'] ?? '');
+            try { Putaway::scanOverride($itemId, $loc, $reason); }
+            catch (Throwable $e) { json_err($e->getMessage(), 409); }
+            ActivityLogger::log('SCAN_OVERRIDE', 'putaway', 'PutawayTaskItem', $itemId);
+            json_out(['ok' => true]);
             break;
 
         default:

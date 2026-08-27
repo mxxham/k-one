@@ -430,6 +430,34 @@ require_once __DIR__ . '/includes/header.php';
     </div>
   </div>
 
+  <?php
+  $deptCards = [
+      ['icon' => 'fa-arrows-rotate',        'label' => 'Replenishment', 'page' => 'replenishment.php',  'color' => '#7e22ce', 'bg' => '#f3e8ff', 'q' => 'SELECT COUNT(*) FROM bin_transfers WHERE transfer_type = \'replenishment\' AND status = \'open\''],
+      ['icon' => 'fa-layer-group',          'label' => 'Waves',         'page' => 'waves.php',          'color' => '#4338ca', 'bg' => '#eef2ff', 'q' => 'SELECT COUNT(*) FROM waves WHERE status IN (\'open\',\'in_progress\')'],
+      ['icon' => 'fa-clipboard-list',       'label' => 'ASN',           'page' => 'asn.php',            'color' => '#0e7490', 'bg' => '#cffafe', 'q' => 'SELECT COUNT(*) FROM asn WHERE status = \'Pending\''],
+      ['icon' => 'fa-warehouse',            'label' => 'Putaway',       'page' => 'putaway_tasks.php',  'color' => '#b45309', 'bg' => '#fef3c7', 'q' => 'SELECT COUNT(*) FROM putaway_tasks WHERE status IN (\'open\',\'in_progress\')'],
+      ['icon' => 'fa-sync-alt',             'label' => 'Cycle Count',   'page' => 'cyclecount.php',     'color' => '#15803d', 'bg' => '#dcfce7', 'q' => 'SELECT COUNT(*) FROM cycle_count_schedules WHERE status IN (\'open\',\'in_progress\')'],
+      ['icon' => 'fa-chart-line',           'label' => 'ABC Analysis',  'page' => 'abc.php',            'color' => '#be185d', 'bg' => '#fce7f3', 'q' => 'SELECT COUNT(*) FROM products WHERE velocity_class IS NOT NULL'],
+  ];
+  $dbDept = db();
+  ?>
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px">
+    <?php foreach ($deptCards as $dc):
+        try { $dcN = (int)$dbDept->query($dc['q'])->fetchColumn(); } catch (Throwable $e) { $dcN = null; }
+    ?>
+    <a href="<?= $dc['page'] ?>" style="text-decoration:none;background:<?= $dc['bg'] ?>;border:1px solid rgba(0,0,0,.05);border-radius:14px;padding:16px 14px;display:flex;flex-direction:column;gap:8px;transition:transform .12s,box-shadow .12s" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 14px rgba(0,0,0,.08)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+      <div style="width:38px;height:38px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+        <i class="fas <?= $dc['icon'] ?>" style="color:<?= $dc['color'] ?>;font-size:1rem"></i>
+      </div>
+      <div>
+        <div style="font-size:1.05rem;font-weight:800;color:#111827;line-height:1"><?= $dcN === null ? '—' : number_format($dcN) ?></div>
+        <div style="font-size:.68rem;font-weight:700;color:<?= $dc['color'] ?>;margin-top:2px;text-transform:uppercase;letter-spacing:.03em"><?= $dc['label'] ?></div>
+      </div>
+    </a>
+    <?php endforeach; ?>
+  </div>
+  <div style="font-size:.68rem;color:#94a3b8;margin-top:-8px"><i class="fas fa-info-circle mr-1"></i>Modul WMS Pro — aktif setelah migrasi hotfix_024 dijalankan</div>
+
 
   <div style="background:#fff;border-radius:14px;box-shadow:0 1px 8px rgba(0,0,0,.07);overflow:hidden">
     <div style="padding:16px 22px;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center">

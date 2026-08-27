@@ -1,1 +1,76 @@
 .phpunit.cache/
+
+# Dependencies
+vendor/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+api_errors.log
+api_stderr.log
+api_stdout.log
+debug_api.log
+debug_test2.log
+test_write.log
+server_stderr.log
+server_stdout.log
+
+# Cache & build
+.codegraph/
+.omo/
+node_modules/
+build/
+dist/
+
+# IDE & editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Test/debug files (untracked)
+abc.php
+api/handlers/abc.php
+debug_*.php
+test_*.php
+parse_excel*.php
+check_*.php
+
+# Cookies & sessions
+cookies.txt
+
+# Archives
+*.zip
+*.phar
+
+# Composer
+composer.phar
+
+# Database
+*.sqlite
+*.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Exports
+exports/
+
+# Frontend build
+frontend.zip
+
+# k-one directory (if it's a submodule or separate project)
+k-one/

@@ -37,10 +37,10 @@ function handle_products($action) {
         case 'create':
             api_require_write();
             $data = body();
-            Product::create($data);
+            $id = Product::create($data);
             ActivityLogger::log('CREATE_PRODUCT', 'stock', 'Product', null,
                 $data['product_code'] ?? null, 'Buat produk: ' . ($data['product_name'] ?? '—'));
-            json_out(['ok' => true]);
+            json_out(['id' => (int)$id]);
             break;
 
         case 'update':
@@ -312,6 +312,122 @@ function handle_locations($action) {
             $stmt = db()->prepare($sql);
             $stmt->execute($params);
             json_out(['rows' => $stmt->fetchAll()]);
+            break;
+
+        case 'uom_limits_list':
+            api_require_auth();
+            $db = db();
+            $rows = $db->query("SELECT ul.*, 
+                (SELECT COUNT(*) FROM products p WHERE p.uom_type = ul.uom_type AND p.is_active = 1) AS product_count
+                FROM uom_physical_limits ul ORDER BY ul.uom_type")->fetchAll();
+            json_out(['rows' => $rows]);
+            break;
+
+        case 'uom_limits_update':
+            api_require_write();
+            $data = body();
+            $uomType = trim($data['uom_type'] ?? '');
+            if (!$uomType) json_err('uom_type wajib diisi.');
+            $db = db();
+            $validLevels = ['A','B','C','D','E'];
+            $minLvl = strtoupper(trim($data['min_level'] ?? 'A'));
+            $maxLvl = strtoupper(trim($data['max_level'] ?? 'E'));
+            if (!in_array($minLvl, $validLevels)) json_err('min_level tidak valid.');
+            if (!in_array($maxLvl, $validLevels)) json_err('max_level tidak valid.');
+            $stmt = $db->prepare("UPDATE uom_physical_limits SET 
+                min_level=?, max_level=?, allow_pick_face=?, max_weight_kg=?, max_height_cm=?, requires_equipment=?
+                WHERE uom_type=?");
+            $stmt->execute([
+                $minLvl, $maxLvl,
+                (int)($data['allow_pick_face'] ?? 1),
+                $data['max_weight_kg'] ?? null,
+                $data['max_height_cm'] ?? null,
+                (int)($data['requires_equipment'] ?? 0),
+                $uomType,
+            ]);
+            if ($stmt->rowCount() === 0) {
+                $ins = $db->prepare("INSERT INTO uom_physical_limits (uom_type, min_level, max_level, allow_pick_face, max_weight_kg, max_height_cm, requires_equipment)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $ins->execute([$uomType, $minLvl, $maxLvl, (int)($data['allow_pick_face'] ?? 1), $data['max_weight_kg'] ?? null, $data['max_height_cm'] ?? null, (int)($data['requires_equipment'] ?? 0)]);
+            }
+            ActivityLogger::log('UPDATE_UOM_LIMITS', 'location', 'UOM Limits', null, $uomType, 'Update UOM limits: ' . $uomType);
+            json_out(['ok' => true]);
+            break;
+
+        case 'product_rules_list':
+            api_require_auth();
+            $db = db();
+            $uomFilter = query('uom_type') ?: null;
+            $search = trim(query('search') ?: '');
+            $perPage = max(1, (int)query('per_page', 50));
+            $page = max(1, (int)query('page', 1));
+            $offset = ($page - 1) * $perPage;
+
+            $where = "WHERE p.is_active = 1";
+            $params = [];
+            if ($uomFilter) { $where .= " AND p.uom_type = ?"; $params[] = $uomFilter; }
+            if ($search) { $where .= " AND (p.product_code LIKE ? OR p.product_name LIKE ?)"; $params[] = "%$search%"; $params[] = "%$search%"; }
+
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM products p $where");
+            $countStmt->execute($params);
+            $total = (int)$countStmt->fetchColumn();
+
+            $sql = "SELECT p.id, p.product_code, p.product_name, p.uom_type, p.drums_per_pallet, p.uom_per_pallet,
+                    r.preferred_zone_code, r.max_level AS rule_max_level, r.allow_pick_face, r.full_pallet_to_pick,
+                    r.consolidate, ul.max_level AS uom_max_level, ul.min_level AS uom_min_level
+                FROM products p
+                LEFT JOIN product_putaway_rules r ON r.product_id = p.id
+                LEFT JOIN uom_physical_limits ul ON ul.uom_type = p.uom_type
+                $where
+                ORDER BY p.product_code
+                LIMIT $perPage OFFSET $offset";
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll();
+            json_out(['rows' => $rows, 'total' => $total, 'page' => $page, 'per_page' => $perPage]);
+            break;
+
+        case 'product_rules_update':
+            api_require_write();
+            $data = body();
+            $productId = (int)($data['product_id'] ?? 0);
+            if (!$productId) json_err('product_id wajib diisi.');
+            $db = db();
+            $check = $db->prepare("SELECT id FROM products WHERE id = ?");
+            $check->execute([$productId]);
+            if (!$check->fetch()) json_err('Produk tidak ditemukan.', 404);
+
+            $validLevels = ['A','B','C','D','E'];
+            $maxLvl = strtoupper(trim($data['max_level'] ?? 'E'));
+            if (!in_array($maxLvl, $validLevels)) json_err('max_level tidak valid.');
+
+            $stmt = $db->prepare("INSERT INTO product_putaway_rules (product_id, preferred_zone_code, max_level, allow_pick_face, full_pallet_to_pick, consolidate)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    preferred_zone_code = VALUES(preferred_zone_code),
+                    max_level = VALUES(max_level),
+                    allow_pick_face = VALUES(allow_pick_face),
+                    full_pallet_to_pick = VALUES(full_pallet_to_pick),
+                    consolidate = VALUES(consolidate)");
+            $stmt->execute([
+                $productId,
+                strtoupper(trim($data['preferred_zone_code'] ?? 'RESERVE')),
+                $maxLvl,
+                (int)($data['allow_pick_face'] ?? 1),
+                (int)($data['full_pallet_to_pick'] ?? 0),
+                (int)($data['consolidate'] ?? 1),
+            ]);
+            json_out(['ok' => true]);
+            break;
+
+        case 'product_rules_delete':
+            api_require_write();
+            $data = body();
+            $productId = (int)($data['product_id'] ?? 0);
+            if (!$productId) json_err('product_id wajib diisi.');
+            $db = db();
+            $db->prepare("DELETE FROM product_putaway_rules WHERE product_id = ?")->execute([$productId]);
+            json_out(['ok' => true]);
             break;
 
         default:

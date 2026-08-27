@@ -86,6 +86,21 @@ function handle_picklist($action) {
             json_out(['data' => $data]);
             break;
 
+        case 'generate_for_wave':
+            api_require_write();
+            $data = body();
+            $waveId = (int)($data['wave_id'] ?? query('wave_id'));
+            if ($waveId <= 0) json_err('wave_id is required', 400);
+            try {
+                $ids = PicklistService::generateForWave($waveId);
+            } catch (\Throwable $e) {
+                json_err($e->getMessage(), $e->getCode() ?: 400);
+            }
+            ActivityLogger::log('GENERATE_PICKLISTS', 'picklist', 'Wave', $waveId,
+                null, 'Generate ' . count($ids) . ' picklist(s) for wave ID ' . $waveId);
+            json_out(['picklist_ids' => $ids, 'count' => count($ids)]);
+            break;
+
         default:
             json_err('Invalid action: ' . $action, 404);
     }

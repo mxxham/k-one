@@ -51,6 +51,12 @@ final class ApiTestHelpers
         curl_close($ch);
 
         $decoded = json_decode((string) $raw, true);
+        
+        // Debug output
+        file_put_contents('D:/K-one/k-one/debug_api.log', 
+            date('H:i:s') . " API: module=$module action=$action status=$status\nrequest=" . json_encode($body) . "\nresponse=$raw\n\n", 
+            FILE_APPEND);
+        
         return [
             'status' => $status,
             'body'   => is_array($decoded) ? $decoded : null,

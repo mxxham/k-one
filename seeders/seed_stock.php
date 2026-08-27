@@ -4,8 +4,10 @@ require_once __DIR__ . '/../config/database.php';
 
 $db = db();
 
+$db->exec("SET FOREIGN_KEY_CHECKS=0");
 $db->exec("DELETE FROM stock_ledger");
 $db->exec("DELETE FROM stock");
+$db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 function calculateExpiry($productionDate)
 {
@@ -15,7 +17,7 @@ function calculateExpiry($productionDate)
 $productsStmt = $db->query("SELECT id, product_code, product_name, uom_type, uom_per_pallet FROM products ORDER BY id");
 $products = $productsStmt->fetchAll();
 
-$locationsStmt = $db->query("SELECT location_code FROM locations WHERE location_type = 'Storage' ORDER BY location_code");
+$locationsStmt = $db->query("SELECT location_code FROM location_master WHERE zone IN ('Bulk','Carton') AND is_active = 1 ORDER BY location_code");
 $locations = $locationsStmt->fetchAll(PDO::FETCH_COLUMN);
 
 $stockItems = [];
@@ -41,7 +43,7 @@ foreach ($products as $product) {
         if ($daysUntilExpiry <= 0) {
             $stockStatus = 'Expired';
         } elseif ($daysUntilExpiry <= 120) {
-            $stockStatus = 'Critical';
+            $stockStatus = 'Available';
         } else {
             $stockStatus = 'Available';
         }
@@ -70,13 +72,12 @@ foreach ($products as $product) {
 
         
         $balance = $quantity;
-        $ledgerStmt = $db->prepare("INSERT INTO stock_ledger (transaction_date, product_id, batch_number, transaction_type, quantity_in, reference_number, expiry_date, balance) VALUES (?, ?, ?, 'IN', ?, 'INITIAL', ?, ?)");
+        $ledgerStmt = $db->prepare("INSERT INTO stock_ledger (transaction_date, product_id, batch_number, transaction_type, quantity_in, reference_number, balance) VALUES (?, ?, ?, 'IN', ?, 'INITIAL', ?)");
         $ledgerStmt->execute([
             $productionDate,
             $productId,
             $stockItems[count($stockItems) - 1]['batch_number'],
             $quantity,
-            $expiryDate,
             $balance
         ]);
     }

@@ -60,6 +60,14 @@ ApiTestHelpers::truncateTransactional($pdo);
 $pdo = null;
 
 // 5. Start the test server pointed at kone_test
+// Set env vars in parent process so child inherits them (Windows proc_open fix)
+putenv('DB_NAME=' . TEST_DB_NAME);
+putenv('DB_HOST=' . TEST_DB_HOST);
+putenv('DB_PORT=' . TEST_DB_PORT);
+putenv('DB_USER=' . TEST_DB_USER);
+putenv('DB_PASS=' . TEST_DB_PASS);
+putenv('API_ENV=test');
+
 $env = getenv();
 $env['DB_NAME'] = TEST_DB_NAME;
 $env['DB_HOST'] = TEST_DB_HOST;

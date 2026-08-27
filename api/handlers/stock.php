@@ -26,6 +26,73 @@ function handle_stock($action) {
             json_out(['rows' => $rows, 'summary' => Stock::getSummary()]);
             break;
 
+        case 'list_grouped':
+            api_require_auth();
+            $status = query('status') ?: null;
+            $expiring = query('expiring') === '1' || query('expiring') === 'true';
+            $search = trim(query('q') ?: '');
+            $location = trim(query('location') ?: '');
+            $yearRaw = trim(query('year') ?: '');
+            $year = preg_match('/^\d{4}$/', $yearRaw) ? (int)$yearRaw : null;
+            $allRows = Stock::getAll($status, $expiring, $year);
+            if ($search) {
+                $allRows = array_values(array_filter($allRows, function ($r) use ($search) {
+                    $needle = strtolower($search);
+                    return strpos(strtolower($r['product_code'] ?? ''), $needle) !== false
+                        || strpos(strtolower($r['product_name'] ?? ''), $needle) !== false
+                        || strpos(strtolower($r['batch_number'] ?? ''), $needle) !== false;
+                }));
+            }
+            if ($location) {
+                $allRows = array_values(array_filter($allRows, fn($r) => stripos($r['location'] ?? '', $location) === 0));
+            }
+            // Group by product_code
+            $grouped = [];
+            foreach ($allRows as $r) {
+                $key = $r['product_code'] ?? '';
+                if (!isset($grouped[$key])) {
+                    $grouped[$key] = [
+                        'product_id'       => $r['product_id'],
+                        'product_code'     => $r['product_code'],
+                        'product_name'     => $r['product_name'],
+                        'category'         => $r['category'] ?? null,
+                        'uom_type'         => $r['uom_type'] ?? null,
+                        'uom_per_pallet'   => $r['uom_per_pallet'] ?? null,
+                        'velocity_class'   => $r['velocity_class'] ?? null,
+                        'total_qty'        => 0,
+                        'total_pallet'     => 0,
+                        'location_count'   => 0,
+                        'batch_count'      => 0,
+                        'batches'          => [],
+                        'earliest_expiry'  => null,
+                        'latest_expiry'    => null,
+                        'statuses'         => [],
+                        'has_hold'         => false,
+                    ];
+                }
+                $g = &$grouped[$key];
+                $g['total_qty']    += floatval($r['quantity'] ?? 0);
+                $g['total_pallet'] += floatval($r['pallet'] ?? 0);
+                $g['location_count']++;
+                $batch = $r['batch_number'] ?? '';
+                if ($batch && !in_array($batch, $g['batches'])) {
+                    $g['batches'][] = $batch;
+                    $g['batch_count'] = count($g['batches']);
+                }
+                $exp = $r['expiry_date'] ?? null;
+                if ($exp) {
+                    if (!$g['earliest_expiry'] || $exp < $g['earliest_expiry']) $g['earliest_expiry'] = $exp;
+                    if (!$g['latest_expiry'] || $exp > $g['latest_expiry']) $g['latest_expiry'] = $exp;
+                }
+                $st = $r['stock_status'] ?? '';
+                if ($st && !in_array($st, $g['statuses'])) $g['statuses'][] = $st;
+                if (!empty($r['hold_status']) && $r['hold_status'] !== 'available') $g['has_hold'] = true;
+                unset($g);
+            }
+            $grouped = array_values($grouped);
+            json_out(['rows' => $grouped, 'summary' => Stock::getSummary()]);
+            break;
+
         case 'summary':
             api_require_auth();
             json_out(['summary' => Stock::getSummary()]);

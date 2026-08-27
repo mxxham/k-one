@@ -4,10 +4,12 @@ require_once __DIR__ . '/../config/database.php';
 
 $db = db();
 
+$db->exec("SET FOREIGN_KEY_CHECKS=0");
 $db->exec("DELETE FROM picklist_items");
 $db->exec("DELETE FROM picklists");
 $db->exec("DELETE FROM outbound_items");
 $db->exec("DELETE FROM outbound_orders");
+$db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 $customersStmt = $db->query("SELECT id FROM customers");
 $customers = $customersStmt->fetchAll(PDO::FETCH_COLUMN);

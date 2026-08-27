@@ -145,6 +145,9 @@ $_isViewer = $user && $user['role'] === 'viewer';
                 <a href="<?= BASE_URL ?>/import_outbound.php" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm <?= ($currentPage ?? '') == 'import_outbound' ? 'active' : '' ?>">
                     <i class="fas fa-file-export w-4 text-center"></i><span>Import Outbound</span>
                 </a>
+                <a href="<?= BASE_URL ?>/import_auto.php" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm <?= ($currentPage ?? '') == 'import_auto' ? 'active' : '' ?>">
+                    <i class="fas fa-magic w-4 text-center"></i><span>Auto Import</span>
+                </a>
                 <?php endif; ?>
                 <?php if (Auth::hasRole('admin')): ?>
                 <a href="<?= BASE_URL ?>/import_stock.php" class="sidebar-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm <?= ($currentPage ?? '') == 'import_stock' ? 'active' : '' ?>">

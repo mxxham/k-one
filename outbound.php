@@ -942,6 +942,21 @@ if (!empty($_obWarnings)):
 
 <?php elseif($action==='view'&&$outbound):?>
 
+<?php
+$cdStmt = db()->prepare("SELECT COUNT(*) FROM inbound_items ii
+        WHERE ii.cross_dock_outbound_order_id = ?");
+$cdStmt->execute([$outbound['id']]);
+$cdCount = (int)$cdStmt->fetchColumn();
+$cdPicklists = db()->prepare("SELECT id, picklist_no, status FROM picklists
+        WHERE notes = 'CROSS-DOCK' AND outbound_order_id = ?");
+$cdPicklists->execute([$outbound['id']]);
+$cdPlList = $cdPicklists->fetchAll();
+$waveLink = db()->prepare("SELECT id, wave_no, status FROM waves w
+        JOIN wave_orders wo ON wo.wave_id = w.id WHERE wo.outbound_order_id = ?");
+$waveLink->execute([$outbound['id']]);
+$waveRow = $waveLink->fetch();
+?>
+
 <div class="ob-card">
   <div class="ob-cb" style="padding:14px 22px"><?php obWorkflow($outbound['status']);?></div>
 </div>
@@ -955,6 +970,21 @@ if (!empty($_obWarnings)):
             <?=htmlspecialchars($outbound['order_number']??$outbound['outbound_number']??'-')?>
           </span>
           <?=obBadge($outbound['status'])?>
+          <?php if($waveRow):?>
+          <a href="waves.php?action=detail&id=<?=(int)$waveRow['id']?>"
+             style="display:inline-flex;align-items:center;gap:5px;background:#f3e8ff;color:#7e22ce;
+                    border:1px solid #d8b4fe;border-radius:6px;padding:2px 9px;font-size:.68rem;
+                    font-weight:700;text-decoration:none">
+            <i class="fas fa-layer-group" style="font-size:.62rem"></i> WAVE <?=htmlspecialchars($waveRow['wave_no'])?>
+          </a>
+          <?php endif;?>
+          <?php if($cdCount > 0):?>
+          <span style="display:inline-flex;align-items:center;gap:5px;background:#eef2ff;color:#4338ca;
+                       border:1px solid #c7d2fe;border-radius:6px;padding:2px 9px;font-size:.68rem;font-weight:700">
+            <i class="fas fa-arrows-split-up-and-left" style="font-size:.62rem"></i>
+            CROSS-DOCK ×<?=$cdCount?>
+          </span>
+          <?php endif;?>
         </div>
         <div style="font-size:.83rem;color:#607d8b">
           <i class="fas fa-calendar mr-1"></i><?=date('d F Y',strtotime($outbound['order_date']))?>
@@ -1020,6 +1050,18 @@ if (!empty($_obWarnings)):
            class="ob-btn" style="background:#013d3c;color:#fff">
           <i class="fas fa-clipboard-list"></i> Picklist
         </a>
+        <?php if(!empty($cdPlList)):?>
+        <div style="width:100%;display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:.7rem;font-weight:700;color:#4338ca;display:inline-flex;align-items:center;gap:5px">
+            <i class="fas fa-arrows-split-up-and-left"></i> Cross-dock picklists:
+          </span>
+          <?php foreach($cdPlList as $cdp):?>
+          <a href="picklist.php?action=view&id=<?=(int)$cdp['id']?>" class="ob-btn" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe">
+            <?=htmlspecialchars($cdp['picklist_no'])?>
+          </a>
+          <?php endforeach;?>
+        </div>
+        <?php endif;?>
         <?php if($canWrite && !in_array($outbound['status']??'', ['Completed','Cancelled','Shipped','Delivered'])): ?><button onclick="confirmDelete(<?=$outbound['id']?>,'<?=htmlspecialchars($outbound['order_number']??$outbound['outbound_number']??'-')?>')"
                 data-ob-del-id="<?=$outbound['id']?>" data-status="<?=htmlspecialchars($outbound['status']??'')?>"
                 class="ob-btn ob-bd"><i class="fas fa-trash"></i> Delete</button>

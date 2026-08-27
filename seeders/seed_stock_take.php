@@ -4,8 +4,10 @@ require_once __DIR__ . '/../config/database.php';
 
 $db = db();
 
+$db->exec("SET FOREIGN_KEY_CHECKS=0");
 $db->exec("DELETE FROM stock_take_items");
 $db->exec("DELETE FROM stock_take");
+$db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 $stockStmt = $db->query("SELECT id, product_id, batch_number, location, quantity FROM stock LIMIT 15");
 $stockItems = $stockStmt->fetchAll();

@@ -6,7 +6,7 @@ UPDATE stock_locations sl
 JOIN inbound_items ii ON sl.inbound_item_id = ii.id
 JOIN products p ON ii.product_id = p.id
 SET sl.original_quantity = CASE
-    WHEN sl.is_full_pallet = 1 THEN COALESCE(p.uom_per_pallet, 4)
+    WHEN sl.is_f ll_pallet = 1 THEN COALESCE(p.uom_per_pallet, 4)
     ELSE COALESCE(ii.actual_qty / NULLIF(ii.pallet, 0), 4)
 END
 WHERE sl.original_quantity = 0;

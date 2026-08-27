@@ -86,7 +86,7 @@ class Product {
     public static function create($data) {
         $db = db();
         $stmt = $db->prepare("INSERT INTO products (product_code, product_name, category, description, drums_per_pallet, uom_type, uom_per_pallet, liters_per_unit, max_sku_qty, max_trans_qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        return $stmt->execute([
+        $stmt->execute([
             $data['product_code'],
             $data['product_name'],
             $data['category'] ?? null,
@@ -98,6 +98,7 @@ class Product {
             $data['max_sku_qty'] ?? 44,
             $data['max_trans_qty'] ?? 80
         ]);
+        return (int)$db->lastInsertId();
     }
 
     public static function update($id, $data) {

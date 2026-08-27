@@ -165,5 +165,140 @@ class PalletHelper {
     public static function calculateLiters($quantity, $litersPerUnit = 209) {
         return $quantity * $litersPerUnit;
     }
+
+    /**
+     * Derive units-per-pallet (UPP) from a product's pack size embedded in the
+     * name/description, mirroring the live WMS putaway data (S35).
+     * 16 pack-size rules:
+     *   "12*0.8L" → 48, "12*1L" → 44, "4*4L" / "3*5L" → 36,
+     *   "24*0.12L" → 80, "1*209L" → 4, "1*20L" → 24, "1*770kg" → 1, ...
+     * Returns null when the pack cannot be resolved.
+     */
+    public static function deriveUppFromPackSize(?string $text): ?int {
+        if ($text === null || $text === '') {
+            return null;
+        }
+        if (!preg_match('/(\d+)\s*\*\s*(\d+(?:\.\d+)?)\s*(l|kg)/i', $text, $m)) {
+            return null;
+        }
+        $qty  = (int)$m[1];
+        $size = (float)$m[2];
+        $unit = strtolower($m[3]);
+
+        if ($unit === 'kg') {
+            if ($size == 770)  return 1;   // fluid bag
+            if ($size >= 100)  return 4;   // 180kg drum
+            if ($size == 18 || $size == 15) return 24; // pail
+            return null;
+        }
+        if ($qty === 1) {
+            if ($size >= 1000) return 1;   // IBC tank
+            if ($size >= 200)  return 4;   // 200/209L drum
+            if ($size == 20)   return 24;  // 20L pail
+            return null;
+        }
+        if ($qty === 12) {
+            if ($size == 1) return 44;                    // 12*1L carton
+            if (in_array($size, [0.8, 0.7, 0.65], true)) return 48; // 12*0.8L carton
+            return null;
+        }
+        if ($qty === 4 && $size == 4)      return 36;   // 4*4L carton
+        if ($qty === 3 && $size == 5)      return 36;   // 3*5L carton
+        if ($qty === 24 && $size == 0.12)  return 80;   // 24*0.12L carton
+        if ($qty === 24 && $size == 1)     return 16;   // 24*1L carton
+        if ($qty === 10 && $size == 0.25)  return 100;  // 10*0.25L carton
+        return null;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* v2 parity helpers — mirrors pallet.ts                               */
+    /* ------------------------------------------------------------------ */
+
+    /** UOM pallet options (maps to v2 getUomOptions). */
+    public static function getUomOptions(string $uomType): array {
+        $options = [
+            'Drum'   => [4],
+            'Carton' => [36, 44, 48],
+            'Pail'   => [24],
+            'EA'     => [4],
+            'Bags'   => [1],
+        ];
+        return $options[$uomType] ?? [4];
+    }
+
+    /** Full pallets + remainder distribution (maps to v2 calculatePalletDistribution). */
+    public static function calculatePalletDistribution(int $totalQty, int $uomPerPallet): array {
+        $upp = max(1, (int)$uomPerPallet);
+        $fullPallets = (int)floor($totalQty / $upp);
+        $remainder = $totalQty % $upp;
+        $distribution = [];
+        $palletNumber = 1;
+        for ($i = 0; $i < $fullPallets; $i++) {
+            $distribution[] = [
+                'pallet_number' => $palletNumber++,
+                'quantity'      => $upp,
+                'is_full'       => true,
+            ];
+        }
+        if ($remainder > 0) {
+            $distribution[] = [
+                'pallet_number' => $palletNumber,
+                'quantity'      => $remainder,
+                'is_full'       => false,
+            ];
+        }
+        return $distribution;
+    }
+
+    /** Level = 5th char of location code (maps to v2 levelOf). */
+    public static function levelOf(?string $locationCode): string {
+        if (!$locationCode) return 'B';
+        return strtoupper($locationCode[4] ?? 'B');
+    }
+
+    /** PICK_FACE at pick-face level A, otherwise RESERVE (maps to v2 palletFunctionFor). */
+    public static function palletFunctionFor(?string $locationCode): string {
+        return self::levelOf($locationCode) === 'A' ? 'PICK_FACE' : 'RESERVE';
+    }
+
+    /** is_full_pallet flag: 1 when qty reaches UPP (maps to v2 isFullPallet). */
+    public static function isFullPallet($qty, ?int $uomPerPallet): int {
+        $upp = (int)($uomPerPallet ?? 4);
+        if (!($upp > 0)) return 1;
+        return (int)$qty >= ($upp - 0.001) ? 1 : 0;
+    }
+
+    /** Level-aware pallet count (maps to v2 calcPalletByLocation). */
+    public static function calcPalletByLocation($qty, int $upp, ?string $loc): float {
+        if ($upp <= 0) return 0;
+        $level = self::levelOf($loc);
+        if ($level === 'A') {
+            return round((float)$qty / $upp, 2);
+        }
+        return ceil((float)$qty / $upp);
+    }
+
+    /** v2 validateQuantity: pure-function signature (no DB). */
+    public static function validateQuantityV2(
+        int $qty,
+        array $product,
+        int $currentStock = 0
+    ): array {
+        $maxSku   = $product['max_sku_qty']   ?? 44;
+        $maxTrans = $product['max_trans_qty'] ?? 80;
+        if ($qty > $maxTrans) {
+            return ['valid' => false, 'message' => "Quantity cannot exceed {$maxTrans} per transaction"];
+        }
+        if ($qty > $maxSku) {
+            return ['valid' => false, 'message' => "Quantity cannot exceed {$maxSku} per SKU"];
+        }
+        if ($currentStock + $qty > $maxSku) {
+            return [
+                'valid'   => false,
+                'message' => "Total stock would exceed maximum SKU limit ({$maxSku}). Current: {$currentStock}, Adding: {$qty}, Max allowed: {$maxSku}",
+            ];
+        }
+        return ['valid' => true];
+    }
 }
 ?>

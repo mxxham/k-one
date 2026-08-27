@@ -2,6 +2,8 @@
 
 class Putaway {
 
+    const PICK_LEVEL = 'A';
+
     /* ------------------------------------------------------------------ */
     /* S33 — Putaway recommendation engine                                 */
     /* ------------------------------------------------------------------ */
@@ -241,6 +243,430 @@ class Putaway {
 
         $bin['current_qty'] = $current;
         return $bin;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* v2 parity helpers for recommendLocations / validatePlacement        */
+    /* ------------------------------------------------------------------ */
+
+    private static function _levelHeight(string $level): int {
+        $map = ['A' => 1, 'B' => 2, 'C' => 3, 'D' => 4, 'E' => 5];
+        return $map[strtoupper($level)] ?? 0;
+    }
+
+    private static function _effectiveMaxLevel(?array $rule, array $limits): string {
+        $rl = strtoupper(trim((string)($rule['max_level'] ?? '')));
+        $map = ['A' => 1, 'B' => 2, 'C' => 3, 'D' => 4, 'E' => 5];
+        if ($rl && isset($map[$rl])) return $rl;
+        return strtoupper((string)($limits['max_level'] ?? 'E'));
+    }
+
+    private static function _getProduct(int $productId): ?array {
+        $db = db();
+        $stmt = $db->prepare("SELECT id, product_code, product_name, uom_type, uom_per_pallet FROM products WHERE id = ?");
+        $stmt->execute([$productId]);
+        return $stmt->fetch() ?: null;
+    }
+
+    private static function _getLocation(string $code): ?array {
+        $db = db();
+        $stmt = $db->prepare("SELECT * FROM location_master WHERE location_code = ? LIMIT 1");
+        $stmt->execute([$code]);
+        return $stmt->fetch() ?: null;
+    }
+
+    private static function _getUomLimit(string $uomType): array {
+        $db = db();
+        $aliases = ['CAR' => 'Carton'];
+        $candidates = [$uomType, $aliases[$uomType] ?? null];
+        foreach ($candidates as $c) {
+            if (!$c) continue;
+            $stmt = $db->prepare("SELECT * FROM uom_physical_limits WHERE UPPER(uom_type) = UPPER(?)");
+            $stmt->execute([$c]);
+            $row = $stmt->fetch();
+            if ($row) return $row;
+        }
+        return ['min_level'=>'A','max_level'=>'E','allow_pick_face'=>1,'max_weight_kg'=>null,'max_height_cm'=>null,'requires_equipment'=>0];
+    }
+
+    private static function _getPutawayRule(int $productId): ?array {
+        $db = db();
+        $stmt = $db->prepare("SELECT * FROM product_putaway_rules WHERE product_id = ?");
+        $stmt->execute([$productId]);
+        return $stmt->fetch() ?: null;
+    }
+
+    private static function _activeBlocks(): array {
+        $db = db();
+        return $db->query("SELECT * FROM putaway_location_blocks WHERE is_active = 1")->fetchAll();
+    }
+
+    private static function _blockHit(array $blocks, string $code): array {
+        foreach ($blocks as $b) {
+            if ($b['scope_type'] === 'location' && strtoupper($b['location_code'] ?? '') === $code) {
+                return ['blocked' => true, 'reason' => $b['reason'] ?? ''];
+            }
+            if ($b['scope_type'] === 'aisle' && strpos($code, strtoupper($b['aisle_prefix'] ?? '')) === 0) {
+                return ['blocked' => true, 'reason' => $b['reason'] ?? ''];
+            }
+        }
+        return ['blocked' => false, 'reason' => null];
+    }
+
+    private static function _zoneBindings(string $zoneCode): array {
+        $db = db();
+        $stmt = $db->prepare("SELECT za.aisle, za.min_level, za.max_level
+                FROM zone_aisles za JOIN zones z ON z.zone_code = za.zone_code
+                WHERE za.zone_code = ? AND za.is_active = 1");
+        $stmt->execute([$zoneCode]);
+        return $stmt->fetchAll();
+    }
+
+    private static function _getExistingRacks(int $productId): array {
+        $db = db();
+        $stmt = $db->prepare("SELECT DISTINCT lm.rack
+                FROM stock_locations sl
+                JOIN stock s ON s.id = sl.stock_id
+                JOIN location_master lm ON lm.location_code = sl.location_code
+                WHERE s.product_id = ? AND sl.status IN ('Available','Reserved') AND lm.rack IS NOT NULL");
+        $stmt->execute([$productId]);
+        return array_column($stmt->fetchAll(), 'rack');
+    }
+
+    private static function _currentPickQty(int $productId): float {
+        $db = db();
+        $stmt = $db->prepare("SELECT COALESCE(SUM(sl.quantity), 0) AS qty
+                FROM stock_locations sl
+                JOIN stock s ON s.id = sl.stock_id
+                JOIN location_master lm ON lm.location_code = sl.location_code
+                WHERE s.product_id = ? AND lm.is_pick_face = 1
+                  AND sl.status IN ('Available','Reserved')");
+        $stmt->execute([$productId]);
+        return floatval($stmt->fetchColumn() ?: 0);
+    }
+
+    /**
+     * Direct pick-face slot finder — used as primary before _findAvailable fallback.
+     * Bypasses the complex _findAvailable zone_aisles JOIN which has issues with
+     * the current zone binding setup.
+     */
+    private static function _findPickFaceSlot(string $level, array $zones, array $existingRacks, array $blocks, array $takenLocations, array $limits): ?array {
+        if ($level !== self::PICK_LEVEL || empty($zones)) return null;
+        $db = db();
+        $equipCond = (int)($limits['requires_equipment'] ?? 0) === 1
+            ? "AND (lm.equipment_accessible = 1 OR lm.level IN ('A','B','C'))" : '';
+        $phZones = implode(',', array_fill(0, count($zones), '?'));
+        $params = array_merge([], $zones);
+        // level param comes right after zone in the SQL WHERE clause
+        $params[] = $level;
+        $notIn = '';
+        if (!empty($takenLocations)) {
+            $ph3 = implode(',', array_fill(0, count($takenLocations), '?'));
+            $params = array_merge($params, $takenLocations);
+            $notIn = " AND lm.location_code NOT IN ($ph3)";
+        }
+        $blockCond = '';
+        foreach ($blocks as $b) {
+            if ($b['scope_type'] === 'aisle' && !empty($b['aisle_prefix'])) {
+                $params[] = strtoupper($b['aisle_prefix']) . '%';
+                $blockCond .= " AND lm.location_code NOT LIKE ?";
+            } elseif ($b['scope_type'] === 'location' && !empty($b['location_code'])) {
+                $params[] = strtoupper($b['location_code']);
+                $blockCond .= " AND lm.location_code <> ?";
+            }
+        }
+        $sql = "SELECT lm.location_code, COALESCE(lm.zone_code, lm.zone) AS zone_code, lm.level
+                FROM location_master lm
+                LEFT JOIN zones z ON z.zone_code = COALESCE(lm.zone_code, lm.zone) AND z.is_active = 1
+                JOIN zone_aisles za ON za.zone_code IN ($phZones) AND za.is_active = 1
+                    AND za.aisle = lm.aisle AND lm.level BETWEEN za.min_level AND za.max_level
+                WHERE lm.is_active = 1 AND lm.level = ?
+                  AND lm.location_code NOT IN (
+                      SELECT DISTINCT location_code FROM stock_locations WHERE status IN ('Available','Reserved')
+                  )
+                  AND lm.location_code NOT IN (
+                      SELECT DISTINCT actual_location FROM putaway_task_items WHERE actual_location IS NOT NULL AND actual_location != '' AND status IN ('Pending','Confirmed')
+                  )
+                  AND lm.location_code NOT IN (
+                      SELECT DISTINCT suggested_location FROM putaway_task_items WHERE suggested_location IS NOT NULL AND suggested_location != '' AND status = 'Pending'
+                  )
+                  $equipCond $notIn $blockCond
+                ORDER BY z.priority ASC, lm.location_code ASC LIMIT 1";
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
+    /**
+     * Find free (unoccupied) locations on the requested levels.
+     * Ordering: zone priority -> same-rack clustering -> level asc -> position.
+     */
+    private static function _findAvailable(array $opts): array {
+        $db = db();
+        $levels = $opts['levels'] ?? [];
+        $limit  = $opts['limit'] ?? 1;
+        if (empty($levels) || $limit <= 0) return [];
+
+        $existingRacks  = $opts['existingRacks'] ?? [];
+        $zones          = $opts['zones'] ?? [];
+        $heavyOnly      = $opts['heavyOnly'] ?? false;
+        $blocks         = $opts['blocks'] ?? [];
+        $takenLocations = $opts['takenLocations'] ?? [];
+
+        $levelExpr = "COALESCE(NULLIF(lm.level,''), lm.row_name)";
+        $joinSQL = '';
+        $params  = [];
+
+        if (!empty($zones)) {
+            $ph = implode(',', array_fill(0, count($zones), '?'));
+            $params = array_merge($params, $zones);
+            $joinSQL = "JOIN zone_aisles za ON za.zone_code IN ($ph)
+                    AND za.is_active = 1 AND za.aisle = lm.aisle
+                    AND $levelExpr BETWEEN za.min_level AND za.max_level";
+        }
+
+        $whereZone = '';
+        // NOTE: $whereZone ? placeholders are NOT added to $params yet.
+        // They must come AFTER $phLv in $params because the SQL string places
+        // $phLv (levels) BEFORE $whereZone. Deferred below after $phLv is appended.
+
+        $blockCond = '';
+        foreach ($blocks as $b) {
+            if ($b['scope_type'] === 'aisle' && !empty($b['aisle_prefix'])) {
+                $params[] = strtoupper($b['aisle_prefix']) . '%';
+                $blockCond .= " AND lm.location_code NOT LIKE ?";
+            } elseif ($b['scope_type'] === 'location' && !empty($b['location_code'])) {
+                $params[] = strtoupper($b['location_code']);
+                $blockCond .= " AND lm.location_code <> ?";
+            }
+        }
+        if (!empty($takenLocations)) {
+            $ph3 = implode(',', array_fill(0, count($takenLocations), '?'));
+            $params = array_merge($params, $takenLocations);
+            $blockCond .= " AND lm.location_code NOT IN ($ph3)";
+        }
+
+        $equipCond = $heavyOnly ? "AND (lm.equipment_accessible = 1 OR $levelExpr IN ('A','B','C'))" : '';
+        // Levels params MUST come before whereZone params to match SQL placeholder order
+        $phLv = implode(',', array_fill(0, count($levels), '?'));
+        $params = array_merge($params, $levels);
+
+        // Now add whereZone params (appears AFTER $phLv in the SQL string)
+        if (!empty($zones)) {
+            $ph2 = implode(',', array_fill(0, count($zones), '?'));
+            $params = array_merge($params, $zones);
+            $whereZone = " AND (za.id IS NOT NULL OR COALESCE(lm.zone_code, lm.zone) IN ($ph2))";
+        }
+
+        $orderExtra = '';
+        if (!empty($existingRacks)) {
+            $rph = implode(',', array_fill(0, count($existingRacks), '?'));
+            $orderExtra = "CASE WHEN lm.rack IN ($rph) THEN 0 ELSE 1 END, ";
+            $params = array_merge($params, $existingRacks);
+        }
+
+        $sql = "SELECT lm.location_code, COALESCE(lm.zone_code, lm.zone) AS zone_code, $levelExpr AS level
+                FROM location_master lm
+                LEFT JOIN zones z ON z.zone_code = COALESCE(lm.zone_code, lm.zone) AND z.is_active = 1
+                $joinSQL
+                WHERE lm.is_active = 1 AND $levelExpr IN ($phLv) $equipCond
+                  AND lm.location_code NOT IN (SELECT DISTINCT location_code FROM stock_locations WHERE status IN ('Available','Reserved'))
+                  AND lm.location_code NOT IN (SELECT DISTINCT actual_location FROM putaway_task_items WHERE actual_location IS NOT NULL AND actual_location != '' AND status IN ('Pending','Confirmed'))
+                  AND lm.location_code NOT IN (SELECT DISTINCT suggested_location FROM putaway_task_items WHERE suggested_location IS NOT NULL AND suggested_location != '' AND status = 'Pending')
+                  $whereZone $blockCond
+                ORDER BY z.priority ASC, {$orderExtra}$levelExpr ASC, lm.location_code ASC
+                LIMIT " . (int)$limit;
+
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Full v2-parity putaway recommendation.
+     * Returns pallets[] array with per-pallet placements, zone, level, reason.
+     * v2 parity of PutawayService.recommendLocations().
+     */
+    public static function recommendLocations(array $data): array {
+        $productId  = (int)($data['product_id'] ?? 0);
+        $qty        = max(0, floatval($data['quantity'] ?? 0));
+        $reqUom     = strtoupper(trim((string)($data['uom'] ?? '')));
+        $uppReq     = !empty($data['uom_per_pallet']) ? (int)$data['uom_per_pallet'] : null;
+        $preferPick = ($data['prefer_pick'] ?? false) === true || ($data['prefer_pick'] ?? '') === '1';
+        $forceLevel = strtoupper(trim((string)($data['force_level'] ?? '')));
+        if ($forceLevel === '') $forceLevel = null;
+
+        $product = self::_getProduct($productId);
+        if (!$product) throw new Exception("Produk tidak ditemukan.");
+
+        $blocks = self::_activeBlocks();
+        $uom    = $reqUom !== '' ? $reqUom : strtoupper((string)($product['uom_type'] ?? 'Drum'));
+        $derivedUpp = self::deriveUppFromPackSize($product['product_name']);
+        $storedUpp  = max(1, intval($product['uom_per_pallet'] ?? 4));
+        // Stored UPP always takes priority; derived is fallback only when stored is missing/default
+        $upp = max(1, $uppReq ?? $storedUpp);
+
+        $limits = self::_getUomLimit($uom);
+        $rule   = self::_getPutawayRule($productId);
+        $maxLevel = self::_effectiveMaxLevel($rule, $limits);
+
+        $map = ['A' => 1, 'B' => 2, 'C' => 3, 'D' => 4, 'E' => 5];
+        $allowPick = (int)($rule['allow_pick_face'] ?? $limits['allow_pick_face'] ?? 1) === 1
+                     && isset($map[self::PICK_LEVEL]) && $map[self::PICK_LEVEL] >= ($map[strtoupper($limits['min_level'] ?? 'A')] ?? 1);
+
+        $fullPallets = (int)floor($qty / $upp);
+        $remainder   = round($qty % $upp, 2);
+        $totalPallets = $fullPallets + ($remainder > 0 ? 1 : 0);
+
+        // Allowed reserve levels for this UOM (never above maxLevel)
+        $reserveLevels = array_filter(['B','C','D','E'], function ($l) use ($map, $maxLevel) {
+            return ($map[$l] ?? 0) <= ($map[$maxLevel] ?? 5);
+        });
+        $reserveLevels = array_values($reserveLevels);
+
+        // Zone bindings
+        $reserveZone = strtoupper((string)($rule['preferred_zone_code'] ?? 'RESERVE'));
+        $reserveBindings = self::_zoneBindings($reserveZone);
+        $reserveZones = [];
+        if (!empty($reserveBindings)) {
+            $lvSet = [];
+            foreach ($reserveBindings as $b) {
+                $lo = $map[strtoupper($b['min_level'] ?? 'B')] ?? 2;
+                $hi = $map[strtoupper($b['max_level'] ?? 'E')] ?? 5;
+                foreach ($reserveLevels as $l) {
+                    $h = $map[$l] ?? 0;
+                    if ($h >= $lo && $h <= $hi) $lvSet[$l] = true;
+                }
+            }
+            if (!empty($lvSet)) $reserveLevels = array_values(array_keys($lvSet));
+            $reserveZones[] = $reserveZone;
+        }
+
+        $pickBindings = self::_zoneBindings('PICK_FAST');
+        $pickZones = !empty($pickBindings) ? ['PICK_FAST'] : [];
+
+        $existingRacks = (($rule['consolidate'] ?? 1) == 1) ? self::_getExistingRacks($productId) : [];
+
+        $placements      = [];
+        $takenLocations  = [];
+        $seq             = 1;
+
+        // 1) Full pallets -> reserve. If prefer_pick or full_pallet_to_pick and
+        //    current pick qty < min_pick_face_qty, hold one full pallet at Level A.
+        $fullToReserve = $fullPallets;
+        if ($allowPick && ($preferPick || ($rule['full_pallet_to_pick'] ?? 0) == 1) && $fullPallets > 0) {
+            $pickQty = self::_currentPickQty($productId);
+            if ($pickQty < floatval($rule['min_pick_face_qty'] ?? 0)) {
+                $slots = self::_findAvailable([
+                    'levels' => [self::PICK_LEVEL], 'limit' => 1,
+                    'existingRacks' => $existingRacks, 'zones' => $pickZones,
+                    'heavyOnly' => (int)($limits['requires_equipment'] ?? 0) === 1,
+                    'blocks' => $blocks, 'takenLocations' => $takenLocations,
+                ]);
+                if (!empty($slots[0])) {
+                    $s = $slots[0];
+                    $placements[] = [
+                        'pallet_seq' => $seq++, 'quantity' => $upp, 'is_full' => true,
+                        'location_code' => $s['location_code'], 'zone_code' => $s['zone_code'],
+                        'level' => $s['level'], 'reason' => 'PICK_FACE_FULL',
+                    ];
+                    $takenLocations[] = $s['location_code'];
+                    $fullToReserve -= 1;
+                }
+            }
+        }
+
+        if ($fullToReserve > 0) {
+            // Special case: Pail & IBC UOM always go to level A (pick face).
+            // Use _findAvailable (which COALESCEs row_name) instead of
+            // _findPickFaceSlot (which only matches lm.level='A' literally).
+            if ($uom === 'PAIL' || $uom === 'IBC') {
+                $slots = self::_findAvailable([
+                    'levels' => [self::PICK_LEVEL], 'limit' => $fullToReserve,
+                    'existingRacks' => $existingRacks, 'zones' => $pickZones,
+                    'heavyOnly' => false, 'blocks' => $blocks,
+                    'takenLocations' => $takenLocations,
+                ]);
+                for ($i = 0; $i < $fullToReserve; $i++) {
+                    if (empty($slots[$i])) break;
+                    $s = $slots[$i];
+                    $placements[] = [
+                        'pallet_seq' => $seq++, 'quantity' => $upp, 'is_full' => true,
+                        'location_code' => $s['location_code'], 'zone_code' => $s['zone_code'],
+                        'level' => $s['level'], 'reason' => 'RESERVE_FULL',
+                    ];
+                    $takenLocations[] = $s['location_code'];
+                }
+            } else {
+                $slots = self::_findAvailable([
+                    'levels' => $reserveLevels, 'limit' => $fullToReserve,
+                    'existingRacks' => $existingRacks, 'zones' => $reserveZones,
+                    'heavyOnly' => (int)($limits['requires_equipment'] ?? 0) === 1,
+                    'blocks' => $blocks, 'takenLocations' => $takenLocations,
+                ]);
+                for ($i = 0; $i < $fullToReserve; $i++) {
+                    if (empty($slots[$i])) break;
+                    $s = $slots[$i];
+                    $placements[] = [
+                        'pallet_seq' => $seq++, 'quantity' => $upp, 'is_full' => true,
+                        'location_code' => $s['location_code'], 'zone_code' => $s['zone_code'],
+                        'level' => $s['level'], 'reason' => 'RESERVE_FULL',
+                    ];
+                    $takenLocations[] = $s['location_code'];
+                }
+            }
+        }
+
+        // 2) Remainder / partial pallet -> pick face (Level A), fallback STAGING
+        if ($remainder > 0) {
+            $targetLevel = $forceLevel ?? self::PICK_LEVEL;
+            $targetZones = ($targetLevel === self::PICK_LEVEL) ? $pickZones : $reserveZones;
+            $s = self::_findPickFaceSlot($targetLevel, $targetZones, $existingRacks, $blocks, $takenLocations, $limits);
+            if ($s) {
+                $placements[] = [
+                    'pallet_seq' => $seq++, 'quantity' => $remainder, 'is_full' => false,
+                    'location_code' => $s['location_code'], 'zone_code' => $s['zone_code'],
+                    'level' => $s['level'], 'reason' => 'PICK_FACE_REMAINDER',
+                ];
+            } else {
+                $slots = self::_findAvailable([
+                    'levels' => [$targetLevel], 'limit' => 1,
+                    'existingRacks' => $existingRacks, 'zones' => $targetZones,
+                    'heavyOnly' => (int)($limits['requires_equipment'] ?? 0) === 1,
+                    'blocks' => $blocks, 'takenLocations' => $takenLocations,
+                ]);
+                if (!empty($slots[0])) {
+                    $s = $slots[0];
+                    $placements[] = [
+                        'pallet_seq' => $seq++, 'quantity' => $remainder, 'is_full' => false,
+                        'location_code' => $s['location_code'], 'zone_code' => $s['zone_code'],
+                        'level' => $s['level'], 'reason' => 'PICK_FACE_REMAINDER',
+                    ];
+                } else {
+                    $placements[] = [
+                        'pallet_seq' => $seq++, 'quantity' => $remainder, 'is_full' => false,
+                        'location_code' => 'STAGING', 'zone_code' => 'STAGING',
+                        'level' => '-', 'reason' => 'NO_SLOT_STAGING',
+                    ];
+                }
+            }
+        }
+
+        $unassignedFull = max(0, $fullToReserve - count(array_filter($placements, fn($p) => $p['reason'] === 'RESERVE_FULL')));
+        $success = $unassignedFull === 0 && ($remainder === 0 || !empty(array_filter($placements, fn($p) => $p['reason'] === 'PICK_FACE_REMAINDER')));
+
+        return [
+            'success'       => $success,
+            'message'       => $success ? '' : "Hanya " . ($fullPallets - $unassignedFull) . "/$fullPallets lokasi full pallet tersedia di level " . implode('/', $reserveLevels) . " — sisa diarahkan ke staging.",
+            'product'       => $product,
+            'uom'           => $uom,
+            'uom_per_pallet'=> $upp,
+            'limits'        => $limits,
+            'rule'          => $rule,
+            'total_pallets' => count($placements),
+            'pallets'       => $placements,
+        ];
     }
 
     /** S40 — validate a manual location save: blocked or out of limits → reject */
@@ -557,7 +983,7 @@ class Putaway {
                 LEFT JOIN users fo ON fo.id = t.forklift_operator_id
                 LEFT JOIN users cp ON cp.id = t.checklist_partner_id
                 LEFT JOIN putaway_task_items ti ON ti.task_id = t.id
-                WHERE t.inbound_order_id = ? AND t.status IN ('Open','In Progress')
+                WHERE t.inbound_order_id = ? AND t.status IN ('Open','In Progress','Completed')
                 GROUP BY t.id, a.full_name, fo.full_name, cp.full_name
                 ORDER BY t.id DESC
                 LIMIT 1");
@@ -737,8 +1163,8 @@ class Putaway {
         if (!empty($params['status'])) { $where[] = "pt.status = ?"; $args[] = $params['status']; }
         if (!empty($params['mine'])) {
             $uid = $_SESSION['user_id'] ?? 0;
-            $where[] = "(pt.assigned_to = ? OR pt.team_partner = ?)";
-            $args[] = $uid; $args[] = $uid;
+            $where[] = "(pt.assigned_to = ? OR pt.team_partner = ? OR pt.forklift_operator_id = ? OR pt.checklist_partner_id = ?)";
+            $args[] = $uid; $args[] = $uid; $args[] = $uid; $args[] = $uid;
         }
         if ($where) $sql .= " WHERE " . implode(" AND ", $where);
         $sql .= " GROUP BY pt.id ORDER BY pt.created_at DESC";
@@ -894,8 +1320,10 @@ class Putaway {
                 // Rows resolved via the manual Manage Pallet Locations path
                 // (save_pallet_locations) already have their stock_locations —
                 // skip the stock move so we never double-create stock.
-                $placedStmt = $db->prepare("SELECT COUNT(*) FROM stock_locations WHERE inbound_item_id = ?");
-                $placedStmt->execute([(int)$i['inbound_item_id']]);
+                // Check by putaway_task_item id (not inbound_item_id) since
+                // multiple pallets can come from the same inbound item.
+                $placedStmt = $db->prepare("SELECT COUNT(*) FROM stock_locations WHERE lpn_code = ?");
+                $placedStmt->execute([$i['lpn_code'] ?? '']);
                 if ((int)$placedStmt->fetchColumn() > 0) {
                     continue;
                 }
@@ -1060,6 +1488,305 @@ class Putaway {
                   AND pti.status = 'Pending'");
         $stmt->execute([$inboundId]);
         return (int)$stmt->fetchColumn() > 0;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* S49 — v2 task queue actions (team, pallet, mobile, labels)          */
+    /* ------------------------------------------------------------------ */
+
+    /** Admin assigns 2-person team (forklift operator + checklist partner). */
+    public static function assignTeam(int $taskId, int $forkliftId, int $partnerId): bool {
+        $db = db();
+        if ($forkliftId === $partnerId) throw new Exception("Operator dan partner tidak boleh orang yang sama.");
+
+        $chk = $db->prepare("SELECT id FROM users WHERE id = ? AND is_active = 1");
+        $chk->execute([$forkliftId]);
+        if (!$chk->fetch()) throw new Exception("Forklift operator tidak ditemukan / nonaktif.");
+        $chk->execute([$partnerId]);
+        if (!$chk->fetch()) throw new Exception("Checklist partner tidak ditemukan / nonaktif.");
+
+        $stmt = $db->prepare("SELECT status FROM putaway_tasks WHERE id = ?");
+        $stmt->execute([$taskId]);
+        $task = $stmt->fetch();
+        if (!$task) throw new Exception("Task tidak ditemukan.");
+        if (!in_array($task['status'], ['Open','In Progress'], true)) {
+            throw new Exception("Task sudah selesai/dibatalkan.");
+        }
+
+        $db->prepare("UPDATE putaway_tasks
+                SET forklift_operator_id = ?, checklist_partner_id = ?,
+                    assigned_to = ?, status = 'In Progress', updated_at = NOW()
+                WHERE id = ?")
+           ->execute([$forkliftId, $partnerId, $forkliftId, $taskId]);
+        return true;
+    }
+
+    /** Remove team assignment from a task. */
+    public static function unassignTeam(int $taskId): bool {
+        $db = db();
+        $stmt = $db->prepare("SELECT status FROM putaway_tasks WHERE id = ?");
+        $stmt->execute([$taskId]);
+        $task = $stmt->fetch();
+        if (!$task) throw new Exception("Task tidak ditemukan.");
+        if (!in_array($task['status'], ['Open','In Progress'], true)) {
+            throw new Exception("Task sudah selesai/dibatalkan.");
+        }
+
+        $db->prepare("UPDATE putaway_tasks
+                SET forklift_operator_id = NULL, checklist_partner_id = NULL,
+                    assigned_to = NULL, status = 'Open', updated_at = NOW()
+                WHERE id = ?")
+           ->execute([$taskId]);
+        return true;
+    }
+
+    /** Change the suggested_location of a Pending pallet row. */
+    public static function updateTaskPallet(int $itemId, string $newLocation, ?string $reason = null): bool {
+        $db = db();
+        $stmt = $db->prepare("SELECT pti.*, pt.status AS task_status
+                FROM putaway_task_items pti
+                JOIN putaway_tasks pt ON pti.task_id = pt.id
+                WHERE pti.id = ?");
+        $stmt->execute([$itemId]);
+        $item = $stmt->fetch();
+        if (!$item) throw new Exception("Pallet item tidak ditemukan.");
+        if ($item['status'] !== 'Pending') throw new Exception("Hanya pallet Pending yang bisa diubah.");
+
+        $loc = strtoupper(trim($newLocation));
+        if ($loc === '') throw new Exception("location_code wajib diisi.");
+
+        $db->prepare("UPDATE putaway_task_items
+                SET suggested_location = ?, actual_location = ?, reason = ?, updated_at = NOW()
+                WHERE id = ?")
+           ->execute([$loc, $loc, $reason, $itemId]);
+        return true;
+    }
+
+    /**
+     * v2 — Partner confirms a pallet via dual-scan (LPN + location).
+     * Open to ANY department (empty override in v2).
+     */
+    public static function completeTaskPallet(int $itemId, ?string $scanOverrideReason = null): bool {
+        $db = db();
+        $ownTx = !$db->inTransaction();
+        try {
+            if ($ownTx) $db->beginTransaction();
+
+            $stmt = $db->prepare("SELECT pti.*, pt.status AS task_status
+                    FROM putaway_task_items pti
+                    JOIN putaway_tasks pt ON pti.task_id = pt.id
+                    WHERE pti.id = ?");
+            $stmt->execute([$itemId]);
+            $item = $stmt->fetch();
+            if (!$item) throw new Exception("Pallet item tidak ditemukan.");
+            if ($item['status'] !== 'Pending') throw new Exception("Pallet sudah dikonfirmasi/dibatalkan.");
+            if ($item['task_status'] === 'Completed') throw new Exception("Task sudah selesai.");
+            if ($item['task_status'] === 'Cancelled') throw new Exception("Task dibatalkan.");
+
+            // The actual_location should already be set by the mobile dual-scan
+            // (scan LPN → scan location → set actual_location → call this action).
+            // Validate that actual_location is set.
+            $actual = strtoupper(trim((string)($item['actual_location'] ?? '')));
+            if ($actual === '') {
+                // Fallback: if actual_location not yet set, use suggested_location
+                $actual = strtoupper(trim((string)($item['suggested_location'] ?? '')));
+            }
+
+            $mismatch = false;
+            if ($actual !== '' && strtoupper((string)($item['suggested_location'] ?? '')) !== $actual) {
+                $mismatch = true;
+                if (trim((string)($scanOverrideReason ?? '')) === '') {
+                    throw new Exception("Lokasi tidak sesuai saran ({$item['suggested_location']}). Alasan override wajib diisi.");
+                }
+            }
+
+            // Validate placement
+            $validation = self::validatePlacement(
+                (int)$item['product_id'], $actual, floatval($item['quantity']), $item['uom'] ?? 'Drum'
+            );
+            if (!$validation['valid'] && !$mismatch) {
+                throw new Exception("Validasi lokasi gagal: " . implode('; ', $validation['reasons']));
+            }
+
+            $db->prepare("UPDATE putaway_task_items SET
+                    actual_location = ?, status = 'Confirmed',
+                    confirmed_by = ?, confirmed_at = NOW(),
+                    scan_override_reason = ?, updated_at = NOW()
+                    WHERE id = ?")
+               ->execute([
+                   $actual,
+                   $_SESSION['user_id'] ?? null,
+                   $mismatch ? $scanOverrideReason : null,
+                   $itemId,
+               ]);
+
+            if ($mismatch) {
+                self::_logActivity('SCAN_OVERRIDE', 'putaway', 'PutawayTaskItem', $itemId,
+                    "Override lokasi {$item['suggested_location']} → $actual: $scanOverrideReason");
+            }
+
+            if ($ownTx) $db->commit();
+            return true;
+        } catch (Throwable $e) {
+            if ($ownTx && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    /** Active users for team assignment dropdown. */
+    public static function listAssignableUsers(): array {
+        $db = db();
+        return $db->query("SELECT id, username, full_name, department
+                FROM users WHERE is_active = 1
+                ORDER BY full_name ASC")->fetchAll();
+    }
+
+    /** Label data for LPN printing. */
+    public static function getLpnLabelData(int $itemId): ?array {
+        $db = db();
+        $stmt = $db->prepare("SELECT pti.*, p.product_code, p.product_name,
+                    st.expiry_date, st.manufacture_date,
+                    pt.task_number, io.order_number
+                FROM putaway_task_items pti
+                JOIN putaway_tasks pt ON pt.id = pti.task_id
+                LEFT JOIN inbound_orders io ON io.id = pt.inbound_order_id
+                JOIN products p ON p.id = pti.product_id
+                LEFT JOIN stock st ON st.product_id = pti.product_id
+                    AND st.batch_number <=> pti.batch_number
+                WHERE pti.id = ?");
+        $stmt->execute([$itemId]);
+        $row = $stmt->fetch();
+        if (!$row) return null;
+
+        return [
+            'lpn_code'           => $row['lpn_code'],
+            'product_code'       => $row['product_code'],
+            'product_name'       => $row['product_name'],
+            'batch_number'       => $row['batch_number'],
+            'uom'                => $row['uom'],
+            'quantity'           => floatval($row['quantity']),
+            'pallet_seq'         => (int)$row['pallet_seq'],
+            'suggested_location' => $row['suggested_location'],
+            'actual_location'    => $row['actual_location'],
+            'expiry_date'        => $row['expiry_date'],
+            'manufacture_date'   => $row['manufacture_date'],
+            'task_number'        => $row['task_number'],
+            'order_number'       => $row['order_number'],
+        ];
+    }
+
+    /**
+     * Fallback HTML string for LPN label when LabelPrinter class is unavailable.
+     * Matches the frontend LpnLabel.tsx structure (CODE128 barcode text placeholder,
+     * product name, batch, expiry, qty, pallet #, suggested location).
+     */
+    public static function fallbackLpnLabel(array $data): string {
+        $lpn        = htmlspecialchars($data['lpn_code'] ?? '');
+        $prodCode   = htmlspecialchars($data['product_code'] ?? '');
+        $prodName   = htmlspecialchars($data['product_name'] ?? '');
+        $batch      = htmlspecialchars($data['batch_number'] ?? '—');
+        $expiry     = htmlspecialchars($data['expiry_date'] ?? '—');
+        $qty        = number_format((float)($data['quantity'] ?? 0), 0, ',', '.');
+        $uom        = htmlspecialchars($data['uom'] ?? '');
+        $pallet     = (int)($data['pallet_seq'] ?? 0);
+        $loc        = htmlspecialchars($data['suggested_location'] ?? '—');
+        $taskNum    = htmlspecialchars($data['task_number'] ?? '—');
+        $mfg        = htmlspecialchars($data['manufacture_date'] ?? '');
+
+        return <<<HTML
+<div style="font-family:monospace;width:320px;border:2px solid #111;padding:12px;margin:0 auto;background:#fff;color:#000">
+  <div style="display:flex;justify-content:space-between;border-bottom:1px solid #999;padding-bottom:6px;margin-bottom:8px">
+    <div style="font-weight:900;font-size:14px;letter-spacing:.08em">
+      {$lpn}<br><span style="font-size:9px;font-weight:700;color:#666">LABEL PALLET / LPN</span>
+    </div>
+    <div style="font-size:9px;font-weight:700;color:#666;text-align:right;line-height:1.3">
+      PT. K-ONE<br>WAREHOUSE
+    </div>
+  </div>
+  <div style="font-size:11px;line-height:1.4">
+    <div style="font-weight:700">{$prodName}</div>
+    <div style="font-size:10px;color:#666">{$prodCode}</div>
+    <div style="display:flex;justify-content:space-between;margin-top:4px">
+      <span>Batch: <b>{$batch}</b></span>
+      <span>Exp: <b>{$expiry}</b></span>
+    </div>
+    <div style="display:flex;justify-content:space-between">
+      <span>Qty: <b>{$qty} {$uom}</b></span>
+      <span>Pallet: <b>#{$pallet}</b></span>
+    </div>
+    <div style="display:flex;justify-content:space-between">
+      <span>Lokasi: <b>{$loc}</b></span>
+      <span>Task: <b>{$taskNum}</b></span>
+    </div>
+  </div>
+  <div style="text-align:center;font-weight:700;letter-spacing:.35em;font-size:11px;margin-top:6px">{$lpn}</div>
+</div>
+HTML;
+    }
+
+    /** Mobile: tasks assigned to the current user (forklift operator or partner). */
+    public static function myTasks(): array {
+        $db = db();
+        $uid = $_SESSION['user_id'] ?? 0;
+        $stmt = $db->prepare("SELECT pt.*, io.order_number, io.shipment_no,
+                    u1.full_name AS assigned_name,
+                    u2.full_name AS partner_name,
+                    COUNT(pti.id) AS pallet_count,
+                    SUM(CASE WHEN pti.status = 'Confirmed' THEN 1 ELSE 0 END) AS confirmed_count
+                FROM putaway_tasks pt
+                JOIN inbound_orders io ON pt.inbound_order_id = io.id
+                LEFT JOIN users u1 ON pt.forklift_operator_id = u1.id
+                LEFT JOIN users u2 ON pt.checklist_partner_id = u2.id
+                LEFT JOIN putaway_task_items pti ON pti.task_id = pt.id
+                WHERE pt.status IN ('Open','In Progress')
+                  AND (pt.forklift_operator_id = ? OR pt.checklist_partner_id = ?)
+                GROUP BY pt.id
+                ORDER BY pt.created_at DESC");
+        $stmt->execute([$uid, $uid]);
+        $tasks = $stmt->fetchAll();
+
+        // Attach item rows to each task
+        foreach ($tasks as &$task) {
+            $itemStmt = $db->prepare("SELECT pti.id, pti.lpn_code, p.product_code, p.product_name,
+                        pti.batch_number, pti.uom, pti.pallet_seq, pti.quantity,
+                        pti.suggested_location, pti.actual_location, pti.status
+                    FROM putaway_task_items pti
+                    LEFT JOIN products p ON p.id = pti.product_id
+                    WHERE pti.task_id = ?
+                    ORDER BY pti.pallet_seq");
+            $itemStmt->execute([(int)$task['id']]);
+            $task['rows'] = $itemStmt->fetchAll();
+            $task['forklift_operator_name'] = $task['assigned_name'] ?? null;
+        }
+        unset($task);
+        return $tasks;
+    }
+
+    /** Scan override: allow mismatch with typed reason. */
+    public static function scanOverride(int $itemId, string $scannedLocation, string $reason): bool {
+        if (trim($reason) === '') throw new Exception("Alasan override wajib diisi.");
+        $db = db();
+        $stmt = $db->prepare("SELECT pti.id, pti.suggested_location, pt.status AS task_status
+                FROM putaway_task_items pti
+                JOIN putaway_tasks pt ON pti.task_id = pt.id
+                WHERE pti.id = ?");
+        $stmt->execute([$itemId]);
+        $item = $stmt->fetch();
+        if (!$item) throw new Exception("Pallet item tidak ditemukan.");
+        if ($item['task_status'] !== 'In Progress') throw new Exception("Task tidak dalam status In Progress.");
+
+        $loc = strtoupper(trim($scannedLocation));
+        $db->prepare("UPDATE putaway_task_items
+                SET actual_location = ?, scan_override_reason = ?, updated_at = NOW()
+                WHERE id = ?")
+           ->execute([$loc, $reason, $itemId]);
+        return true;
+    }
+
+    private static function _logActivity(string $type, string $module, string $entityType, int $entityId, ?string $description): void {
+        if (class_exists('ActivityLogger')) {
+            ActivityLogger::log($type, $module, $entityType, $entityId, null, $description);
+        }
     }
 
     /* ------------------------------------------------------------------ */
@@ -1336,6 +2063,74 @@ class Putaway {
                 SET pti.status = 'Cancelled'
                 WHERE pti.inbound_item_id = ? AND pt.status IN ('Open','In Progress') AND pti.status = 'Pending'")
            ->execute([$itemId]);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Pallet helpers (mirror v2 apps/api/src/common/pallet.ts)           */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Derive units-per-pallet (UPP) from a product name pack-size pattern.
+     * "12*0.8L" → 48, "1*209L" → 4, "24*0.12L" → 80, etc.
+     */
+    public static function deriveUppFromPackSize(?string $text): ?int {
+        if (!$text) return null;
+        $m = null;
+        if (!preg_match('/(\d+)\s*\*\s*(\d+(?:\.\d+)?)\s*(l|kg)/i', $text, $m)) {
+            return null;
+        }
+        $qty  = (int)$m[1];
+        $size = (float)$m[2];
+        $unit = strtolower($m[3]);
+
+        // kg variants
+        if ($unit === 'kg') {
+            if ($size === 770) return 1;          // fluid bag
+            if ($size >= 100)  return 4;          // 180 kg drum
+            if ($size === 18 || $size === 15) return 24; // pail
+            return null;
+        }
+        // 1 × large containers
+        if ($qty === 1) {
+            if ($size >= 1000) return 1;          // IBC
+            if ($size >= 200)  return 4;          // 200/209 L drum
+            if ($size === 20)  return 24;         // 20 L pail
+            return null;
+        }
+        if ($qty === 12) {
+            if ($size === 1) return 44;           // 12*1 L
+            if (in_array($size, [0.8, 0.7, 0.65], true)) return 48; // 12*0.8 L
+            return null;
+        }
+        if ($qty === 4 && $size === 4) return 36;
+        if ($qty === 3 && $size === 5) return 36;
+        if ($qty === 24 && $size === 0.12) return 80;
+        if ($qty === 24 && $size === 1)   return 16;
+        if ($qty === 10 && $size === 0.25) return 100;
+
+        return null;
+    }
+
+    /** Level character = 5th char of location code (A-E). */
+    public static function levelOf(?string $locationCode): string {
+        if (!$locationCode || strlen($locationCode) < 5) return 'B';
+        return strtoupper($locationCode[4]);
+    }
+
+    /** 1 when qty >= UPP (tolerance 0.001). */
+    public static function isFullPallet(float $qty, ?int $uomPerPallet): int {
+        $upp = (int)($uomPerPallet ?? 4);
+        if ($upp <= 0) return 1;
+        return ($qty >= $upp - 0.001) ? 1 : 0;
+    }
+
+    /** Level A → fractional pallets (round 2dp); other levels → ceil. */
+    public static function calcPalletByLocation(float $qty, int $upp, ?string $loc): int {
+        if ($upp <= 0) return 0;
+        if (self::levelOf($loc) === 'A') {
+            return (int)round($qty / $upp, 2);
+        }
+        return (int)ceil($qty / $upp);
     }
 }
 ?>

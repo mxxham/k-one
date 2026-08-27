@@ -53,12 +53,18 @@ class Stock {
         $summary = $db->query("SELECT
                 COUNT(DISTINCT product_id) as total_products,
                 SUM(quantity) as total_drums,
-                SUM(pallet) as total_pallets,
                 COUNT(CASE WHEN stock_status = 'Available' THEN 1 END) as available_items,
                 COUNT(CASE WHEN stock_status = 'Reserved' THEN 1 END) as reserved_items,
                 COUNT(CASE WHEN stock_status = 'Expired' THEN 1 END) as expired_items,
                 COUNT(CASE WHEN stock_status = 'Dues In' THEN 1 END) as dues_in_items
                 FROM stock WHERE quantity > 0")->fetch();
+
+        $palletResult = $db->query("SELECT
+                SUM(CEIL(s.quantity / GREATEST(COALESCE(p.uom_per_pallet, 4), 1))) as total_pallets
+                FROM stock s
+                JOIN products p ON s.product_id = p.id
+                WHERE s.quantity > 0 AND s.stock_status = 'Available'")->fetch();
+        $summary['total_pallets'] = (int)($palletResult['total_pallets'] ?? 0);
 
         $expiring = $db->query("SELECT COUNT(*) as count FROM stock
                 WHERE expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
@@ -198,12 +204,12 @@ class Stock {
 
     public static function getStockByLocation() {
         $db = db();
-        return $db->query("SELECT SUBSTRING_INDEX(location, '-', 1) as area,
+        return $db->query("SELECT LEFT(location, 2) as area,
                 COUNT(DISTINCT product_id) as products,
                 SUM(quantity) as total_qty,
                 SUM(pallet) as total_pallet
                 FROM stock WHERE quantity > 0 AND location IS NOT NULL
-                GROUP BY SUBSTRING_INDEX(location, '-', 1)
+                GROUP BY LEFT(location, 2)
                 ORDER BY area")->fetchAll();
     }
 

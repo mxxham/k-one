@@ -4,9 +4,11 @@ require_once __DIR__ . '/../config/database.php';
 
 $db = db();
 
+$db->exec("SET FOREIGN_KEY_CHECKS=0");
 $db->exec("DELETE FROM location_allocations");
 $db->exec("DELETE FROM inbound_items");
 $db->exec("DELETE FROM inbound_orders");
+$db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 $productsStmt = $db->query("SELECT id, product_code, product_name, uom_type, uom_per_pallet FROM products LIMIT 10");
 $products = $productsStmt->fetchAll();

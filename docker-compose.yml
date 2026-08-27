@@ -1,0 +1,38 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: kone-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-sanchaya}
+    ports:
+      - "${MYSQL_HOST_PORT:-3307}:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./database.sql:/docker-entrypoint-initdb.d/01-database.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    container_name: kone-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASS: ${MYSQL_ROOT_PASSWORD:-root}
+      DB_NAME: ${MYSQL_DATABASE:-sanchaya}
+    ports:
+      - "${APP_PORT:-80}:80"
+    volumes:
+      - ./:/var/www/html/k-one
+
+volumes:
+  db_data:

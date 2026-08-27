@@ -233,6 +233,16 @@ require_once __DIR__ . '/includes/header.php';
                         </td>
                         <td class="py-3 px-4 text-gray-600 font-mono text-sm">
                             <?= htmlspecialchars($item['outbound_number']) ?>
+                            <?php if (!empty($item['wave_id'])): ?>
+                            <span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe;border-radius:5px;padding:0 6px;font-size:.63rem;font-weight:700;vertical-align:middle">
+                                <i class="fas fa-layer-group" style="font-size:.58rem"></i> WAVE
+                            </span>
+                            <?php endif; ?>
+                            <?php if (($item['notes'] ?? '') === 'CROSS-DOCK'): ?>
+                            <span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:5px;padding:0 6px;font-size:.63rem;font-weight:700;vertical-align:middle">
+                                <i class="fas fa-arrows-split-up-and-left" style="font-size:.58rem"></i> CROSS-DOCK
+                            </span>
+                            <?php endif; ?>
                         </td>
                         <td class="py-3 px-4 text-gray-600">
                             <?= $item['customer_name'] ? htmlspecialchars($item['customer_name']) : '<span class="text-gray-400">—</span>' ?>
@@ -358,6 +368,16 @@ require_once __DIR__ . '/includes/header.php';
                 <div class="text-lg font-semibold text-purple-600">
                     <?= htmlspecialchars($picklist['picklist_number']) ?>
                 </div>
+                <?php if (!empty($picklist['wave_id'])): ?>
+                <span style="display:inline-flex;align-items:center;gap:4px;margin-top:6px;background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe;border-radius:6px;padding:1px 9px;font-size:.7rem;font-weight:700">
+                    <i class="fas fa-layer-group" style="font-size:.62rem"></i> WAVE PICKLIST
+                </span>
+                <?php endif; ?>
+                <?php if (($picklist['notes'] ?? '') === 'CROSS-DOCK'): ?>
+                <span style="display:inline-flex;align-items:center;gap:4px;margin-top:6px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:6px;padding:1px 9px;font-size:.7rem;font-weight:700">
+                    <i class="fas fa-arrows-split-up-and-left" style="font-size:.62rem"></i> CROSS-DOCK
+                </span>
+                <?php endif; ?>
                 <div class="text-sm mt-1">
                     Date: <?= date('d F Y', strtotime($picklist['created_date'])) ?>
                     <?php if ($picklist['confirmed_at']): ?>

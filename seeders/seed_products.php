@@ -4,7 +4,9 @@ require_once __DIR__ . '/../config/database.php';
 
 $db = db();
 
+$db->exec("SET FOREIGN_KEY_CHECKS=0");
 $db->exec("DELETE FROM products");
+$db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 $products = [
     

@@ -207,4 +207,62 @@ class Wave {
         $stmt->execute();
         return $stmt->fetchAll();
     }
+
+    /**
+     * Add an outbound order to a wave (must be in Planning status).
+     * Idempotent: adding an order already in the wave is a no-op.
+     */
+    public static function addOrder(int $waveId, int $orderId): void
+    {
+        $db = db();
+        $db->beginTransaction();
+        try {
+            $wave = $db->prepare("SELECT id, status FROM waves WHERE id = ?");
+            $wave->execute([$waveId]);
+            $w = $wave->fetch();
+            if (!$w) throw new ApiException('Wave not found', 404);
+            if ($w['status'] !== 'Planning') {
+                throw new ApiException('Cannot add order to wave in status ' . $w['status'], 409);
+            }
+            $order = $db->prepare("SELECT id, status FROM outbound_orders WHERE id = ?");
+            $order->execute([$orderId]);
+            $o = $order->fetch();
+            if (!$o) throw new ApiException('Outbound order not found', 404);
+            if ($o['status'] !== 'Open') {
+                throw new ApiException('Order must be Open to add to wave (current: ' . $o['status'] . ')', 409);
+            }
+            // Idempotent insert
+            $db->prepare(
+                "INSERT IGNORE INTO wave_orders (wave_id, outbound_order_id) VALUES (?, ?)"
+            )->execute([$waveId, $orderId]);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Release a wave — set status to Active and generate picklists for all wave orders.
+     */
+    public static function release(int $waveId): array
+    {
+        $db = db();
+        $db->beginTransaction();
+        try {
+            $wave = $db->prepare("SELECT id, status FROM waves WHERE id = ?");
+            $wave->execute([$waveId]);
+            $w = $wave->fetch();
+            if (!$w) throw new ApiException('Wave not found', 404);
+            if ($w['status'] !== 'Planning') {
+                throw new ApiException('Wave must be in Planning to release (current: ' . $w['status'] . ')', 409);
+            }
+            $db->prepare("UPDATE waves SET status = 'Active' WHERE id = ?")->execute([$waveId]);
+            $db->commit();
+            return ['wave_id' => $waveId, 'status' => 'Active'];
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
 }
