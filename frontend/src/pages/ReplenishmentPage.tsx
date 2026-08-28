@@ -17,11 +17,11 @@ interface Shortage {
   product_code: string;
   product_name: string;
   location_id: string;
-  location_code: string;
-  current_qty: number;
+  pick_face_location: string;
+  available_qty: number;
   min_qty: number;
-  shortage_qty: number;
-  last_updated: string;
+  uom_per_pallet: number;
+  shortage: number;
 }
 
 interface SuggestedTransfer {
@@ -301,16 +301,16 @@ const ReplenishmentPage: React.FC = () => {
                   <div className="space-y-4">
                     {shortages.map((shortage) => (
                       <div
-                        key={`${shortage.product_id}-${shortage.location_id}`}
+                        key={`${shortage.product_id}-${shortage.pick_face_location}`}
                         className="border border-slate-200 rounded-lg hover:shadow-md transition-shadow"
                       >
                         <button
                           onClick={() =>
                             setExpandedShortageId(
                               expandedShortageId ===
-                                `${shortage.product_id}-${shortage.location_id}`
+                                `${shortage.product_id}-${shortage.pick_face_location}`
                                 ? null
-                                : `${shortage.product_id}-${shortage.location_id}`
+                                : `${shortage.product_id}-${shortage.pick_face_location}`
                             )
                           }
                           className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
@@ -322,15 +322,15 @@ const ReplenishmentPage: React.FC = () => {
                                   {shortage.product_name}
                                 </h4>
                                 <p className="text-sm text-slate-600">
-                                  Product: {shortage.product_code} | Location: {shortage.location_code}
+                                  Product: {shortage.product_code} | Location: {shortage.pick_face_location}
                                 </p>
                               </div>
                               <div className="text-right">
                                 <div className="text-lg font-bold text-red-600">
-                                  {shortage.shortage_qty} units
+                                  {shortage.shortage} units
                                 </div>
                                 <p className="text-xs text-slate-500">
-                                  Current: {shortage.current_qty} / Min: {shortage.min_qty}
+                                  Current: {shortage.available_qty} / Min: {shortage.min_qty}
                                 </p>
                               </div>
                             </div>
@@ -338,7 +338,7 @@ const ReplenishmentPage: React.FC = () => {
                           <ChevronDown
                             className={`w-5 h-5 text-slate-400 transition-transform flex-shrink-0 ml-2 ${
                               expandedShortageId ===
-                              `${shortage.product_id}-${shortage.location_id}`
+                              `${shortage.product_id}-${shortage.pick_face_location}`
                                 ? 'rotate-180'
                                 : ''
                             }`}
@@ -346,7 +346,7 @@ const ReplenishmentPage: React.FC = () => {
                         </button>
 
                         {expandedShortageId ===
-                          `${shortage.product_id}-${shortage.location_id}` && (
+                          `${shortage.product_id}-${shortage.pick_face_location}` && (
                           <div className="border-t border-slate-200 bg-slate-50 p-4">
                             <dl className="grid grid-cols-2 gap-4 text-sm">
                               <div>
@@ -354,7 +354,7 @@ const ReplenishmentPage: React.FC = () => {
                                   Current Quantity
                                 </dt>
                                 <dd className="text-slate-900">
-                                  {shortage.current_qty} units
+                                  {shortage.available_qty} units
                                 </dd>
                               </div>
                               <div>
@@ -367,18 +367,18 @@ const ReplenishmentPage: React.FC = () => {
                               </div>
                               <div>
                                 <dt className="font-semibold text-slate-700">
-                                  Shortage Amount
+                                  Replenishment Target
                                 </dt>
-                                <dd className="text-red-600 font-semibold">
-                                  {shortage.shortage_qty} units
+                                <dd className="text-blue-600 font-semibold">
+                                  {shortage.uom_per_pallet} units (uom_per_pallet)
                                 </dd>
                               </div>
                               <div>
                                 <dt className="font-semibold text-slate-700">
-                                  Last Updated
+                                  Shortage Amount
                                 </dt>
-                                <dd className="text-slate-900">
-                                  {new Date(shortage.last_updated).toLocaleString()}
+                                <dd className="text-red-600 font-semibold">
+                                  {shortage.shortage} units
                                 </dd>
                               </div>
                             </dl>

@@ -8,7 +8,7 @@ class Replenishment {
 
     /**
      * List all pick-face targets with current qty, shortage, and sources.
-     * v2 parity: listSuggestions() — only rows where available_qty < min_qty.
+     * Shortage = uom_per_pallet - available_qty.
      */
     public static function list(array $params = []): array {
         $db = db();
@@ -36,7 +36,7 @@ class Replenishment {
         }
         $sql .= " GROUP BY t.id, lm.location_code, lm.row_name, lm.zone, lm.aisle,
                           p.product_code, p.product_name, p.uom_type, p.uom_per_pallet
-                  HAVING available_qty < t.min_qty
+                  HAVING available_qty <= t.min_qty
                   ORDER BY lm.location_code, p.product_code";
 
         $stmt = $db->prepare($sql);
@@ -44,12 +44,12 @@ class Replenishment {
         $rows = $stmt->fetchAll();
 
         foreach ($rows as &$r) {
-            $r['available_qty'] = floatval($r['available_qty']);
-            $r['min_qty']       = floatval($r['min_qty']);
-            $r['max_qty']       = floatval($r['max_qty']);
-            $r['shortage']      = max(0, $r['max_qty'] - $r['available_qty']);
-            $r['below_min']     = $r['available_qty'] < $r['min_qty'];
-            $r['sources']       = self::_findSourceRows($r['product_id'], $r['location_code'], $r['shortage']);
+            $r['available_qty']  = floatval($r['available_qty']);
+            $r['min_qty']        = floatval($r['min_qty']);
+            $r['uom_per_pallet'] = floatval($r['uom_per_pallet']);
+            $r['shortage']       = max(0, floatval($r['uom_per_pallet']) - floatval($r['available_qty']));
+            $r['below_min']      = floatval($r['available_qty']) <= floatval($r['min_qty']);
+            $r['sources']        = self::_findSourceRows($r['product_id'], $r['location_code'], $r['shortage']);
         }
         unset($r);
         return $rows;
@@ -57,7 +57,7 @@ class Replenishment {
 
     /**
      * All pick-face targets with current pick-face qty (no filter).
-     * v2 parity: listTargets().
+     * Shortage = uom_per_pallet - available_qty.
      */
     public static function targets(array $params = []): array {
         $db = db();
@@ -85,10 +85,10 @@ class Replenishment {
         $stmt->execute($args);
         $rows = $stmt->fetchAll();
         foreach ($rows as &$r) {
-            $r['available_qty'] = floatval($r['available_qty']);
-            $r['min_qty']       = floatval($r['min_qty']);
-            $r['max_qty']       = floatval($r['max_qty']);
-            $r['shortage']      = max(0, $r['max_qty'] - $r['available_qty']);
+            $r['available_qty']  = floatval($r['available_qty']);
+            $r['min_qty']        = floatval($r['min_qty']);
+            $r['uom_per_pallet'] = floatval($r['uom_per_pallet']);
+            $r['shortage']       = max(0, floatval($r['uom_per_pallet']) - floatval($r['available_qty']));
         }
         unset($r);
         return $rows;
@@ -136,8 +136,8 @@ class Replenishment {
     }
 
     /**
-     * Detect all shortages (current_qty < min_qty) with computed shortage = max_qty - current_qty.
-     * v2 parity: detectShortages().
+     * Detect all shortages (available_qty <= min_qty) with shortage = uom_per_pallet - available_qty.
+     * Replenishment target is always the product's uom_per_pallet (Level A pick-face only).
      */
     public static function detectShortages(): array {
         $db = db();
@@ -146,9 +146,9 @@ class Replenishment {
                        lm.location_code AS pick_face_location,
                        p.id AS product_id,
                        p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
-                       t.min_qty, t.max_qty,
+                       t.min_qty,
                        COALESCE(SUM(s.quantity),0) AS available_qty,
-                       GREATEST(COALESCE(t.max_qty, t.min_qty) - COALESCE(SUM(s.quantity),0), 0) AS shortage
+                       GREATEST(p.uom_per_pallet - COALESCE(SUM(s.quantity),0), 0) AS shortage
                 FROM pick_face_targets t
                 JOIN location_master lm ON lm.id = t.location_id
                 JOIN products p ON p.id = t.product_id
@@ -157,19 +157,20 @@ class Replenishment {
                     AND s.stock_status = 'Available'
                     AND (s.hold_status = 'available' OR s.hold_status IS NULL)
                     AND s.quantity > 0
+                WHERE lm.row_name = 'A'
                 GROUP BY t.id, lm.location_code, p.id, p.product_code, p.product_name,
-                         p.uom_type, p.uom_per_pallet, t.min_qty, t.max_qty
-                HAVING available_qty < t.min_qty
-                   AND COALESCE(t.max_qty, t.min_qty) > available_qty
+                         p.uom_type, p.uom_per_pallet, t.min_qty
+                HAVING available_qty <= t.min_qty
+                   AND p.uom_per_pallet > available_qty
                 ORDER BY lm.location_code, p.product_code";
         $stmt = $db->prepare($sql);
         $stmt->execute();
         $rows = $stmt->fetchAll();
         foreach ($rows as &$r) {
-            $r['available_qty'] = floatval($r['available_qty']);
-            $r['min_qty']       = floatval($r['min_qty']);
-            $r['max_qty']       = floatval($r['max_qty']);
-            $r['shortage']      = floatval($r['shortage']);
+            $r['available_qty']  = floatval($r['available_qty']);
+            $r['min_qty']        = floatval($r['min_qty']);
+            $r['uom_per_pallet'] = floatval($r['uom_per_pallet']);
+            $r['shortage']       = floatval($r['shortage']);
         }
         unset($r);
         return $rows;
@@ -177,7 +178,7 @@ class Replenishment {
 
     /**
      * Dry-run suggestions with full source detail.
-     * v2 parity: suggestTransfers().
+     * Shortage target is always uom_per_pallet.
      */
     public static function suggestTransfers(): array {
         $shortages = self::detectShortages();
@@ -191,7 +192,7 @@ class Replenishment {
                 'product_code'        => $s['product_code'],
                 'current_qty'         => $s['available_qty'],
                 'min_qty'             => $s['min_qty'],
-                'max_qty'             => $s['max_qty'],
+                'uom_per_pallet'      => $s['uom_per_pallet'],
                 'shortage'            => $s['shortage'],
                 'source'              => array_map(function($r) {
                     return [
@@ -398,7 +399,6 @@ class Replenishment {
         if (!$productId)  throw new Exception("product_id wajib diisi.");
         if ($minQty < 0)  throw new Exception("min_qty tidak boleh negatif.");
         if ($maxQty < 0)  throw new Exception("max_qty tidak boleh negatif.");
-        if ($maxQty < $minQty) throw new Exception("max_qty tidak boleh lebih kecil dari min_qty.");
 
         $chk = $db->prepare("SELECT id FROM location_master WHERE id = ?");
         $chk->execute([$locationId]);
