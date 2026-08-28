@@ -9,40 +9,44 @@ class Replenishment {
     /**
      * List all pick-face targets with current qty, shortage, and sources.
      * Shortage = uom_per_pallet - available_qty.
+     * Auto-discovers from location_master across all aisles.
      */
     public static function list(array $params = []): array {
         $db = db();
-
-        $sql = "SELECT t.*, lm.location_code, lm.row_name, lm.zone, lm.aisle,
+        $blocked = self::_blockedClause('lm');
+        $sql = "SELECT lm.id AS target_id, t.id AS config_id,
+                       lm.location_code, lm.row_name, lm.zone, lm.aisle,
+                       s.product_id,
                        p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
+                       COALESCE(t.min_qty, 1) AS min_qty,
                        COALESCE(SUM(s.quantity),0) AS available_qty
-                FROM pick_face_targets t
-                JOIN location_master lm ON t.location_id = lm.id
-                JOIN products p ON t.product_id = p.id
-                LEFT JOIN stock s ON s.product_id = t.product_id
-                    AND s.location = lm.location_code
+                FROM location_master lm
+                JOIN stock s ON s.location = lm.location_code
                     AND s.stock_status = 'Available'
-                    AND s.quantity > 0
                     AND (s.hold_status = 'available' OR s.hold_status IS NULL)
-                WHERE 1=1";
+                    AND s.quantity > 0
+                JOIN products p ON p.id = s.product_id
+                LEFT JOIN pick_face_targets t ON t.location_id = lm.id AND t.product_id = s.product_id
+                WHERE lm.is_pick_face = 1
+                  AND lm.row_name = 'A'
+                  AND lm.is_active = 1
+                  $blocked";
         $args = [];
         if (!empty($params['product_id'])) {
-            $sql .= " AND t.product_id = ?";
+            $sql .= " AND s.product_id = ?";
             $args[] = (int)$params['product_id'];
         }
         if (!empty($params['location_code'])) {
             $sql .= " AND lm.location_code = ?";
             $args[] = $params['location_code'];
         }
-        $sql .= " GROUP BY t.id, lm.location_code, lm.row_name, lm.zone, lm.aisle,
-                          p.product_code, p.product_name, p.uom_type, p.uom_per_pallet
-                  HAVING available_qty <= t.min_qty
+        $sql .= " GROUP BY lm.id, lm.location_code, lm.row_name, lm.zone, lm.aisle,
+                          s.product_id, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet, t.min_qty
+                  HAVING available_qty <= COALESCE(t.min_qty, 1)
                   ORDER BY lm.location_code, p.product_code";
-
         $stmt = $db->prepare($sql);
         $stmt->execute($args);
         $rows = $stmt->fetchAll();
-
         foreach ($rows as &$r) {
             $r['available_qty']  = floatval($r['available_qty']);
             $r['min_qty']        = floatval($r['min_qty']);
@@ -58,29 +62,40 @@ class Replenishment {
     /**
      * All pick-face targets with current pick-face qty (no filter).
      * Shortage = uom_per_pallet - available_qty.
+     * Auto-discovers from location_master across all aisles.
+     * Shows blocked status for each target.
      */
     public static function targets(array $params = []): array {
         $db = db();
-        $sql = "SELECT t.*, lm.location_code, lm.row_name, lm.aisle, lm.zone,
+        $sql = "SELECT lm.id AS target_id, t.id AS config_id,
+                       lm.location_code, lm.row_name, lm.aisle, lm.zone,
+                       s.product_id,
                        p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
-                       COALESCE(SUM(s.quantity),0) AS available_qty
-                FROM pick_face_targets t
-                JOIN location_master lm ON t.location_id = lm.id
-                JOIN products p ON t.product_id = p.id
-                LEFT JOIN stock s ON s.product_id = t.product_id
-                    AND s.location = lm.location_code
+                       COALESCE(t.min_qty, 1) AS min_qty,
+                       COALESCE(SUM(s.quantity),0) AS available_qty,
+                       EXISTS(SELECT 1 FROM putaway_location_blocks b
+                              WHERE b.is_active = 1
+                                AND ((b.scope_type='location' AND b.location_code=lm.location_code)
+                                  OR (b.scope_type='aisle' AND lm.location_code LIKE CONCAT(b.aisle_prefix,'%')))
+                       ) AS is_blocked
+                FROM location_master lm
+                JOIN stock s ON s.location = lm.location_code
                     AND s.stock_status = 'Available'
-                    AND s.quantity > 0
                     AND (s.hold_status = 'available' OR s.hold_status IS NULL)
-                WHERE 1=1";
+                    AND s.quantity > 0
+                JOIN products p ON p.id = s.product_id
+                LEFT JOIN pick_face_targets t ON t.location_id = lm.id AND t.product_id = s.product_id
+                WHERE lm.is_pick_face = 1
+                  AND lm.row_name = 'A'
+                  AND lm.is_active = 1";
         $args = [];
         if (!empty($params['location_code'])) {
             $sql .= " AND lm.location_code = ?";
             $args[] = $params['location_code'];
         }
-        $sql .= " GROUP BY t.id, lm.location_code, lm.row_name, lm.aisle, lm.zone,
-                          p.product_code, p.product_name, p.uom_type, p.uom_per_pallet
-                  ORDER BY lm.location_code, p.product_code";
+        $sql .= " GROUP BY lm.id, lm.location_code, lm.row_name, lm.aisle, lm.zone,
+                          s.product_id, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet, t.min_qty
+                  ORDER BY lm.aisle, lm.location_code, p.product_code";
         $stmt = $db->prepare($sql);
         $stmt->execute($args);
         $rows = $stmt->fetchAll();
@@ -89,6 +104,7 @@ class Replenishment {
             $r['min_qty']        = floatval($r['min_qty']);
             $r['uom_per_pallet'] = floatval($r['uom_per_pallet']);
             $r['shortage']       = max(0, floatval($r['uom_per_pallet']) - floatval($r['available_qty']));
+            $r['is_blocked']     = (int)$r['is_blocked'];
         }
         unset($r);
         return $rows;
@@ -111,6 +127,7 @@ class Replenishment {
                   AND s.location != ?
                   AND s.location NOT IN ('QUA_SHELL','STAGING','UNALLOCATED')
                   AND lm.row_name IN ('B','C','D','E')
+                  " . self::_blockedClause('lm') . "
                 ORDER BY CASE WHEN s.expiry_date IS NULL THEN 1 ELSE 0 END,
                          s.expiry_date ASC, s.location, s.id
                 LIMIT 50");
@@ -136,31 +153,39 @@ class Replenishment {
     }
 
     /**
-     * Detect all shortages (available_qty <= min_qty) with shortage = uom_per_pallet - available_qty.
+     * Detect all shortages with auto-discovery from location_master.
+     * Shortage = uom_per_pallet - available_qty.
      * Replenishment target is always the product's uom_per_pallet (Level A pick-face only).
+     * Auto-discovers all Level A pick-face bins across all aisles (CA-CG).
+     * Uses pick_face_targets for per-product min_qty override (default: 1).
+     * Excludes blocked locations from putaway_location_blocks.
      */
     public static function detectShortages(): array {
         $db = db();
-        $sql = "SELECT t.id AS target_id,
-                       t.location_id,
+        $blocked = self::_blockedClause('lm');
+        $sql = "SELECT lm.id AS target_id,
+                       lm.id AS location_id,
                        lm.location_code AS pick_face_location,
-                       p.id AS product_id,
+                       lm.aisle,
+                       s.product_id,
                        p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
-                       t.min_qty,
+                       COALESCE(t.min_qty, 1) AS min_qty,
                        COALESCE(SUM(s.quantity),0) AS available_qty,
                        GREATEST(p.uom_per_pallet - COALESCE(SUM(s.quantity),0), 0) AS shortage
-                FROM pick_face_targets t
-                JOIN location_master lm ON lm.id = t.location_id
-                JOIN products p ON p.id = t.product_id
-                LEFT JOIN stock s ON s.product_id = t.product_id
-                    AND s.location = lm.location_code
+                FROM location_master lm
+                JOIN stock s ON s.location = lm.location_code
                     AND s.stock_status = 'Available'
                     AND (s.hold_status = 'available' OR s.hold_status IS NULL)
                     AND s.quantity > 0
-                WHERE lm.row_name = 'A'
-                GROUP BY t.id, lm.location_code, p.id, p.product_code, p.product_name,
-                         p.uom_type, p.uom_per_pallet, t.min_qty
-                HAVING available_qty <= t.min_qty
+                JOIN products p ON p.id = s.product_id
+                LEFT JOIN pick_face_targets t ON t.location_id = lm.id AND t.product_id = s.product_id
+                WHERE lm.is_pick_face = 1
+                  AND lm.row_name = 'A'
+                  AND lm.is_active = 1
+                  $blocked
+                GROUP BY lm.id, lm.location_code, lm.aisle, s.product_id, p.product_code,
+                         p.product_name, p.uom_type, p.uom_per_pallet, t.min_qty
+                HAVING available_qty <= COALESCE(t.min_qty, 1)
                    AND p.uom_per_pallet > available_qty
                 ORDER BY lm.location_code, p.product_code";
         $stmt = $db->prepare($sql);
@@ -214,12 +239,30 @@ class Replenishment {
      * v2 parity: generateTransfers().
      */
     public static function generateTransfersFull(int $userId): array {
+        $db = db();
         $shortages = self::detectShortages();
         $generated = [];
         $insufficient = [];
         $skipped = [];
 
         foreach ($shortages as $s) {
+            // Check if destination is blocked
+            $blockCheck = $db->prepare("SELECT EXISTS(
+                SELECT 1 FROM putaway_location_blocks b
+                WHERE b.is_active = 1
+                  AND ((b.scope_type='location' AND b.location_code=?)
+                    OR (b.scope_type='aisle' AND ? LIKE CONCAT(b.aisle_prefix,'%')))
+            )");
+            $blockCheck->execute([$s['pick_face_location'], $s['pick_face_location']]);
+            if ($blockCheck->fetchColumn()) {
+                $skipped[] = [
+                    'target_id'          => (int)$s['target_id'],
+                    'pick_face_location' => $s['pick_face_location'],
+                    'reason'             => 'Lokasi tujuan terblokir: ' . $s['pick_face_location'],
+                ];
+                continue;
+            }
+
             $needed = $s['shortage'];
             $sourceRows = self::_findSourceRows($s['product_id'], $s['pick_face_location'], $needed);
             $available = array_sum(array_column($sourceRows, 'take_qty'));
@@ -281,7 +324,8 @@ class Replenishment {
         $product = $prod->fetch();
         if (!$product) throw new Exception("Produk tidak ditemukan.");
 
-        // Available pick-face (Level A, is_pick_face=1) stock
+        // Available pick-face (Level A, is_pick_face=1) stock — excludes blocked locations
+        $blocked = self::_blockedClause('lm');
         $pick = $db->prepare("SELECT COALESCE(SUM(s.quantity), 0) AS qty
                 FROM stock s
                 JOIN location_master lm ON lm.location_code = s.location
@@ -290,7 +334,8 @@ class Replenishment {
                   AND (s.hold_status = 'available' OR s.hold_status IS NULL)
                   AND s.quantity > 0
                   AND lm.row_name = 'A'
-                  AND lm.is_pick_face = 1");
+                  AND lm.is_pick_face = 1
+                  $blocked");
         $pick->execute([$productId]);
         $pickAvailable = floatval($pick->fetchColumn() ?? 0);
 
@@ -307,7 +352,7 @@ class Replenishment {
             ];
         }
 
-        // Target: existing pick-face bin of the SKU, else first free Level A bin
+        // Target: existing pick-face bin of the SKU, else first free Level A bin — excludes blocked
         $targetRow = $db->prepare("SELECT lm.location_code
                 FROM stock_locations sl
                 JOIN location_master lm ON lm.location_code = sl.location_code
@@ -317,6 +362,7 @@ class Replenishment {
                   AND lm.is_pick_face = 1
                   AND sl.status IN ('Available','Reserved')
                   AND s.quantity > 0
+                  $blocked
                 ORDER BY lm.location_code LIMIT 1");
         $targetRow->execute([$productId]);
         $target = $targetRow->fetchColumn();
@@ -330,6 +376,7 @@ class Replenishment {
                       AND lm.location_code NOT IN (
                           SELECT DISTINCT location_code FROM stock_locations
                           WHERE status IN ('Available','Reserved'))
+                      $blocked
                     ORDER BY lm.aisle, lm.rack, lm.position LIMIT 1");
             $free->execute();
             $target = $free->fetchColumn();
@@ -426,6 +473,19 @@ class Replenishment {
     /* ------------------------------------------------------------------ */
     /* Helpers                                                             */
     /* ------------------------------------------------------------------ */
+
+    /**
+     * SQL fragment excluding blocked bins from putaway_location_blocks.
+     * @param string $alias Table alias for location_code (e.g. 'lm', 's')
+     */
+    private static function _blockedClause(string $alias = 'lm'): string {
+        return "AND NOT EXISTS (
+            SELECT 1 FROM putaway_location_blocks b
+            WHERE b.is_active = 1
+              AND ( (b.scope_type = 'location' AND b.location_code = {$alias}.location_code)
+                 OR (b.scope_type = 'aisle'   AND {$alias}.location_code LIKE CONCAT(b.aisle_prefix, '%')) )
+        )";
+    }
 
     private static function _getTransferNumber(int $transferId): string {
         $db = db();
