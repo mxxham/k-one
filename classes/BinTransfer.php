@@ -429,19 +429,20 @@ class BinTransfer {
 
         $existingStmt = $db->prepare(
             "SELECT id, quantity FROM stock_locations
-             WHERE stock_id = ? AND location_code = ? AND status = 'Available'
+             WHERE location_code = ? AND status = 'Available'
              ORDER BY pallet_seq ASC LIMIT 1"
         );
-        $existingStmt->execute([$destStockId, $toLoc]);
+        $existingStmt->execute([$toLoc]);
         $existing = $existingStmt->fetch();
 
         if ($existing) {
             $db->prepare(
                 "UPDATE stock_locations
-                 SET quantity = ?, pallet_function = 'PICK_FACE',
+                 SET stock_id = ?, quantity = ?, pallet_function = 'PICK_FACE',
                      is_full_pallet = ?, updated_at = NOW()
                  WHERE id = ?"
             )->execute([
+                $destStockId,
                 (float)$existing['quantity'] + $qty,
                 $isFull ? 1 : 0,
                 $existing['id'],
