@@ -32,9 +32,29 @@ class Auth {
             $_SESSION['email'] = $user['email'];
             $_SESSION['role'] = $user['role'];
             $_SESSION['department'] = $user['department'] ?? 'all';
+            $_SESSION['must_change_password'] = (int)($user['must_change_password'] ?? 0);
             return true;
         }
         return false;
+    }
+
+    /**
+     * Check if the current user must change their password.
+     */
+    public static function mustChangePassword(): bool {
+        return isset($_SESSION['must_change_password']) && $_SESSION['must_change_password'] === 1;
+    }
+
+    /**
+     * Force the current user to change password. Sets must_change_password=0.
+     */
+    public static function markPasswordChanged(): void {
+        $user = self::user();
+        if ($user) {
+            $db = db();
+            $db->prepare("UPDATE users SET must_change_password = 0 WHERE id = ?")->execute([$user['id']]);
+            $_SESSION['must_change_password'] = 0;
+        }
     }
 
     public static function logout() {

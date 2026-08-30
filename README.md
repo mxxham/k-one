@@ -30,9 +30,11 @@ Sistem manajemen gudang berbasis web untuk operasi gudang Shell CKB, dibangun de
 
 Buka browser → `http://localhost/k-one`
 
-Login default:
+Login pertama kali:
 - **Username:** `admin`
-- **Password:** `admin123`
+- **Password:** `admin123` (akan diminta mengganti password saat login pertama)
+
+> ⚠️ **Security:** Segera ganti password default setelah login pertama. Jangan gunakan credentials ini di production.
 ---
 
 ## Migrasi & Hotfix Database

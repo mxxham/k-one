@@ -47,6 +47,8 @@ debug_*.php
 test_*.php
 parse_excel*.php
 check_*.php
+fetch()*
+smoke_test*.php
 
 # Cookies & sessions
 cookies.txt

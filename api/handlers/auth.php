@@ -52,7 +52,45 @@ function handle_auth($action) {
 
         case 'me':
             $user = api_require_auth();
+            $db = db();
+            $stmt = $db->prepare("SELECT must_change_password FROM users WHERE id = ?");
+            $stmt->execute([$user['id']]);
+            $mustChange = (int)($stmt->fetchColumn() ?: 0);
+            $user['must_change_password'] = $mustChange;
             json_out(['user' => $user]);
+            break;
+
+        case 'change_password':
+            $data = body();
+            $oldPassword = (string)($data['old_password'] ?? '');
+            $newPassword = (string)($data['new_password'] ?? '');
+
+            if ($oldPassword === '' || $newPassword === '') {
+                json_err('Password lama dan baru wajib diisi.');
+            }
+            if (strlen($newPassword) < 8) {
+                json_err('Password baru minimal 8 karakter.');
+            }
+
+            $auth = api_require_auth();
+            $db = db();
+            $stmt = $db->prepare("SELECT password FROM users WHERE id = ?");
+            $stmt->execute([$auth['id']]);
+            $hash = $stmt->fetchColumn();
+
+            if (!password_verify($oldPassword, $hash)) {
+                json_err('Password lama salah.', 401);
+            }
+
+            $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+            $db->prepare("UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?")
+               ->execute([$newHash, $auth['id']]);
+            Auth::markPasswordChanged();
+
+            ActivityLogger::log('CHANGE_PASSWORD', 'auth', 'User', (int)$auth['id'],
+                $auth['username'], 'Password diubah: ' . $auth['username']);
+
+            json_out(['message' => 'Password berhasil diubah.']);
             break;
 
         default:

@@ -1,0 +1,1145 @@
+openapi: 3.0.3
+info:
+  title: K-one WMS API
+  description: |
+    REST API for K-one Warehouse Management System.
+    
+    ## Authentication
+    All endpoints (except `auth::login`) require Bearer token authentication:
+    ```
+    Authorization: Bearer <token>
+    ```
+    
+    Get a token via `POST /api/index.php?module=auth&action=login`.
+    
+    ## Rate Limiting
+    Login endpoint is rate-limited to 5 attempts per minute per IP.
+    
+    ## Permissions
+    - `any` — Any authenticated user
+    - `write` — Admin, Operator, Warehouse, Supervisor, Staff
+    - `admin` — Admin only
+  version: 2.0.0
+  contact:
+    name: K-one Support
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:8790
+    description: Local development server
+  - url: http://localhost/k-one
+    description: XAMPP local server
+
+tags:
+  - name: Auth
+    description: Authentication & user management
+  - name: Products
+    description: Product master data
+  - name: Customers
+    description: Customer master data
+  - name: Suppliers
+    description: Supplier master data
+  - name: Locations
+    description: Warehouse location management
+  - name: Inbound
+    description: Inbound receiving & putaway
+  - name: Outbound
+    description: Outbound shipping & FEFO
+  - name: Stock
+    description: Stock management & ledger
+  - name: Stocktake
+    description: Cycle counting / stock opname
+  - name: Picklist
+    description: Picklist management
+  - name: Waves
+    description: Wave picking orchestration
+  - name: BinTransfer
+    description: Bin-to-bin transfers
+  - name: Reports
+    description: Report generation & export
+  - name: Quality
+    description: Quality inspection management
+  - name: RMA
+    description: Return Merchandise Authorization
+  - name: Monitoring
+    description: System health & metrics
+  - name: Notifications
+    description: Notification management
+  - name: Dashboard
+    description: Dashboard data
+  - name: ActivityLog
+    description: Audit trail
+
+paths:
+  /api/index.php:
+    get:
+      tags: [Auth]
+      summary: API banner / version info
+      description: Returns API version and current time when no module/action provided
+      parameters:
+        - name: module
+          in: query
+          schema:
+            type: string
+          required: false
+        - name: action
+          in: query
+          schema:
+            type: string
+          required: false
+      responses:
+        '200':
+          description: API info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: K-one API
+                  version:
+                    type: string
+                    example: 2.0.0
+                  time:
+                    type: string
+                    format: date-time
+
+  /api/index.php?module=auth&action=login:
+    post:
+      tags: [Auth]
+      summary: Login and get access token
+      description: |
+        Authenticate user and receive a Bearer token (valid for 12 hours).
+        
+        **Rate limited:** 5 attempts per minute per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  example: admin
+                password:
+                  type: string
+                  format: password
+                  example: admin123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  token:
+                    type: string
+                    description: Bearer token (64 hex chars)
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+        '429':
+          description: Too many login attempts
+
+  /api/index.php?module=auth&action=me:
+    get:
+      tags: [Auth]
+      summary: Get current user info
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  user:
+                    $ref: '#/components/schemas/User'
+
+  /api/index.php?module=auth&action=change_password:
+    post:
+      tags: [Auth]
+      summary: Change current user's password
+      description: Required for users with `must_change_password` flag.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_password, new_password]
+              properties:
+                old_password:
+                  type: string
+                  format: password
+                new_password:
+                  type: string
+                  format: password
+                  minLength: 8
+      responses:
+        '200':
+          description: Password changed successfully
+        '401':
+          description: Old password is incorrect
+
+  /api/index.php?module=users&action=list:
+    get:
+      tags: [Auth]
+      summary: List all users
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  rows:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+
+  /api/index.php?module=users&action=create:
+    post:
+      tags: [Auth]
+      summary: Create new user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, full_name, email, role]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                  format: password
+                full_name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                role:
+                  type: string
+                  enum: [admin, operator, viewer]
+                department:
+                  type: string
+                  enum: [inbound, outbound, inventory, ops, all]
+                  default: all
+      responses:
+        '200':
+          description: User created
+
+  /api/index.php?module=products&action=list:
+    get:
+      tags: [Products]
+      summary: List products with pagination
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  rows:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  per_page:
+                    type: integer
+
+  /api/index.php?module=products&action=all:
+    get:
+      tags: [Products]
+      summary: Get all products (for dropdowns)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: All products
+
+  /api/index.php?module=products&action=detail:
+    get:
+      tags: [Products]
+      summary: Get product by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Product detail
+
+  /api/index.php?module=products&action=create:
+    post:
+      tags: [Products]
+      summary: Create new product
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_code, product_name]
+              properties:
+                product_code:
+                  type: string
+                product_name:
+                  type: string
+                uom_type:
+                  type: string
+                drums_per_pallet:
+                  type: integer
+                uom_per_pallet:
+                  type: integer
+      responses:
+        '200':
+          description: Product created
+
+  /api/index.php?module=customers&action=list:
+    get:
+      tags: [Customers]
+      summary: List customers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Customer list
+
+  /api/index.php?module=locations&action=list:
+    get:
+      tags: [Locations]
+      summary: List warehouse locations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: zone
+          in: query
+          schema:
+            type: string
+        - name: available_only
+          in: query
+          schema:
+            type: string
+            enum: ['0', '1', 'true', 'false']
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Location list
+
+  /api/index.php?module=locations&action=available:
+    get:
+      tags: [Locations]
+      summary: Get available (empty) locations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: count
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: zone
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Available locations
+
+  /api/index.php?module=locations&action=suggest:
+    get:
+      tags: [Locations]
+      summary: Suggest locations for putaway
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: quantity
+          in: query
+          schema:
+            type: number
+        - name: uom
+          in: query
+          schema:
+            type: string
+            default: Drum
+        - name: uom_per_pallet
+          in: query
+          schema:
+            type: integer
+            default: 4
+        - name: zone
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Suggested locations
+
+  /api/index.php?module=locations&action=zone_summary:
+    get:
+      tags: [Locations]
+      summary: Get location count by zone
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Zone summary
+
+  /api/index.php?module=locations&action=check:
+    get:
+      tags: [Locations]
+      summary: Check if a location code is available
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+            example: AA01A01
+      responses:
+        '200':
+          description: Location availability check
+
+  /api/index.php?module=inbound&action=list:
+    get:
+      tags: [Inbound]
+      summary: List inbound orders
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, pending, partial, received, cancelled]
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Inbound order list
+
+  /api/index.php?module=inbound&action=create:
+    post:
+      tags: [Inbound]
+      summary: Create inbound order
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [inbound_code]
+              properties:
+                inbound_code:
+                  type: string
+                supplier_name:
+                  type: string
+                expected_date:
+                  type: string
+                  format: date
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Inbound order created
+
+  /api/index.php?module=outbound&action=list:
+    get:
+      tags: [Outbound]
+      summary: List outbound orders
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Outbound order list
+
+  /api/index.php?module=outbound&action=create:
+    post:
+      tags: [Outbound]
+      summary: Create outbound order
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outbound_code]
+              properties:
+                outbound_code:
+                  type: string
+                customer_name:
+                  type: string
+                delivery_date:
+                  type: string
+                  format: date
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Outbound order created
+
+  /api/index.php?module=outbound&action=ship:
+    post:
+      tags: [Outbound]
+      summary: Ship outbound order
+      description: Validates FEFO allocation, deducts stock, creates ledger entries.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outbound_id]
+              properties:
+                outbound_id:
+                  type: integer
+      responses:
+        '200':
+          description: Shipment processed
+        '400':
+          description: Insufficient stock or FEFO violation
+
+  /api/index.php?module=stock&action=list:
+    get:
+      tags: [Stock]
+      summary: List stock levels
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: product_id
+          in: query
+          schema:
+            type: integer
+        - name: location
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Stock list
+
+  /api/index.php?module=stock&action=ledger:
+    get:
+      tags: [Stock]
+      summary: Get stock ledger (audit trail)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: product_id
+          in: query
+          schema:
+            type: integer
+        - name: location
+          in: query
+          schema:
+            type: string
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Ledger entries
+
+  /api/index.php?module=stock&action=transfer:
+    post:
+      tags: [Stock]
+      summary: Transfer stock between locations
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stock_id, from_location, to_location, quantity]
+              properties:
+                stock_id:
+                  type: integer
+                from_location:
+                  type: string
+                to_location:
+                  type: string
+                quantity:
+                  type: number
+      responses:
+        '200':
+          description: Transfer completed
+
+  /api/index.php?module=stocktake&action=list:
+    get:
+      tags: [Stocktake]
+      summary: List stocktake sessions
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Stocktake sessions
+
+  /api/index.php?module=stocktake&action=create:
+    post:
+      tags: [Stocktake]
+      summary: Create new stocktake session
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Stocktake created
+
+  /api/index.php?module=picklist&action=list:
+    get:
+      tags: [Picklist]
+      summary: List picklists
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Picklist list
+
+  /api/index.php?module=picklist&action=create_from_outbound:
+    post:
+      tags: [Picklist]
+      summary: Create picklist from outbound order
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outbound_id]
+              properties:
+                outbound_id:
+                  type: integer
+      responses:
+        '200':
+          description: Picklist created
+
+  /api/index.php?module=bintransfer&action=create:
+    post:
+      tags: [BinTransfer]
+      summary: Create bin transfer
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stock_id, from_location, to_location, quantity]
+              properties:
+                stock_id:
+                  type: integer
+                from_location:
+                  type: string
+                to_location:
+                  type: string
+                quantity:
+                  type: number
+      responses:
+        '200':
+          description: Bin transfer created
+
+  /api/index.php?module=waves&action=list:
+    get:
+      tags: [Waves]
+      summary: List waves
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Wave list
+
+  /api/index.php?module=waves&action=create:
+    post:
+      tags: [Waves]
+      summary: Create new wave
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Wave created
+
+  /api/index.php?module=quality&action=list:
+    get:
+      tags: [Quality]
+      summary: List quality inspections
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, in_progress, passed, failed]
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Inspection list
+
+  /api/index.php?module=quality&action=create:
+    post:
+      tags: [Quality]
+      summary: Create quality inspection
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [inbound_id, inspector_name]
+              properties:
+                inbound_id:
+                  type: integer
+                inspector_name:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Inspection created
+
+  /api/index.php?module=rma&action=list:
+    get:
+      tags: [RMA]
+      summary: List RMA requests
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected, received, completed]
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: RMA list
+
+  /api/index.php?module=rma&action=create:
+    post:
+      tags: [RMA]
+      summary: Create RMA request
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outbound_id, customer_id, reason]
+              properties:
+                outbound_id:
+                  type: integer
+                customer_id:
+                  type: integer
+                reason:
+                  type: string
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      outbound_item_id:
+                        type: integer
+                      quantity:
+                        type: number
+                      condition:
+                        type: string
+                        enum: [damaged, defective, wrong_item, expired]
+      responses:
+        '200':
+          description: RMA created
+
+  /api/index.php?module=monitoring&action=health:
+    get:
+      tags: [Monitoring]
+      summary: System health check
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded, critical]
+                  database:
+                    type: string
+                    enum: [connected, disconnected]
+                  uptime:
+                    type: string
+
+  /api/index.php?module=monitoring&action=metrics:
+    get:
+      tags: [Monitoring]
+      summary: Get system metrics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: System metrics
+
+  /api/index.php?module=notification&action=list:
+    get:
+      tags: [Notifications]
+      summary: List notifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: unread_only
+          in: query
+          schema:
+            type: string
+            enum: ['0', '1', 'true', 'false']
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Notification list
+
+  /api/index.php?module=notification&action=send:
+    post:
+      tags: [Notifications]
+      summary: Send notification
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, message]
+              properties:
+                title:
+                  type: string
+                message:
+                  type: string
+                type:
+                  type: string
+                  enum: [info, warning, error, success]
+                  default: info
+                recipient_id:
+                  type: integer
+                  description: User ID (omit for broadcast)
+      responses:
+        '200':
+          description: Notification sent
+
+  /api/index.php?module=report&action=dashboard:
+    get:
+      tags: [Dashboard]
+      summary: Get dashboard summary data
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard data
+
+  /api/index.php?module=activitylog&action=list:
+    get:
+      tags: [ActivityLog]
+      summary: List activity log entries
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: module
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Activity log entries
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 64-char hex token from login endpoint
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+      description: Page number
+    PerPageParam:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        default: 25
+        maximum: 100
+      description: Items per page
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, operator, viewer]
+        department:
+          type: string
+          enum: [inbound, outbound, inventory, ops, all]
+        is_active:
+          type: integer
+          enum: [0, 1]
+        must_change_password:
+          type: integer
+          enum: [0, 1]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        product_code:
+          type: string
+        product_name:
+          type: string
+        uom_type:
+          type: string
+        drums_per_pallet:
+          type: integer
+        uom_per_pallet:
+          type: integer
+        is_active:
+          type: integer
+          enum: [0, 1]
+
+    Location:
+      type: object
+      properties:
+        id:
+          type: integer
+        location_code:
+          type: string
+          example: AA01A01
+        aisle:
+          type: string
+        rack:
+          type: string
+        row_name:
+          type: string
+        position:
+          type: string
+        zone:
+          type: string
+        is_active:
+          type: integer
+
+    InboundOrder:
+      type: object
+      properties:
+        id:
+          type: integer
+        inbound_code:
+          type: string
+        supplier_name:
+          type: string
+        status:
+          type: string
+          enum: [draft, pending, partial, received, cancelled]
+        expected_date:
+          type: string
+          format: date
+        created_at:
+          type: string
+          format: date-time
+
+    OutboundOrder:
+      type: object
+      properties:
+        id:
+          type: integer
+        outbound_code:
+          type: string
+        customer_name:
+          type: string
+        status:
+          type: string
+          enum: [draft, pending, partial, shipped, cancelled]
+        delivery_date:
+          type: string
+          format: date
+        created_at:
+          type: string
+          format: date-time
+
+    Stock:
+      type: object
+      properties:
+        id:
+          type: integer
+        product_id:
+          type: integer
+        product_code:
+          type: string
+        product_name:
+          type: string
+        location:
+          type: string
+        batch_no:
+          type: string
+        quantity:
+          type: number
+        expiry_date:
+          type: string
+          format: date
+        status:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
