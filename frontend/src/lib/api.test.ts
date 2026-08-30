@@ -162,13 +162,13 @@ describe('uploadApi', () => {
 });
 
 describe('apiHref / webBase', () => {
-  it('builds an absolute URL with token query param', () => {
+  it('builds an absolute URL without token in query string (security fix)', () => {
     setSession('tok', { id: 1, username: 'u', full_name: 'U', email: 'x', role: 'viewer' });
     const href = apiHref('export', 'stock', { year: 2026 });
     expect(href).toContain('module=export');
     expect(href).toContain('action=stock');
     expect(href).toContain('year=2026');
-    expect(href).toContain('token=tok');
+    expect(href).not.toContain('token=');
   });
 
   it('omits empty params and token when absent', () => {

@@ -1,0 +1,97 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Outbound API Contracts",
+    "description": "Validation schemas for the outbound module (api/index.php?module=outbound).",
+    "actions": {
+        "create": {
+            "description": "Create a new outbound order",
+            "required": [],
+            "properties": {
+                "customer_id": { "type": "integer" },
+                "so_number": { "type": "string", "maxLength": 50 },
+                "do_number": { "type": "string", "maxLength": 50 },
+                "expected_date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                "notes": { "type": "string", "maxLength": 500 }
+            },
+            "items_field": "items",
+            "items": {
+                "required": ["product_id"],
+                "properties": {
+                    "product_id": { "type": "integer" },
+                    "quantity": { "type": "number", "minimum": 0 },
+                    "uom": { "type": "string" },
+                    "location": { "type": "string", "maxLength": 20 },
+                    "ship_to_name": { "type": "string", "maxLength": 100 },
+                    "ship_to_location": { "type": "string", "maxLength": 100 }
+                }
+            }
+        },
+        "update": {
+            "description": "Update an existing outbound order",
+            "required": ["id"],
+            "properties": {
+                "id": { "type": "integer" },
+                "customer_id": { "type": "integer" },
+                "so_number": { "type": "string", "maxLength": 50 },
+                "do_number": { "type": "string", "maxLength": 50 },
+                "expected_date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                "notes": { "type": "string", "maxLength": 500 }
+            }
+        },
+        "delete": {
+            "description": "Delete an outbound order",
+            "required": ["id"],
+            "properties": {
+                "id": { "type": "integer" }
+            }
+        },
+        "add_item": {
+            "description": "Add an item to an outbound order",
+            "required": ["outbound_id"],
+            "properties": {
+                "outbound_id": { "type": "integer" },
+                "product_id": { "type": "integer" },
+                "quantity": { "type": "number", "minimum": 0 },
+                "manual_location": { "type": "string", "maxLength": 20 }
+            }
+        },
+        "delete_item": {
+            "description": "Delete an outbound item",
+            "required": ["outbound_id", "item_id"],
+            "properties": {
+                "outbound_id": { "type": "integer" },
+                "item_id": { "type": "integer" }
+            }
+        },
+        "pick_items": {
+            "description": "Trigger pick (FEFO allocation) for outbound order",
+            "required": ["id"],
+            "properties": {
+                "id": { "type": "integer" }
+            }
+        },
+        "ship": {
+            "description": "Ship an outbound order",
+            "required": ["id"],
+            "properties": {
+                "id": { "type": "integer" }
+            }
+        },
+        "complete": {
+            "description": "Complete an outbound order",
+            "required": ["id"],
+            "properties": {
+                "id": { "type": "integer" }
+            }
+        },
+        "update_item_status": {
+            "description": "Update outbound item in-process status",
+            "required": ["item_id", "outbound_id", "status"],
+            "properties": {
+                "item_id": { "type": "integer" },
+                "outbound_id": { "type": "integer" },
+                "status": { "type": "string", "enum": ["Goods Received", "ATP", "Unserviceable"] }
+            }
+        }
+    }
+}

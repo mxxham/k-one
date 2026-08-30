@@ -8,7 +8,7 @@ import ConfirmButton from '@/components/ConfirmButton';
 import { Field, TextInput, Select } from '@/components/Field';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/context/AuthContext';
-import { api, apiHref } from '@/lib/api';
+import { api, apiHref, LedgerProduct } from '@/lib/api';
 import { WebBtn } from '@/components/WebBtn';
 import { fmtNum, fmtDateTime } from '@/lib/format';
 
@@ -52,7 +52,7 @@ export default function LedgerPage() {
   const { canAdmin } = useAuth();
 
   const [rows, setRows] = useState<LedgerRow[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<LedgerProduct[]>([]);
   const [productId, setProductId] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');

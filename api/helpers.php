@@ -1,11 +1,58 @@
 <?php
 
-/** Pagination params from request */
+/** Pagination params from request (positional: [$page, $perPage, $offset]). */
 function page_params(int $defaultPerPage = 50): array {
     $page = max(1, (int)($_GET['page'] ?? 1));
     $perPage = max(1, (int)($_GET['per_page'] ?? $defaultPerPage));
     if ($perPage > 500) $perPage = 500;
     return [$page, $perPage, ($page - 1) * $perPage];
+}
+
+/**
+ * Extract page/perPage from the GET request as an associative array.
+ * Drop-in replacement for page_params() with named keys.
+ *
+ * @return array{page: int, per_page: int, offset: int}
+ */
+function getRequestPagination(int $defaultPerPage = 50): array {
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $perPage = max(1, (int)($_GET['per_page'] ?? $defaultPerPage));
+    if ($perPage > 500) $perPage = 500;
+    return ['page' => $page, 'per_page' => $perPage, 'offset' => ($page - 1) * $perPage];
+}
+
+/**
+ * Append LIMIT / OFFSET to a SQL query string using prepared-statement params.
+ *
+ * @param  string $query   SQL with any WHERE / ORDER BY already applied (no trailing LIMIT).
+ * @param  array  $params  Bound parameters for $query.
+ * @param  int    $page    1-based page number.
+ * @param  int    $perPage Rows per page (capped at 500).
+ * @return array{0: string, 1: array}  The amended query and merged params.
+ */
+function paginate(string $query, array $params, int $page, int $perPage): array {
+    $perPage = max(1, min($perPage, 500));
+    $offset  = (max(1, $page) - 1) * $perPage;
+    $query  .= " LIMIT " . $perPage . " OFFSET " . $offset;
+    return [$query, $params];
+}
+
+/**
+ * Build the standard pagination metadata object included in every paginated response.
+ *
+ * @return array{page: int, per_page: int, total: int, total_pages: int, has_next: bool, has_prev: bool}
+ */
+function paginationMeta(int $total, int $page, int $perPage): array {
+    $perPage    = max(1, $perPage);
+    $totalPages = (int)ceil($total / $perPage);
+    return [
+        'page'        => $page,
+        'per_page'    => $perPage,
+        'total'       => $total,
+        'total_pages' => $totalPages,
+        'has_next'    => $page < $totalPages,
+        'has_prev'    => $page > 1,
+    ];
 }
 
 /** Product search used by inbound/outbound forms */
@@ -93,6 +140,7 @@ function statuses_for(string $module): array {
         'picklist' => ['Draft','Confirmed','Picking','Picked','Completed','Cancelled'],
         'stocktake'=> ['Draft','In Progress','Completed','Cancelled'],
         'bintransfer'=> ['Pending','Completed','Cancelled'],
+        'rma'        => ['Pending','Approved','Processed','Completed','Cancelled'],
     ];
     return $map[$module] ?? [];
 }

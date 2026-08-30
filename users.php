@@ -4,6 +4,7 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/classes/Auth.php';
 
 require_once __DIR__ . '/classes/ActivityLogger.php';
+require_once __DIR__ . '/classes/SecurityAudit.php';
 Auth::requireAuth();
 Auth::requireRole(['admin']);
 
@@ -36,10 +37,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $newId = (int)$db->lastInsertId();
             ActivityLogger::log('CREATE_USER', 'user', 'User', $newId,
                 trim($_POST['username']), "Buat user baru: " . trim($_POST['full_name']) . " (" . ($_POST['role'] ?? 'viewer') . ")");
+            SecurityAudit::logDataAccess(
+                $_SESSION['user_id'] ?? 0,
+                'user',
+                'create',
+                "Created user " . trim($_POST['full_name']) . " (" . trim($_POST['username']) . ") with role " . ($_POST['role'] ?? 'viewer')
+            );
             header('Location: users.php?success=created'); exit;
         }
 
         if (isset($_POST['update_user'])) {
+            // Get current user data before update for audit comparison
+            $currentUser = $db->prepare("SELECT username, full_name, role, email FROM users WHERE id = ?");
+            $currentUser->execute([(int)$_POST['id']]);
+            $oldUserData = $currentUser->fetch();
+            
             $sql    = "UPDATE users SET username = ?, full_name = ?, email = ?, role = ?";
             $params = [trim($_POST['username']), trim($_POST['full_name']), trim($_POST['email'] ?? ''), $_POST['role'] ?? 'viewer'];
             if (!empty($_POST['password'])) {
@@ -51,6 +63,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->prepare($sql)->execute($params);
             ActivityLogger::log('UPDATE_USER', 'user', 'User', (int)$_POST['id'],
                 trim($_POST['username']), "Edit user: " . trim($_POST['full_name']) . " → role " . ($_POST['role'] ?? 'viewer') . (!empty($_POST['password']) ? ', password diubah' : ''));
+            
+            // Log privilege change if role changed
+            $newRole = $_POST['role'] ?? 'viewer';
+            if ($oldUserData && $oldUserData['role'] !== $newRole) {
+                SecurityAudit::logPrivilegeChange(
+                    $_SESSION['user_id'] ?? 0,
+                    (int)$_POST['id'],
+                    $oldUserData['role'],
+                    $newRole
+                );
+            }
+            
+            // Log password change if password was updated
+            if (!empty($_POST['password'])) {
+                SecurityAudit::logPasswordChange((int)$_POST['id'], 'admin_reset');
+            }
+            
             header('Location: users.php?success=updated'); exit;
         }
 
@@ -80,13 +109,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
                 }
-                $delUser = $db->prepare("SELECT username, full_name FROM users WHERE id=?");
+                $delUser = $db->prepare("SELECT username, full_name, role FROM users WHERE id=?");
                 $delUser->execute([$userId]);
                 $delInfo = $delUser->fetch();
                 $db->prepare("DELETE FROM users WHERE id = ?")->execute([$userId]);
                 $db->commit();
                 ActivityLogger::log('DELETE_USER', 'user', 'User', $userId,
                     $delInfo['username'] ?? null, "Hapus user: " . ($delInfo['full_name'] ?? $userId));
+                SecurityAudit::logDataAccess(
+                    $_SESSION['user_id'] ?? 0,
+                    'user',
+                    'delete',
+                    "Deleted user " . ($delInfo['full_name'] ?? $userId) . " (" . ($delInfo['username'] ?? '') . ") role=" . ($delInfo['role'] ?? '')
+                );
             } catch (Exception $e) {
                 $db->rollBack();
                 throw new Exception("Delete failed. Run migrations/revision_002.sql first to fix FK constraints. Details: " . $e->getMessage());

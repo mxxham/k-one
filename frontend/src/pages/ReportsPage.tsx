@@ -3,7 +3,7 @@ import {
   RefreshCw, FileText, CalendarDays, Box, Truck, PackageOpen, Boxes, BookOpen,
   ArrowDownToLine, ArrowUpFromLine, PackagePlus, PackageMinus, Printer, FileSpreadsheet,
 } from 'lucide-react';
-import { api, apiHref } from '@/lib/api';
+import { api, apiHref, webBase, ReportData, ReportRow } from '@/lib/api';
 import { WebBtn } from '@/components/WebBtn';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, EmptyState } from '@/components/Card';
@@ -196,8 +196,8 @@ export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState('daily');
   const [fromDate, setFromDate] = useState(todayISO());
   const [toDate, setToDate] = useState(todayISO());
-  const [reportData, setReportData] = useState<any>(null);
-  const [tabData, setTabData] = useState<any[]>([]);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [tabData, setTabData] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const reqId = useRef(0);
@@ -256,7 +256,7 @@ export default function ReportsPage() {
             {legacyType && (
               <>
                 <WebBtn
-                  href={apiHref('print', 'report', { type: legacyType, date: activeTab === 'daily' ? fromDate : undefined, date_to: activeTab === 'daily' ? toDate : undefined })}
+                  href={`${webBase()}/print_report.php?type=${legacyType}${activeTab === 'daily' ? `&date=${fromDate}&date_to=${toDate}` : ''}`}
                   label="Print / PDF"
                   icon={<Printer className="w-4 h-4" />}
                 />

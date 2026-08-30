@@ -101,6 +101,54 @@ function handle_replenishment($action) {
             json_out(['id' => $id]);
             break;
 
+        /* ---- Auto-Replenishment System ---- */
+
+        case 'run_cycle':
+            api_require_write();
+            $trigger = body()['trigger'] ?? 'manual';
+            try {
+                $result = AutoReplenishment::runCycle($trigger);
+            } catch (Throwable $e) {
+                json_err($e->getMessage(), 409);
+            }
+            ActivityLogger::log(
+                'AUTO_REPLENISH_CYCLE', 'replenishment', 'AutoReplenishment', null, null,
+                "Auto-replenishment cycle ({$trigger}): "
+                . count($result['generated']) . " generated, "
+                . count($result['skipped']) . " skipped, "
+                . count($result['failed']) . " failed"
+            );
+            json_out($result);
+            break;
+
+        case 'auto_status':
+            api_require_auth();
+            $result = AutoReplenishment::getStatus();
+            json_out($result);
+            break;
+
+        case 'auto_config':
+            api_require_auth();
+            $result = AutoReplenishment::getConfig();
+            json_out(['config' => $result]);
+            break;
+
+        case 'update_auto_config':
+            api_require_admin();
+            $updates = [];
+            foreach (body() as $key => $value) {
+                if ($key !== 'action') {
+                    $updates[$key] = $value;
+                }
+            }
+            $ok = AutoReplenishment::updateConfig($updates);
+            ActivityLogger::log(
+                'UPDATE_REPLENISH_CONFIG', 'replenishment', 'AutoReplenishment', null, null,
+                "Config updated: " . implode(', ', array_keys($updates))
+            );
+            json_out(['success' => $ok]);
+            break;
+
         default:
             json_err('Invalid action: ' . $action, 404);
     }

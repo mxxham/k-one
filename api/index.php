@@ -18,6 +18,19 @@
  *   8. Call handler → _binary / _html / {success:true, ...}
  */
 
+/* ------------------------------------------------------------------ */
+/* CORS headers — must precede session_start and all includes          */
+/* ------------------------------------------------------------------ */
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+header('Access-Control-Allow-Credentials: true');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
 error_reporting(0);
 ini_set('display_errors', '0');
 date_default_timezone_set('Asia/Jakarta');
@@ -33,21 +46,12 @@ foreach (glob(__DIR__ . '/../classes/*.php') as $classFile) {
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/registry.php';
 
+// API contract validation middleware (optional — opt-in via constant or ?_validate=1)
+require_once __DIR__ . '/middleware/ApiException.php';
+require_once __DIR__ . '/middleware/ValidateRequest.php';
+
 header('Content-Type: application/json; charset=utf-8');
-
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-if ($origin) {
-    header('Access-Control-Allow-Origin: ' . $origin);
-    header('Vary: Origin');
-}
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Cache-Control: no-store, no-cache, must-revalidate');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(204);
-    exit;
-}
 
 /* ------------------------------------------------------------------ */
 /* Response helpers                                                    */
@@ -75,6 +79,32 @@ function body(): array {
 
 function query($key, $default = null) {
     return $_GET[$key] ?? $default;
+}
+
+/* ------------------------------------------------------------------ */
+/* Rate limiting — brute-force protection for login                    */
+/* ------------------------------------------------------------------ */
+
+function checkRateLimit(string $ip): bool {
+    $file = sys_get_temp_dir() . '/kone_login_' . md5($ip);
+    $attempts = 0;
+    $window = 60; // 1 minute
+
+    if (file_exists($file)) {
+        $data = json_decode(file_get_contents($file), true);
+        if (time() - $data['first'] < $window) {
+            $attempts = $data['attempts'];
+        }
+    }
+
+    if ($attempts >= 5) return false;
+
+    $data = [
+        'first' => $data['first'] ?? time(),
+        'attempts' => $attempts + 1,
+    ];
+    file_put_contents($file, json_encode($data));
+    return true;
 }
 
 /* ------------------------------------------------------------------ */
@@ -220,7 +250,28 @@ if (!in_array($publicKey, PUBLIC_ACTIONS, true)) {
     }
 }
 
-// 8. Call handler — wrap so uncaught exceptions return v2 parity 500 shape
+// 8. Rate limit check for login
+if ($publicKey === 'auth::login') {
+    $clientIp = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    if (!checkRateLimit($clientIp)) {
+        http_response_code(429);
+        echo json_encode(['success' => false, 'message' => 'Too many login attempts. Please try again later.']);
+        exit;
+    }
+}
+
+// 9. Contract validation — optional, opt-in via API_CONTRACT_VALIDATION or ?_validate=1
+if (ValidateRequest::isEnabled()) {
+    try {
+        ValidateRequest::validate($module, $action, body());
+    } catch (ContractValidationException $e) {
+        http_response_code($e->getCode());
+        echo json_encode($e->toJson());
+        exit;
+    }
+}
+
+// 10. Call handler — wrap so uncaught exceptions return v2 parity 500 shape
 try {
     $result = $fn($action);
 } catch (Throwable $e) {

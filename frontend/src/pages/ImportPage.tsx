@@ -4,7 +4,7 @@ import {
   Truck, PackageOpen, Boxes, Download, UploadCloud, RefreshCw,
   CheckCircle2, AlertTriangle, XCircle, X, FileCheck2, PlayCircle,
 } from 'lucide-react';
-import { api, apiHref, uploadApi } from '@/lib/api';
+import { api, apiHref, uploadApi, PreviewStats } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import { Card } from '@/components/Card';
 
@@ -165,7 +165,7 @@ export default function ImportPage() {
   const [error, setError] = useState('');
   const [result, setResult] = useState<ImportResult | null>(null);
   const [preview, setPreview] = useState<StockRow[] | null>(null);
-  const [previewStats, setPreviewStats] = useState<any>(null);
+  const [previewStats, setPreviewStats] = useState<PreviewStats | null>(null);
   const [commitResult, setCommitResult] = useState<ImportResult | null>(null);
 
   const cfg = TABS.find((t) => t.key === tab)!;

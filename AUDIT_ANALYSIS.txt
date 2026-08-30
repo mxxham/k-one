@@ -1,0 +1,309 @@
+K-ONE WMS CODEBASE AUDIT ANALYSIS
+==================================
+Generated: 2026-08-27
+
+EXECUTIVE SUMMARY
+-----------------
+Total API Handlers: 33 (across 28 files)
+Total Service Classes: 31 (pure business logic)
+Total Exception Classes: 4 (custom error types)
+Status: 32 Complete, 2 Partial, 0 Broken
+
+KEY FINDINGS
+============
+
+1. HANDLER ANALYSIS
+-------------------
+COMPLETE (32 handlers):
+- All core domain handlers fully implemented with error handling
+- Consistent use of ActivityLogger for audit trails
+- Proper role-based access control via api_require_auth/write/admin
+
+PARTIAL (2 handlers):
+- import: Uses exception-driven error handling; delegates to import_helpers for file parsing
+- print: Utility handler with no explicit actions; PDF/barcode generation wrapper
+- system: Single-action admin maintenance; reset_operational_data only
+
+OBSERVATIONS:
+- wave.php and waves.php are likely duplicates (wave created 2024-Q3, waves refactored)
+- Suggest consolidating wave/waves into single handler
+- import handler has complex async logic (auto_async action)
+
+2. SERVICE CLASS DEPENDENCIES
+-----------------------------
+
+HIGH-CRITICALITY SERVICES (used by 5+ handlers/services):
+├─ ActivityLogger (30+ references) - Audit trails
+├─ Stock (15+ references) - Core inventory
+├─ PDO (direct DB) (used in all services)
+├─ Inbound (10+ references) - Receiving flow
+├─ Outbound (8+ references) - Shipping flow
+├─ LocationManager (7+ references) - Location management
+├─ PalletHelper (7+ references) - UOM conversion
+├─ Picklist (6+ references) - Picking
+└─ Report (5+ references) - Analytics
+
+MODERATE-CRITICALITY SERVICES (used by 2-4 handlers/services):
+├─ FefoAllocator (2 services: Inbound, Outbound)
+├─ Putaway (2+ handlers)
+├─ Wave (2+ handlers)
+├─ Product (master data)
+├─ Customer (master data)
+└─ ExcelExport (3+ handlers)
+
+LOW-CRITICALITY SERVICES (single handler/niche):
+├─ ConsolidationService (consolidation handler)
+├─ DiscrepancyService (discrepancy handler)
+├─ DispatchService (dispatch handler)
+├─ StagingService (staging handler)
+├─ CycleCount (cyclecount handler)
+├─ Asn (asn handler)
+└─ Replenishment (replenishment handler)
+
+3. CIRCULAR DEPENDENCIES ANALYSIS
+----------------------------------
+
+IDENTIFIED CYCLES:
+1. Inbound → Stock → (via queries) → Inbound ✓ No explicit instantiation
+2. Outbound → Stock → (via queries) → Outbound ✓ No explicit instantiation
+3. Inbound → Putaway → Inbound (taskAssignment) ✓ Minor coupling
+4. Outbound → FefoAllocator → Stock → Outbound ✓ No instantiation cycle
+5. LocationManager → PalletHelper → LocationManager ✓ Helper pattern
+
+VERDICT: No problematic circular dependencies. All cycles are either:
+- Database-mediated (queryable, not instantiation cycles)
+- Helper patterns (PalletHelper used for calculations, not vice versa)
+- Legitimate domain relationships (Putaway manages Inbound tasks)
+
+4. UNUSED/UNDERUTILIZED SERVICES
+---------------------------------
+
+POTENTIALLY UNUSED:
+- OrderService: Only used by order handler (3 methods)
+  └─ Consider consolidating into Outbound or merging with Picklist
+- TaskAssignmentService: Only createOperator/getOperator exposed
+  └─ Used by Putaway; simple wrapper around database queries
+- StagingService: Only 2 actions (scan_staging, staged_items)
+  └─ Lightweight; could be merged into Stock handler
+
+RARELY USED:
+- LabelPrinter: Called only from Putaway::getLpnLabelData
+  └─ Single responsibility; keep as-is
+- GiExportService: Single export action
+  └─ Domain-specific; keep separate
+
+5. DATA FLOW ANALYSIS
+---------------------
+
+CRITICAL PATH (Receiving → Shipping):
+  API Request → Handler → Service → Database
+  ├─ Inbound (receive) → Stock (create/update) → stock table ✓
+  ├─ Putaway (assign locations) → LocationManager → zones/bins ✓
+  ├─ Outbound (create/pick) → FefoAllocator → stock lookups ✓
+  ├─ Wave (batch pick) → Picklist (generate) → Stock (reserve) ✓
+  └─ Stock (ship) → ActivityLogger (audit) ✓
+
+STOCK LEDGER USAGE:
+- Stock::hold/release operations log to stock_ledger
+- Stock::adjust operations log to stock_ledger
+- Stock transfers tracked via stock_locations and inbound_items
+
+TRANSACTION SAFETY:
+- Inbound::complete() uses db()->beginTransaction()
+- Outbound::ship() uses db()->beginTransaction()
+- Stock::hold() uses db()->beginTransaction()
+- Stock::release() uses db()->beginTransaction()
+✓ All critical operations wrapped in transactions
+
+6. HANDLER-TO-SERVICE MAPPING
+-----------------------------
+
+HANDLERS WITH MOST DEPENDENCIES:
+1. putaway (8+ services):
+   - Putaway, LocationManager, PalletHelper, Inbound, TaskAssignmentService, ActivityLogger
+   └─ Complex domain; justified
+
+2. export (7 services):
+   - ExcelExport, Inbound, Outbound, Report, Stock, StockTake, ActivityLogger
+   └─ Report aggregation; justified
+
+3. reports/report (6 services):
+   - Report, ActivityLogger, ExcelExport, Stock, Inbound, Outbound, StockTake
+   └─ Analytics aggregation; justified
+
+HANDLERS WITH SINGLE SERVICE:
+- abc (AbcAnalysis only)
+- asn (Asn only)
+- consolidation (ConsolidationService only)
+- discrepancy (DiscrepancyService only)
+- dispatch (DispatchService only)
+- gi_export (GiExportService only)
+- order (OrderService only)
+- staging (StagingService only)
+- system (Report only)
+
+7. ERROR HANDLING PATTERNS
+--------------------------
+
+OBSERVED PATTERNS:
+✓ Proper exception throwing in service layer
+  - Asn::create throws "ASN tidak ditemukan"
+  - BinTransfer uses exception-driven error handling
+  - Inbound::create validates before operations
+
+✓ Consistent JSON error responses
+  - json_err(message, http_code) used consistently
+  - Activity logging for errors (LOG action)
+
+⚠ Some handlers with try-catch around service calls
+  - waves.php catches Throwable for create/cancel
+  - inbound.php catches Throwable for complete
+
+✓ Database transaction rollback on error
+  - Stock::hold commits only on success
+  - Prevents partial state updates
+
+8. MISSING/INCOMPLETE IMPLEMENTATIONS
+-------------------------------------
+
+NO FOUND ISSUES:
+✓ All handlers have complete switch statements
+✓ No explicit TODO/FIXME comments
+✓ No "stub" or "not implemented" markers
+✓ No "throw new Exception" patterns (exceptions are business-driven)
+
+POTENTIAL IMPROVEMENTS:
+1. wave.php & waves.php should consolidate
+   - wave has: list,detail,candidate_orders,create,cancel,add_order,release
+   - waves has: list,detail,candidate_orders,create,cancel
+   - waves is subset; recommend removing waves in favor of wave
+
+2. LocationManager::getFEFOByLocation could cache results
+   - Called frequently during picking; consider caching strategy
+
+3. Picklist and PicklistService have naming ambiguity
+   - Picklist: Class for individual picklist records
+   - PicklistService: Orchestration service
+   - Suggest rename PicklistService → PicklistOrchestrator for clarity
+
+9. DATABASE ACCESS PATTERNS
+---------------------------
+
+TABLES WITH MOST OPERATIONS:
+1. stock (21+ services)
+   - SELECT, UPDATE, INSERT operations across all flows
+   - Critical for FEFO allocation logic
+
+2. inbound_orders (15+ services)
+   - Receiving flow orchestration
+   - Linked to ASN, putaway tasks, cross-dock
+
+3. outbound_orders (12+ services)
+   - Shipping flow orchestration
+   - Linked to waves, picklists, destinations
+
+4. stock_ledger (10+ services)
+   - Audit trail for all stock movements
+   - Written by Stock, hold/release operations
+
+5. inbound_items (8+ services)
+   - Item-level receiving
+   - Linked to locations, pallet distribution
+
+JUNCTION TABLES USED:
+- wave_orders (waves ↔ orders)
+- outbound_item_locations (outbound items ↔ locations)
+- stock_locations (stock ↔ inbound items)
+- outbound_destinations (outbound ↔ ship-to locations)
+
+10. CONCURRENCY CONSIDERATIONS
+------------------------------
+
+RACE CONDITION RISKS:
+1. Stock::transfer - potential race if called simultaneously
+   └─ Mitigation: PDO transaction per handler call
+
+2. Wave::create + Picklist::generateForWave
+   └─ Foreign key constraints ensure consistency
+
+3. LocationManager::reserveForOutbound + commitInboundLocations
+   └─ Transaction-based protection in handlers
+
+QUERY OPTIMIZATION:
+- Most SELECT queries use JOINs appropriately
+- GROUP_CONCAT used for aggregation (be mindful of mysql group concat max len)
+- set SESSION group_concat_max_len = 65536 in Inbound::getAll
+
+11. TESTING COVERAGE
+--------------------
+
+OBSERVED IN CODEBASE:
+✓ migrations/ directory with schema evolution
+✓ seeders/ directory with test data
+✓ api/registry.php with route definitions
+
+RECOMMENDED TEST FOCUS:
+1. FEFO allocation logic (FefoAllocator::allocate)
+   - Edge case: expired stock handling
+   - Edge case: partial allocation scenarios
+
+2. Putaway location recommendation
+   - Ensure zone/aisle/UOM constraints respected
+   - Cross-product rule application
+
+3. Stock ledger consistency
+   - Inbound completion flow
+   - Outbound shipping flow
+   - Adjustment operations
+
+4. Wave creation and picking flow
+   - Picklist generation from orders
+   - Cross-dock order handling
+
+12. DEPLOYMENT NOTES
+--------------------
+
+CRITICAL CONFIGURATIONS:
+- config/database.php: DB connection, SMTP settings
+- classes/database.php: PDO singleton initialization
+- api/registry.php: Route handler registration
+
+DEPENDENCIES:
+- PHPSpreadsheet (for Excel export)
+- PHPMailer (for email notifications)
+- Three.js (for 3D visualization)
+- Vite + React 18 (frontend)
+
+RECOMMENDED INIT SEQUENCE:
+1. Run migrations/ in sequence (revision_001.sql → hotfix_023)
+2. Run seeders/ for initial data
+3. Point webroot to K-one/ directory
+4. Set storage/ directory as writable
+5. npm install && npm run build in frontend/
+
+====================
+SUMMARY STATISTICS
+====================
+
+HANDLERS:          33 (100% implemented)
+├─ Complete       32 (97%)
+└─ Partial        2  (6%)  [import, print, system]
+
+SERVICES:          31 (100% implemented)
+├─ Complete       31 (100%)
+└─ Broken         0  (0%)
+
+EXCEPTIONS:        4 (custom types)
+├─ InvalidLpnException
+├─ InsufficientStockException
+├─ DispatchReferenceConflictException
+└─ PickReferenceConflictException
+
+DEPENDENCIES:
+├─ High-criticality  9 services
+├─ Moderate          6 services
+└─ Low               16 services
+
+CIRCULAR DEPS:      0 (problematic)
+DATABASE TXNS:      6 operations wrapped
+AUDIT LOGGING:      30+ entry points

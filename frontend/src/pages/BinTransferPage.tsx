@@ -11,30 +11,12 @@ import ConfirmButton from '@/components/ConfirmButton';
 import { Field, TextInput, Select, TextArea, Grid } from '@/components/Field';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/context/AuthContext';
-import { api } from '@/lib/api';
+import { api, BinTransferRow } from '@/lib/api';
 import { fmtNum, fmtDate, todayISO } from '@/lib/format';
 import ScanInput from '@/components/ScanInput';
 
 const PER_PAGE = 20;
 const STATUS_OPTIONS = ['Pending', 'Completed', 'Cancelled'];
-
-interface BinTransferRow {
-  id: number;
-  transfer_number: string;
-  transfer_date: string;
-  product_id: number;
-  product_code: string;
-  product_name: string;
-  batch_number: string;
-  from_location: string;
-  to_location: string;
-  quantity: number;
-  uom: string;
-  reason: string;
-  status: string;
-  created_by_name: string;
-  completed_by_name: string;
-}
 
 interface SearchProduct {
   id: number;
@@ -65,7 +47,7 @@ export default function BinTransferPage() {
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const [detail, setDetail] = useState<any>(null);
+  const [detail, setDetail] = useState<BinTransferRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
   const [open, setOpen] = useState(false);

@@ -93,11 +93,6 @@ class DispatchService
             $db->prepare("UPDATE stock_locations SET status = 'Dispatched' WHERE lpn_code = ?")
                ->execute([$lpnCode]);
 
-            // Audit log — resolve operator → user_id for FK
-            $opStmt = $db->prepare("SELECT user_id FROM operators WHERE id = ?");
-            $opStmt->execute([$operatorId]);
-            $userIdForAudit = (int)($opStmt->fetchColumn() ?: $operatorId);
-
             $db->prepare(
                 "INSERT INTO audit_log (module, module_id, action, user_id, details, created_at)
                  VALUES ('dispatch', ?, 'DISPATCH', ?, ?, NOW())"

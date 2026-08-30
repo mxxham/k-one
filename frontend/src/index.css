@@ -96,7 +96,7 @@ textarea:focus {
 
 /* Rack-walk bin labels (S44): window.print() outputs the whole .bin-print-area
    grid — one small label per bin, laid out so a printed run matches walking
-   the racks. */
+   the racks. Uses CSS columns for automatic multi-page pagination. */
 @media print {
   .bin-print-area,
   .bin-print-area * {
@@ -117,5 +117,11 @@ textarea:focus {
   .bin-label {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  /* Force page break every 48 labels (4 cols × 12 rows ≈ 48 labels per A4 page) */
+  .bin-label:nth-of-type(48n) {
+    page-break-after: always;
+    break-after: page;
   }
 }

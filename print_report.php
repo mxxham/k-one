@@ -1,6 +1,9 @@
 <?php
 session_start();
 date_default_timezone_set('Asia/Jakarta');
+if (ob_get_level() === 0) {
+    header('Content-Type: text/html; charset=UTF-8');
+}
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/classes/Auth.php';
 require_once __DIR__ . '/classes/Report.php';
@@ -304,13 +307,24 @@ $themeColors = [
 </head>
 <body>
 
+<div id="back-to-app" style="position:fixed;top:10px;right:10px;z-index:9999;">
+  <a href="javascript:window.close()" style="background:#0d1f1f;color:white;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,0.2);">
+    Close &amp; Back to K-one
+  </a>
+</div>
+<style>
+  @media print {
+    #back-to-app { display: none !important; }
+  }
+</style>
+
 <div class="print-bar no-print">
   <div class="left">
     <span class="title">📊 Report Preview</span>
     <span class="badge"><?= strtoupper($reportType) ?></span>
   </div>
   <div class="btns">
-    <a class="btn-back" href="reports.php?type=<?= $reportType ?>&date=<?= $date ?>">← Kembali</a>
+    <a class="btn-back" href="http://localhost:5173/">← Kembali</a>
     <button class="btn-print" onclick="window.print()">🖨️ Print / Simpan PDF</button>
   </div>
 </div>
@@ -648,9 +662,9 @@ $themeColors = [
 </div>
 
 <script>
-if (location.search.includes('autoprint=1')) {
-  window.onload = () => setTimeout(() => window.print(), 500);
-}
+window.onload = function() {
+  setTimeout(function() { window.print(); }, 500);
+};
 </script>
 </body>
 </html>

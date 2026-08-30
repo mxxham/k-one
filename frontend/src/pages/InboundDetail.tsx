@@ -917,7 +917,7 @@ const headerActions = (
     <div className="flex items-center gap-2 flex-wrap">
       <Link
         to="/inbound"
-        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/15 border border-white/30 text-white text-sm font-semibold hover:bg-white/25"
+        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/25 border border-white/40 text-white text-sm font-semibold hover:bg-white/35"
       >
         <ArrowLeft className="w-4 h-4" /> Back
       </Link>

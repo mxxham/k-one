@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { Plus, RefreshCw, Pencil, Layers, FlaskConical, Box, Trash2, Route, AlertTriangle, Ban } from 'lucide-react';
+import { Plus, RefreshCw, Pencil, Layers, FlaskConical, Box, Trash2, Route, AlertTriangle, Ban, BarChart3 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { fmtNum, fmtDateTime } from '@/lib/format';
 import { useToast } from '@/components/Toast';
@@ -83,6 +83,14 @@ interface BlockRow {
   blocked_at: string | null;
 }
 
+interface ZoneStat {
+  zone: string;
+  location_count: number;
+  total_qty: number;
+  occupied_count: number;
+  product_count?: number;
+}
+
 const emptyUom = { uom_type: 'Drum', min_level: 'A', max_level: 'E', allow_pick_face: 1, max_weight_kg: '', max_height_cm: '', requires_equipment: 0 };
 const emptyZone = { zone_code: '', zone_name: '', zone_type: 'RESERVE', priority: 10, is_active: 1 };
 const emptyZoneAisle = { zone_code: '', aisle: 'CA', min_level: 'A', max_level: 'E', is_active: 1 };
@@ -101,7 +109,7 @@ export default function ZoningPage() {
   const toast = useToast();
   const { canWrite, canAdmin } = useAuth();
 
-  const [tab, setTab] = useState<'uom' | 'product' | 'zone' | 'zoneaisles' | 'blocks'>('uom');
+  const [tab, setTab] = useState<'uom' | 'product' | 'zone' | 'zoneaisles' | 'blocks' | 'zone-stats'>('uom');
 
   const [uomLimits, setUomLimits] = useState<UomLimitRow[]>([]);
   const [productRules, setProductRules] = useState<ProductRuleRow[]>([]);
@@ -131,6 +139,9 @@ export default function ZoningPage() {
   const [aisleForm, setAisleForm] = useState({ aisle_prefix: '', reason: '' });
   const [locForm, setLocForm] = useState({ location_code: '', reason: '' });
   const [blockSaving, setBlockSaving] = useState(false);
+
+  const [zoneStats, setZoneStats] = useState<ZoneStat[]>([]);
+  const [zoneStatsLoading, setZoneStatsLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -201,6 +212,22 @@ export default function ZoningPage() {
       loadLocationOptions();
     }
   }, [tab, loadBlocks, loadLocationOptions]);
+
+  const loadZoneStats = useCallback(async () => {
+    setZoneStatsLoading(true);
+    try {
+      const res = await api('stock', 'zone_stats', { params: { all: '1' } });
+      setZoneStats((res.zones || []) as ZoneStat[]);
+    } catch (err: any) {
+      toast('error', err.message || 'Gagal memuat statistik zone');
+    } finally {
+      setZoneStatsLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (tab === 'zone-stats') loadZoneStats();
+  }, [tab, loadZoneStats]);
 
   const saveAisleBlock = async (e: FormEvent) => {
     e.preventDefault();
@@ -472,6 +499,7 @@ export default function ZoningPage() {
     { key: 'zone' as const, label: 'Zones', icon: Layers },
     { key: 'zoneaisles' as const, label: 'Zone Aisles', icon: Route },
     { key: 'blocks' as const, label: 'Blocked Locations', icon: Ban },
+    { key: 'zone-stats' as const, label: 'Zone Stats', icon: BarChart3 },
   ];
 
   const activeBlocks = blockRows.filter((b) => b.is_active);
@@ -985,6 +1013,84 @@ export default function ZoningPage() {
                       </div>
                     </details>
                   )}
+                </>
+              )}
+            </Card>
+          )}
+
+          {tab === 'zone-stats' && (
+            <Card title="Zone Statistics">
+              {zoneStatsLoading ? (
+                <Spinner label="Memuat statistik zone…" />
+              ) : zoneStats.length === 0 ? (
+                <EmptyState message="Belum ada data statistik zone" />
+              ) : (
+                <>
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                    <div className="rounded-xl border border-gray-200 bg-white p-4 text-center">
+                      <div className="text-2xl font-bold text-brand-700">{zoneStats.length}</div>
+                      <div className="text-[11px] uppercase tracking-wider text-gray-500 font-bold mt-1">Total Zones</div>
+                    </div>
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
+                      <div className="text-2xl font-bold text-emerald-700">
+                        {zoneStats.filter((z) => z.zone.toUpperCase().includes('PICK')).length}
+                      </div>
+                      <div className="text-[11px] uppercase tracking-wider text-emerald-600 font-bold mt-1">Pick Face</div>
+                    </div>
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
+                      <div className="text-2xl font-bold text-amber-700">
+                        {zoneStats.filter((z) => z.zone.toUpperCase().includes('BULK')).length}
+                      </div>
+                      <div className="text-[11px] uppercase tracking-wider text-amber-600 font-bold mt-1">Bulk</div>
+                    </div>
+                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
+                      <div className="text-2xl font-bold text-blue-700">
+                        {zoneStats.filter((z) => z.zone.toUpperCase().includes('RESERVE')).length}
+                      </div>
+                      <div className="text-[11px] uppercase tracking-wider text-blue-600 font-bold mt-1">Reserve</div>
+                    </div>
+                  </div>
+
+                  {/* Detail Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[640px]">
+                      <thead>
+                        <tr className="bg-brand-50 text-[11px] uppercase tracking-wider text-brand-700">
+                          <th className="px-3 py-2.5 text-left font-bold">Zone</th>
+                          <th className="px-3 py-2.5 text-center font-bold">Locations</th>
+                          <th className="px-3 py-2.5 text-center font-bold">Occupied</th>
+                          <th className="px-3 py-2.5 text-center font-bold">Products</th>
+                          <th className="px-3 py-2.5 text-center font-bold">Total Qty</th>
+                          <th className="px-3 py-2.5 text-center font-bold">Util%</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {zoneStats.map((z) => {
+                          const utilPct = z.location_count > 0 ? Math.round((z.occupied_count / z.location_count) * 100) : 0;
+                          return (
+                            <tr key={z.zone} className="hover:bg-brand-50/50">
+                              <td className="px-3 py-2.5">
+                                <span
+                                  className="inline-flex px-2 py-0.5 rounded-md text-white text-[11px] font-bold"
+                                  style={{ backgroundColor: ZONE_COLORS[z.zone.toUpperCase()] || '#94a3b8' }}
+                                >
+                                  {z.zone}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5 text-center font-bold">{fmtNum(z.location_count, 0)}</td>
+                              <td className="px-3 py-2.5 text-center text-gray-600">{fmtNum(z.occupied_count, 0)}</td>
+                              <td className="px-3 py-2.5 text-center text-gray-600">{fmtNum(z.product_count ?? 0, 0)}</td>
+                              <td className="px-3 py-2.5 text-center font-bold">{fmtNum(z.total_qty, 0)}</td>
+                              <td className="px-3 py-2.5 text-center">
+                                <Badge ok={utilPct >= 70}>{utilPct}%</Badge>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </>
               )}
             </Card>

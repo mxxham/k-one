@@ -1,0 +1,65 @@
+Component|Type|Status|Dependencies|Methods/Actions|Issues
+abc|Handler|Complete|AbcAnalysis,ActivityLogger|analyze,status,recompute|None
+activitylog|Handler|Complete|ActivityLogger|list,modules|None
+asn|Handler|Complete|Asn,ActivityLogger|list,detail,create,update,cancel|None
+auth|Handler|Complete|Auth,ActivityLogger|login,logout,me|None
+bintransfer|Handler|Complete|BinTransfer,ActivityLogger|list,detail,locations_with_stock,stock_at_location,create,execute,cancel|None
+consolidation|Handler|Complete|ConsolidationService,ActivityLogger|consolidate,status|None
+customers|Handler|Complete|Customer|list,all,detail,create,update,delete|None
+cyclecount|Handler|Complete|CycleCount,ActivityLogger|list,save,create,update,delete,run_due,run_now|None
+dashboard|Handler|Complete|Report,PDO|stats,aisle_detail,check_expiry_alerts,fefo_queue,alerts,insights|None
+discrepancy|Handler|Complete|DiscrepancyService,ActivityLogger|log,get,list|None
+dispatch|Handler|Complete|DispatchService,ActivityLogger|scan_dispatch,get,list|None
+export|Handler|Complete|ExcelExport,Inbound,Outbound,Report,Stock,StockTake|inbound,outbound,customers,products,ledger,stock,stocktake,asn,report|None
+gi_export|Handler|Complete|GiExportService|export|None
+import|Handler|Partial|Exception|tpl_inbound,tpl_outbound,tpl_stock,inbound,outbound,stock_preview,stock_commit,auto,auto_async|Multiple exception throws for error handling; depends on import_helpers
+inbound|Handler|Complete|Inbound,Putaway,Stock,ActivityLogger|list,detail,stats,search_products,scan,create,update,delete,add_item,update_item,update_item_qty,update_item_dates,update_item_pallet_no,delete_item,update_item_status,save_pallet_locations,save_item_location,advance_status,complete,repair_ledger|None
+ledger|Handler|Complete|ActivityLogger,PDO|list,repair_all|Direct database queries
+locations|Handler|Complete|LocationManager|list,all,detail,create,update,delete,check,available,zone_summary,suggest,parse_codes,print_labels,uom_limits_list,uom_limits_update,product_rules_list,product_rules_update,product_rules_delete|None
+order|Handler|Complete|OrderService,ActivityLogger|create,get,list|None
+outbound|Handler|Complete|Outbound,ActivityLogger|list,detail,stats,search_products,check_stock,create,update,add_item,pick_items,ship,complete,delete,delete_item,update_item_status|None
+picking|Handler|Complete|PickingService,ActivityLogger|confirm_pick,pending_picks|None
+picklist|Handler|Complete|Picklist,PicklistService,ActivityLogger|list,detail,stats,create_from_outbound,confirm,complete,delete,update_item,export_data,generate_for_wave|None
+print|Handler|Partial|Picklist|Utility handler - PDF/barcode generation|No explicit actions; helper module
+products|Handler|Complete|Product,ActivityLogger|list,all,detail,create,update,delete|None
+putaway|Handler|Complete|Putaway,ActivityLogger|recommend,validate,list_blocks,add_block,create_block,remove_block,deactivate_block,create_task,has_open_pallets,zones,save_zone,delete_zone,zone_aisles,save_zone_aisle,delete_zone_aisle,uom_limits,save_uom_limit,product_rules,save_product_rule,delete_product_rule,aisle_map,bins,task_list,task_detail,task_assign,assign_task,unassign_task,task_update_pallet,task_complete_pallet,task_complete,task_cancel,assignable_users,get_lpn_label_data,print_lpn_label,my_tasks,scan_override|None
+replenishment|Handler|Complete|Replenishment,ActivityLogger|list,suggestions,detect,suggest,generate,for_demand,targets,save_target,delete_target|None
+report|Handler|Complete|Report|daily,products,inbound,outbound,stock,ledger,list,modules|None
+staging|Handler|Complete|StagingService,ActivityLogger|scan_staging,staged_items|None
+stock|Handler|Complete|Stock,ActivityLogger|list,list_grouped,summary,expiring,by_location,detail,locations,transfer,adjust,hold,release,scan,scan_override|None
+stocktake|Handler|Complete|StockTake,ActivityLogger|list,detail,stats,get_locations,get_scope_locations,get_stock,create,add_item,auto_load,update,delete_item,delete,start_counting,save_counters,advance_to_c2,finish_counting,save_review,apply_adjustment|None
+system|Handler|Partial|Report,ActivityLogger|reset_operational_data|Single action handler; admin maintenance only
+users|Handler|Complete|Auth|list,all,detail,create,update,delete|None
+wave|Handler|Complete|Wave,ActivityLogger|list,detail,candidate_orders,create,cancel,add_order,release|None
+waves|Handler|Complete|Wave,ActivityLogger|list,detail,candidate_orders,create,cancel|Possible duplicate of wave handler; similar functionality
+AbcAnalysis|Service|Complete|PDO|analyze,status,recompute|Velocity class analysis; 90-day lookback window
+ActivityLogger|Service|Complete|PDO|log,getRecent,getForReference,countRecent,actionLabel,moduleIcon,moduleColor|Audit trail; used by all handlers
+Asn|Service|Complete|PDO,Product|list,countAll,detail,createWithNumber,create,generateNumber,update,cancel,markReceived,linkedInbounds|Advanced Shipping Notice workflow; links to inbound_orders
+Auth|Service|Complete|PDO|check,user,login,logout,requireAuth,loginByToken,hasRole,requireRole,canWrite,canAdmin,requireAdmin,requireWrite,requireDepartment|Role-based access control (RBAC)
+BinTransfer|Service|Complete|PDO|generateNumber,getAll,countAll,getById,getStockAtLocation,getLocationsWithStock,create,execute,cancel|Bin-to-bin stock movement and tracking
+ConsolidationService|Service|Complete|PDO|consolidate,getStatus|Shipment consolidation logic
+Customer|Service|Complete|PDO|getAll,getCount,getTypeStats,getPaginated,getById,create,update,delete|Customer master data management
+CycleCount|Service|Complete|PDO|listSchedules,saveSchedule,deleteSchedule,runDue,runNow|Scheduled inventory counting and execution
+DiscrepancyService|Service|Complete|PDO|logDiscrepancy,get,list|Audit discrepancy tracking and logging
+DispatchService|Service|Complete|PDO|scanDispatch,getDispatch,listDispatches|Dispatch orchestration and order batching
+ExcelExport|Service|Complete|PHPSpreadsheet|__construct,setTitle,setSubtitle,setHeaders,addRow,addRows,addSummary,autoSize,download,exportInbound,exportInboundWithItems,exportOutbound,exportOutboundWithItems,exportStock,exportLedger,exportProducts,exportCustomers,exportDailyReport,exportExpiringItems,exportStockTake|Excel export builder using PhpSpreadsheet library
+FefoAllocator|Service|Complete|PDO,Stock|allocate|FEFO (First Expired First Out) allocation logic; critical for outbound
+GiExportService|Service|Complete|PDO,ExcelExport|export|Goods Issue export handler
+Inbound|Service|Complete|PDO,Putaway,Stock,FefoAllocator|generateNumber,getAll,countAll,getById,getItems,getItemLocations,getOrderLocations,create,addItem,saveItemLocations,calculatePallet,calcPalletByLocation,calculateExpiryDate,calculatePalletDistribution,update,updateItem,updateItemDates,updateItemPalletNo,updateItemQty,deleteItem,complete,changeItemStatus,savePalletLocations,saveItemLocation,autoComplete,regenerateLedger,delete,getStats|Inbound receiving & putaway orchestration; core flow
+LabelPrinter|Service|Complete|PDO,PalletHelper,ExcelExport|lpnLabel|LPN label generation and printing
+LocationManager|Service|Complete|PDO,PalletHelper|getAll,countAll,getAvailableLocations,isAvailable,getLocationInfo,suggestLocationsForInbound,getAvailableLocationsByLevel,commitInboundLocations,getFEFOByLocation,reserveForOutbound,deductAfterShip,releaseReservation,getPicklistLocations,getZoneSummary|Warehouse location hierarchy (aisle-rack-level-bin) management
+OrderService|Service|Complete|PDO|create,get,list,markShipped,markPartiallyShipped|Order lifecycle management and status transitions
+Outbound|Service|Complete|PDO,Stock,FefoAllocator,Inbound|displayOrderNo,saveDestinations,generateNumber,getAll,countAll,getById,getItems,getItemPickedLocations,getAvailableStock,getTotalAvailableQty,getFEFOAllocation,addItemWithFEFO,create,calculatePallet,calculatePalletDistribution,update,updateItem,deleteItem,pickItems,ship,complete,delete,getStats|Outbound shipping with FEFO allocation; core flow
+PalletHelper|Service|Complete|PDO,Product|calculatePallet,palletToUnits,getPalletCapacity,validateQuantity,calculateExpiryDate,getExpiryInfo,generateLocations,getProductUOMInfo,calculateLiters,deriveUppFromPackSize,getUomOptions,calculatePalletDistribution,levelOf,palletFunctionFor,isFullPallet,calcPalletByLocation,validateQuantityV2|UOM/pallet conversion helper; used across services
+PickingService|Service|Complete|PDO,Picklist,PicklistService|confirmPick,getPendingPicks|Pick confirmation workflow
+Picklist|Service|Complete|PDO,PalletHelper|__construct,generateNumber,createFromOutbound,createFromOrders,insertPicklistItems,calculatePalletDistribution,getById,getItems,getAll,countAll,getStats,updateItem,confirm,complete,delete,exportForPrint,addCrossDockItem|Picklist generation & management; links to waves
+PicklistService|Service|Complete|PDO,Picklist|generateForWave,createForOrder|Picklist service orchestration
+Product|Service|Complete|PDO|getAll,getCount,getStatsByUom,getPaginated,getById,getByCode,create,update,delete,search,calculatePallet,calculatePalletDistribution,getUomOptions,validateQuantity,calculateExpiryDate|Product master data management and UOM handling
+Putaway|Service|Complete|PDO,LocationManager,PalletHelper,Inbound,TaskAssignmentService|recommend,recommendLocations,validate,listBlocks,addBlock,removeBlock,createTask,enqueueForPutaway,palletFunctionFor,openTaskNumbers,reconcileItemRows,getInboundOpenTask,validatePlacement,listTasks,taskDetail,assignTask,confirmPallet,completeTask,cancelTask,hasOpenPallets,assignTeam,unassignTeam,updateTaskPallet,completeTaskPallet,listAssignableUsers,getLpnLabelData,fallbackLpnLabel,myTasks,scanOverride,listZones,saveZone,deleteZone,listZoneAisles,saveZoneAisle,deleteZoneAisle,listUomLimits,saveUomLimit,listProductRules,saveProductRule,deleteProductRule,listAisleMap,listAllBins,cancelItemPallets,deriveUppFromPackSize,levelOf,isFullPallet,calcPalletByLocation|Putaway task orchestration with zone/aisle/bin/UOM rules; large feature set
+Replenishment|Service|Complete|PDO,Stock|list,targets,detectShortages,suggestTransfers,generateTransfersFull,demandReplenishment,saveTarget,deleteTarget|Replenishment detection & transfer generation
+Report|Service|Complete|PDO,ActivityLogger,ExcelExport,Stock,Inbound,Outbound,StockTake|getDailyReport,dashboardStats,aisleDetail,checkExpiryAlerts,fefoQueue,dashboardAlerts,dashboardInsights,reportProducts,reportStock,reportLedger,activityLogList,activityModules,resetOperationalData,exportToCSV|Analytics & reporting engine; aggregates multiple services
+StagingService|Service|Complete|PDO,Stock|scanStaging,getStagedItems|Staging area scan & management
+Stock|Service|Complete|PDO,ActivityLogger|getAll,getById,getByProduct,getSummary,getExpiringSoon,getExpiryInfo,getMovement,getStockByLocation,transfer,adjust,availableHoldClause,hold,release,scan,scanOverride|Core stock ledger & movement; high critical path usage
+StockTake|Service|Complete|PDO,Stock|getAll,getById,getItems,calculateAccuracy,create,autoLoadByLocations,getActiveLockedLocations,addItem,update,delete,getSystemStock,getStats,startCounting,saveC1,advanceToC2,saveC2,saveCounters,finishCounting,saveReview,applyAdjustment,addItemFull|Cycle counting & stock opname orchestration
+TaskAssignmentService|Service|Complete|PDO|createOperator,getOperator,listOperators,assign|Operator task assignment for putaway
+Wave|Service|Complete|PDO,Picklist,LocationManager|generateNumber,countAll,getAll,getById,detail,create,cancel,candidateOrders,addOrder,release|Wave picking orchestration; links to picklists

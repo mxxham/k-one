@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, FormEvent, ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, PackagePlus, Trash2, Printer, FileText, ClipboardList, MapPin } from 'lucide-react';
-import { api, apiHref, webBase, getToken } from '@/lib/api';
+import { api, apiHref, webBase, getToken, OutboundOrderDetail } from '@/lib/api';
 import { WebBtn } from '@/components/WebBtn';
 import { fmtNum, fmtDate, fmtDateTime } from '@/lib/format';
 import { useAuth } from '@/context/AuthContext';
@@ -350,7 +350,7 @@ export default function OutboundDetail() {
   const toast = useToast();
   const orderId = Number(id);
 
-  const [order, setOrder] = useState<any>(null);
+  const [order, setOrder] = useState<OutboundOrderDetail | null>(null);
   const [items, setItems] = useState<OutboundItem[]>([]);
   const [destinations, setDestinations] = useState<DestRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -358,23 +358,31 @@ export default function OutboundDetail() {
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [statusItem, setStatusItem] = useState<OutboundItem | null>(null);
   const [newStatus, setNewStatus] = useState('Goods Received');
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetchDetail = async () => {
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     setLoading(true);
     try {
-      const res = await api('outbound', 'detail', { params: { id: orderId } });
-      setOrder(res.order || null);
-      setItems(res.items || []);
-      setDestinations(res.destinations || []);
+      const res = await api('outbound', 'detail', { params: { id: orderId }, signal: ctrl.signal });
+      if (!ctrl.signal.aborted) {
+        setOrder(res.order || null);
+        setItems(res.items || []);
+        setDestinations(res.destinations || []);
+      }
     } catch (err: any) {
+      if (err.name === 'AbortError') return;
       toast('error', err.message || 'Gagal memuat data');
     } finally {
-      setLoading(false);
+      if (!ctrl.signal.aborted) setLoading(false);
     }
   };
 
   useEffect(() => {
     if (orderId) fetchDetail();
+    return () => abortRef.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 
@@ -488,7 +496,7 @@ export default function OutboundDetail() {
             {canWrite && deletable && <ConfirmButton label="Hapus Order" onConfirm={handleDelete} disabled={busy} />}
             <button
               onClick={() => navigate('/outbound')}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/15 text-white text-sm font-semibold hover:bg-white/25"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/25 border border-white/40 text-white text-sm font-semibold hover:bg-white/35"
             >
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
@@ -674,7 +682,7 @@ export default function OutboundDetail() {
       </Modal>
 
       {canWrite && (
-        <AddItemModal open={addItemOpen} onClose={() => setAddItemOpen(false)} outboundId={orderId} onDone={fetchDetail} />
+        <AddItemModal key={addItemOpen ? 'open' : 'closed'} open={addItemOpen} onClose={() => setAddItemOpen(false)} outboundId={orderId} onDone={fetchDetail} />
       )}
     </div>
   );

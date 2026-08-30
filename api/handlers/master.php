@@ -306,9 +306,8 @@ function handle_locations($action) {
                 $sql .= " AND lm.zone = ?";
                 $params[] = $zone;
             }
-            $sql .= " ORDER BY lm.aisle IS NULL, lm.aisle, lm.rack IS NULL, lm.rack,
-                              lm.row_name IS NULL, lm.row_name, lm.position IS NULL, lm.position, lm.location_code
-                      LIMIT 500";
+$sql .= " ORDER BY lm.aisle IS NULL, lm.aisle, lm.rack IS NULL, lm.rack,
+                              lm.row_name IS NULL, lm.row_name, lm.position IS NULL, lm.position, lm.location_code";
             $stmt = db()->prepare($sql);
             $stmt->execute($params);
             json_out(['rows' => $stmt->fetchAll()]);

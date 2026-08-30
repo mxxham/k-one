@@ -1,17 +1,5 @@
 <?php
 
-/**
- * ApiException — mirrors v2 common/api-exception.ts ApiException.badRequest / notFound.
- * Used to return typed HTTP status codes instead of generic 500.
- */
-class ApiException extends \Exception {
-    public int $statusCode;
-    public function __construct(string $message, int $statusCode = 400) {
-        parent::__construct($message);
-        $this->statusCode = $statusCode;
-    }
-}
-
 class Picklist {
 
     public static function generateNumber() {

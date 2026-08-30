@@ -177,7 +177,6 @@ export default function Rack3D({ bins, onHover, onSelect, selectedKey }: Rack3DP
       const p = layout.byCode[b.location_code];
       if (p) out.push({ bin: b, pos: p });
     }
-    console.log('[Rack3D] rendered bins:', out.length, 'of', bins.length);
     return out;
   }, [bins, layout]);
 

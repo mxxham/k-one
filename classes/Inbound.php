@@ -2,11 +2,11 @@
 
 class Inbound {
 
-    public static function generateNumber() {
-        $db = db();
+    public static function generateNumber($db = null) {
+        $db = $db ?? db();
         $year  = date('Y');
         $month = date('m');
-        $prefix = "IN-{$year}{$month}-";
+        $prefix = INBOUND_NUMBER_PREFIX . "{$year}{$month}-";
 
         $stmt = $db->prepare("SELECT order_number FROM inbound_orders
                                WHERE order_number LIKE ?
@@ -27,8 +27,8 @@ class Inbound {
         return $prefix . date('His') . rand(10,99);
     }
 
-    public static function getAll($status = null, $limit = null, $offset = 0, $odNo = null) {
-        $db = db();
+    public static function getAll($status = null, $limit = null, $offset = 0, $odNo = null, $db = null) {
+        $db = $db ?? db();
         $db->exec("SET SESSION group_concat_max_len = 65536");
         $conditions = [];
         $params = [];
@@ -59,8 +59,8 @@ class Inbound {
         return $stmt->fetchAll();
     }
 
-    public static function countAll($status = null, $odNo = null) {
-        $db = db();
+    public static function countAll($status = null, $odNo = null, $db = null) {
+        $db = $db ?? db();
         $conditions = [];
         $params = [];
         if ($status) { $conditions[] = "io.status = ?"; $params[] = $status; }
@@ -74,8 +74,8 @@ class Inbound {
         return (int)$stmt->fetchColumn();
     }
 
-    public static function getById($id) {
-        $db = db();
+    public static function getById($id, $db = null) {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT io.*,
                 u.full_name as created_by_name,
                 r.full_name as received_by_name
@@ -87,8 +87,8 @@ class Inbound {
         return $stmt->fetch();
     }
 
-    public static function getItems($inboundId) {
-        $db = db();
+    public static function getItems($inboundId, $db = null) {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT ii.*,
                 p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
                 ob.order_number AS cross_dock_order_number, ob.status AS cross_dock_order_status
@@ -103,8 +103,8 @@ class Inbound {
 
     
 
-    public static function getItemLocations($itemId) {
-        $db = db();
+    public static function getItemLocations($itemId, $db = null) {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT sl.*,
                 COALESCE(sl.original_quantity, sl.quantity) AS display_quantity
                 FROM stock_locations sl
@@ -116,8 +116,8 @@ class Inbound {
 
     
 
-    public static function getOrderLocations($inboundId) {
-        $db = db();
+    public static function getOrderLocations($inboundId, $db = null) {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT sl.*,
                 p.product_code, p.product_name,
                 ii.batch_number, ii.uom, ii.exp_date
@@ -130,8 +130,8 @@ class Inbound {
         return $stmt->fetchAll();
     }
 
-    public static function create($data) {
-        $db = db();
+    public static function create($data, $db = null) {
+        $db = $db ?? db();
         try {
             $db->beginTransaction();
 
@@ -183,7 +183,7 @@ class Inbound {
                 ($data['expected_date']   ?: null),
                 $receivedBy,
                 ($data['received_date']   ?: null),
-                $data['status'] ?? 'Draft',
+                $data['status'] ?? INBOUND_STATUSES['DEFAULT'],
                 $data['notes']           ?? null,
                 $data['created_by']      ?? null,
                 $asnId
@@ -224,8 +224,8 @@ class Inbound {
 
     
 
-    public static function addItem($inboundId, $item) {
-        $db = db();
+    public static function addItem($inboundId, $item, $db = null) {
+        $db = $db ?? db();
 
         
         $stmt = $db->prepare("SELECT uom_type, uom_per_pallet, liters_per_unit,
@@ -240,7 +240,7 @@ class Inbound {
         $uom      = $item['uom'] ?? $productInfo['uom_type'];
 
         
-        $uomPerPallet = max(1, intval($productInfo['uom_per_pallet'] ?? 4));
+        $uomPerPallet = max(1, intval($productInfo['uom_per_pallet'] ?? DEFAULT_UOM_PER_PALLET));
 
         $pallet = self::calculatePallet($quantity, $uomPerPallet);
 
@@ -292,8 +292,8 @@ class Inbound {
             $item['pallet_no'] ?? null,
             $item['manufacture_date'] ?? null,
             $expDate,
-            $item['stock_status'] ?? 'Pending',
-            $item['in_process_status'] ?? 'Dues In',
+            $item['stock_status'] ?? INBOUND_DEFAULT_STOCK_STATUS,
+            $item['in_process_status'] ?? INBOUND_DEFAULT_PROCESS_STATUS,
             $item['cross_dock_outbound_order_id'] ?? null,
             $item['notes'] ?? null
         ]);
@@ -325,8 +325,8 @@ class Inbound {
 
     
 
-    public static function saveItemLocations($itemId, $stockId, array $palletLocs, $batchNumber, $uom = 'EA') {
-        $db = db();
+    public static function saveItemLocations($itemId, $stockId, array $palletLocs, $batchNumber, $uom = 'EA', $db = null) {
+        $db = $db ?? db();
 
         $db->prepare("DELETE FROM stock_locations WHERE inbound_item_id = ?")->execute([$itemId]);
 
@@ -376,7 +376,7 @@ class Inbound {
         return (int)ceil($quantity / $uomPerPallet);
     }
 
-    public static function calculateExpiryDate($productionDate, $years = 4) {
+    public static function calculateExpiryDate($productionDate, $years = DEFAULT_SHELF_LIFE_YEARS) {
         if (empty($productionDate)) return null;
         $date = date_create($productionDate);
         if (!$date) return null;
@@ -399,8 +399,8 @@ class Inbound {
         return $dist;
     }
 
-    public static function update($id, $data) {
-        $db = db();
+    public static function update($id, $data, $db = null) {
+        $db = $db ?? db();
         try {
             $db->beginTransaction();
 
@@ -417,7 +417,7 @@ class Inbound {
                 $data['do_number']    ?? null,
                 $data['container_no'] ?? null, $data['armada_no'] ?? null,
                 ($data['production_date'] ?: null), ($data['expected_date'] ?: null),
-                $data['status'] ?? 'Draft', $data['notes'] ?? null,
+                $data['status'] ?? INBOUND_STATUSES['DEFAULT'], $data['notes'] ?? null,
                 $id
             ]);
 
@@ -446,8 +446,8 @@ class Inbound {
         }
     }
 
-    public static function updateItem($itemId, $data) {
-        $db = db();
+    public static function updateItem($itemId, $data, $db = null) {
+        $db = $db ?? db();
 
         $batchCol = 'batch_number';
 
@@ -461,7 +461,7 @@ class Inbound {
             $data['batch_number'] ?? $data['batch_no'] ?? null,
             $data['location'] ?? null,
             $data['quantity'] ?? 0,
-            $data['uom'] ?? 'EA',
+            $data['uom'] ?? UOM_DEFAULT_SQL,
             $data['actual_qty'] ?? $data['quantity'] ?? 0,
             $data['manufacture_date'] ?? null,
             $data['exp_date'] ?? null,
@@ -477,7 +477,7 @@ class Inbound {
                 $itemId, null,
                 $data['pallet_locations'],
                 $data['batch_number'] ?? null,
-                $data['uom'] ?? 'EA'
+                $data['uom'] ?? UOM_DEFAULT_SQL
             );
         }
 
@@ -486,8 +486,8 @@ class Inbound {
 
     
 
-    public static function updateItemDates(int $itemId, ?string $manufactureDate, ?string $expDate): bool {
-        $db = db();
+    public static function updateItemDates(int $itemId, ?string $manufactureDate, ?string $expDate, $db = null): bool {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT ii.*, io.status AS ord_status
                 FROM inbound_items ii
                 JOIN inbound_orders io ON ii.inbound_order_id = io.id
@@ -520,8 +520,8 @@ class Inbound {
         return true;
     }
 
-    public static function updateItemPalletNo($itemId, $palletNo) {
-        $db = db();
+    public static function updateItemPalletNo($itemId, $palletNo, $db = null) {
+        $db = $db ?? db();
         $val = ($palletNo !== null && trim($palletNo) !== '') ? strtoupper(trim($palletNo)) : null;
         $db->prepare("UPDATE inbound_items SET pallet_no = ? WHERE id = ?")
            ->execute([$val, $itemId]);
@@ -530,8 +530,8 @@ class Inbound {
 
     
 
-    public static function updateItemQty(int $itemId, float $newQty): bool {
-        $db = db();
+    public static function updateItemQty(int $itemId, float $newQty, $db = null): bool {
+        $db = $db ?? db();
         $db->beginTransaction();
         try {
             $stmt = $db->prepare("SELECT ii.*, io.status AS ord_status, p.uom_per_pallet
@@ -547,7 +547,7 @@ class Inbound {
             }
             if ($newQty <= 0) throw new \Exception("Qty harus lebih dari 0");
 
-            $uomPlt = max(1, (int)($item['uom_per_pallet'] ?? 4));
+            $uomPlt = max(1, (int)($item['uom_per_pallet'] ?? DEFAULT_UOM_PER_PALLET));
             $newPallet = (int)ceil($newQty / $uomPlt);
 
             
@@ -587,8 +587,8 @@ class Inbound {
         }
     }
 
-    public static function deleteItem($itemId) {
-        $db = db();
+    public static function deleteItem($itemId, $db = null) {
+        $db = $db ?? db();
         try {
             $db->beginTransaction();
 
@@ -640,7 +640,7 @@ class Inbound {
                                $itemData['inbound_order_id'],
                                $batchVal,
                                $qty,
-                               $itemData['uom'] ?? 'Drum',
+                               $itemData['uom'] ?? UOM_DEFAULT_TYPE,
                            ]);
                     }
                 }
@@ -663,9 +663,9 @@ class Inbound {
 
     
 
-    public static function complete($id) {
+    public static function complete($id, $db = null) {
         file_put_contents('D:/K-one/k-one/asn_debug.log', date('H:i:s') . " Inbound::complete START for id=$id\n", FILE_APPEND);
-        $db = db();
+        $db = $db ?? db();
         try {
             $db->beginTransaction();
 
@@ -680,12 +680,7 @@ class Inbound {
             $inbound = self::getById($id);
             $items   = self::getItems($id);
 
-            $stockStatusMap = [
-                'ATP'            => 'Available',
-                'Picked'         => 'Available',
-                'Dues In'        => 'Dues In',
-                'Unserviceable'  => 'Rejected',
-            ];
+            $stockStatusMap = INBOUND_STOCK_STATUS_MAP;
 
             
             
@@ -694,7 +689,7 @@ class Inbound {
 
             foreach ($items as $item) {
                 $batchVal  = $item['batch_number'] ?? $item['batch_no'] ?? null;
-                $inProcess = $item['in_process_status'] ?? 'Dues In';
+                $inProcess = $item['in_process_status'] ?? INBOUND_DEFAULT_PROCESS_STATUS;
 
                 if ($inProcess === 'Dues In') continue;
 
@@ -706,7 +701,7 @@ class Inbound {
                 $totalQty  = floatval($item['actual_qty'] ?? $item['quantity'] ?? 0);
 
 
-                $uomPerPlt = max(1, intval($item['uom_per_pallet'] ?? 4));
+                $uomPerPlt = max(1, intval($item['uom_per_pallet'] ?? DEFAULT_UOM_PER_PALLET));
 
                 
                 
@@ -952,20 +947,15 @@ class Inbound {
      * enqueued putaway task (deferred stock_locations write, v2 parity).
      * Cross-dock staging + picklist happens at ATP.
      */
-    public static function changeItemStatus(int $itemId, string $newProcess, ?int $createdBy = null): void {
-        $db = db();
-        $allowed = ['Dues In', 'Goods Received', 'Unserviceable', 'ATP'];
+    public static function changeItemStatus(int $itemId, string $newProcess, ?int $createdBy = null, $db = null): void {
+        $db = $db ?? db();
+        $allowed = INBOUND_ALLOWED_PROCESSES;
         if (!in_array($newProcess, $allowed, true)) {
             throw new Exception('Status tidak valid.');
         }
 
-        $stockBadge = [
-            'Dues In'        => 'Pending',
-            'Goods Received' => 'Pending',
-            'ATP'            => 'Accepted',
-            'Unserviceable'  => 'Rejected',
-        ];
-        $newBadge = $stockBadge[$newProcess] ?? 'Pending';
+        $stockBadge = INBOUND_STOCK_BADGE;
+        $newBadge = $stockBadge[$newProcess] ?? STOCK_STATUSES['PENDING'];
 
         $ownTx = !$db->inTransaction();
         $ioId = 0;
@@ -983,11 +973,11 @@ class Inbound {
             $it = $itRow->fetch();
             if (!$it) throw new Exception('Item tidak ditemukan', 404);
             $ioId       = (int)$it['io_id'];
-            $oldProcess = $it['in_process_status'] ?? 'Dues In';
+            $oldProcess = $it['in_process_status'] ?? INBOUND_DEFAULT_PROCESS_STATUS;
             $pid        = (int)$it['product_id'];
             $batch      = $it['batch_number'] ?? $it['batch_no'] ?? null;
             $totalQty   = floatval($it['actual_qty'] ?? $it['quantity'] ?? 0);
-            $uomPerPlt  = max(1, intval($it['uom_per_pallet'] ?? 4));
+            $uomPerPlt  = max(1, intval($it['uom_per_pallet'] ?? DEFAULT_UOM_PER_PALLET));
             $plt        = (int)ceil($totalQty / $uomPerPlt);
 
             // 1. Update inbound_items
@@ -1021,7 +1011,7 @@ class Inbound {
                      reference_number, batch_number, quantity_in, quantity_out, uom, pallet, balance, location, notes)
                     VALUES (?,?,'IN','Inbound',?,?,?,?,0,?,?,?,?,?)")
                    ->execute([date('Y-m-d'), $pid, $it['io_id'], $it['order_number'], $batch,
-                              $qtyIn, $it['uom'] ?? 'Drum', $plt,
+                              $qtyIn, $it['uom'] ?? UOM_DEFAULT_TYPE, $plt,
                               $balance, $loc, $notes]);
             };
 
@@ -1047,11 +1037,11 @@ class Inbound {
                     $db->prepare("INSERT INTO stock_locations
                         (stock_id, location_code, pallet_seq, quantity, original_quantity, uom, is_full_pallet, batch_number, inbound_item_id, status)
                         VALUES (NULL, 'STAGING', 1, ?, ?, ?, 1, ?, ?, 'Available')")
-                       ->execute([$totalQty, $totalQty, $it['uom'] ?? 'Drum', $batch, $itemId]);
+                       ->execute([$totalQty, $totalQty, $it['uom'] ?? UOM_DEFAULT_TYPE, $batch, $itemId]);
                     $slId = (int)$db->lastInsertId();
                     $db->prepare("UPDATE inbound_items SET location='STAGING' WHERE id=?")
                        ->execute([$itemId]);
-                    Picklist::addCrossDockItem($crossDockObId, $pid, $totalQty, $batch, $it['uom'] ?? 'Drum', $createdBy ?? ($it['created_by'] ?? 0), $slId);
+                    Picklist::addCrossDockItem($crossDockObId, $pid, $totalQty, $batch, $it['uom'] ?? UOM_DEFAULT_TYPE, $createdBy ?? ($it['created_by'] ?? 0), $slId);
                 } else {
                     $cur = $runningBal();
                     $insertLedger('[Inbound] ATP | In-Process: ATP | ' . $it['order_number'], $totalQty, $it['location'] ?? null, $cur + $totalQty);
@@ -1143,7 +1133,7 @@ class Inbound {
                 $db->prepare("INSERT INTO stock
                     (product_id,batch_number,location,quantity,uom,pallet,manufacture_date,expiry_date,stock_status)
                     VALUES (?,?,'QUA_SHELL',?,?,?,?,?,'Rejected')")
-                   ->execute([$pid, $batch, $totalQty, $it['uom'] ?? 'Drum', $plt, $it['manufacture_date'], $it['exp_date']]);
+                   ->execute([$pid, $batch, $totalQty, $it['uom'] ?? UOM_DEFAULT_TYPE, $plt, $it['manufacture_date'], $it['exp_date']]);
                 $delLedger();
                 $cur = $runningBal();
                 $insertLedger('[Inbound] Unserviceable (QUA_SHELL) | In-Process: Unserviceable | ' . $it['order_number'], $totalQty, 'QUA_SHELL', $cur);
@@ -1168,9 +1158,9 @@ class Inbound {
     }
 
     /** v2 — manual Manage Pallet Locations save with putaway-rule validation. */
-    public static function savePalletLocations(int $itemId, array $pallets, int $userId = 0): void {
-        $db = db();
-        $specialLocs = ['QUA_SHELL', 'STAGING'];
+    public static function savePalletLocations(int $itemId, array $pallets, int $userId = 0, $db = null): void {
+        $db = $db ?? db();
+        $specialLocs = SPECIAL_LOCATIONS;
         $invalidLocs = [];
         $invalidRules = [];
         foreach ($pallets as $p) {
@@ -1187,7 +1177,7 @@ class Inbound {
                 $itInfo->execute([$itemId]);
                 $info = $itInfo->fetch();
                 if ($info) {
-                    $val = Putaway::validatePlacement((int)$info['product_id'], $pLoc, floatval($p['quantity'] ?? 0), (string)($info['uom'] ?? $info['uom_type'] ?? 'Drum'));
+                    $val = Putaway::validatePlacement((int)$info['product_id'], $pLoc, floatval($p['quantity'] ?? 0), (string)($info['uom'] ?? $info['uom_type'] ?? UOM_DEFAULT_TYPE));
                     if (!$val['valid']) {
                         $invalidRules[] = $pLoc . ': ' . implode('; ', $val['reasons']);
                     }
@@ -1217,7 +1207,7 @@ class Inbound {
                 $p['pallet_seq'] ?? 1,
                 $pQty,
                 $pQty,
-                $itRow['uom'] ?? 'Drum',
+                $itRow['uom'] ?? UOM_DEFAULT_TYPE,
                 !empty($p['is_full']) ? 1 : 0,
                 $batch,
                 Putaway::palletFunctionFor($pLoc),
@@ -1229,10 +1219,10 @@ class Inbound {
     }
 
     /** v2 — assign a single location to an item (updates stock when completed). */
-    public static function saveItemLocation(int $itemId, string $loc): void {
-        $specialLocs = ['QUA_SHELL', 'STAGING'];
+    public static function saveItemLocation(int $itemId, string $loc, $db = null): void {
+        $specialLocs = SPECIAL_LOCATIONS;
         if ($loc === '' || !$itemId) throw new Exception('Lokasi dan item wajib diisi.');
-        $db = db();
+        $db = $db ?? db();
         if (!in_array($loc, $specialLocs, true)) {
             $locCheck = $db->prepare("SELECT id FROM location_master WHERE location_code=? AND is_active=1 LIMIT 1");
             $locCheck->execute([$loc]);
@@ -1255,11 +1245,11 @@ class Inbound {
      * S42 — auto-complete the inbound when every item is ATP/Unserviceable and
      * no putaway pallets remain open (v2 inbound workflow).
      */
-    public static function autoComplete(int $id): bool {
-        $db = db();
+    public static function autoComplete(int $id, $db = null): bool {
+        $db = $db ?? db();
         $items = self::getItems($id);
         foreach ($items as $item) {
-            $inProcess = $item['in_process_status'] ?? 'Dues In';
+            $inProcess = $item['in_process_status'] ?? INBOUND_DEFAULT_PROCESS_STATUS;
             if (!in_array($inProcess, ['ATP', 'Unserviceable'], true)) {
                 return false;
             }
@@ -1289,9 +1279,9 @@ class Inbound {
         return true;
     }
 
-    private static function syncBatchToOutbound($productId, $batchNumber, $expDate) {
+    private static function syncBatchToOutbound($productId, $batchNumber, $expDate, $db = null) {
         if (empty($batchNumber)) return;
-        $db = db();
+        $db = $db ?? db();
 
         
         $db->prepare("UPDATE outbound_items oi
@@ -1314,8 +1304,8 @@ class Inbound {
            ->execute([$batchNumber, $batchNumber, $productId]);
     }
 
-    private static function addToLedger($item, $inbound, $batchVal = null) {
-        $db = db();
+    private static function addToLedger($item, $inbound, $batchVal = null, $db = null) {
+        $db = $db ?? db();
 
         $isRejected = ($item['in_process_status'] ?? '') === 'Unserviceable'
                    || ($item['stock_status'] ?? '') === 'Rejected';
@@ -1343,7 +1333,7 @@ class Inbound {
             ? '[Inbound] Unserviceable (QUA_SHELL) | In-Process: ' . $inProcessLabel . ' | ' . $inbound['order_number']
             : '[Inbound] ' . $inProcessLabel . ' | In-Process: ' . $inProcessLabel . ' | ' . $inbound['order_number'];
 
-        $uomPP = max(1, intval($item['uom_per_pallet'] ?? 4));
+        $uomPP = max(1, intval($item['uom_per_pallet'] ?? DEFAULT_UOM_PER_PALLET));
         $palletForLedger = ($uomPP > 0) ? (int)ceil($ledgerQty / $uomPP) : intval($item['pallet'] ?? 0);
 
         $db->prepare("INSERT INTO stock_ledger
@@ -1360,8 +1350,8 @@ class Inbound {
            ]);
     }
 
-    public static function regenerateLedger($id) {
-        $db = db();
+    public static function regenerateLedger($id, $db = null) {
+        $db = $db ?? db();
         try {
             $db->beginTransaction();
 
@@ -1373,7 +1363,7 @@ class Inbound {
 
             foreach ($items as $item) {
                 $batchVal  = $item['batch_number'] ?? $item['batch_no'] ?? null;
-                $inProcess = $item['in_process_status'] ?? 'Dues In';
+                $inProcess = $item['in_process_status'] ?? INBOUND_DEFAULT_PROCESS_STATUS;
                 if ($inProcess === 'Dues In') continue;
                 self::addToLedger($item, $inbound, $batchVal);
             }
@@ -1386,8 +1376,8 @@ class Inbound {
         }
     }
 
-    public static function delete($id) {
-        $db = db();
+    public static function delete($id, $db = null) {
+        $db = $db ?? db();
         try {
             $db->beginTransaction();
 
@@ -1454,8 +1444,8 @@ class Inbound {
         }
     }
 
-    public static function getStats() {
-        $db = db();
+    public static function getStats($db = null) {
+        $db = $db ?? db();
         $stats = [];
 
         $stmt = $db->prepare("SELECT COUNT(*) as count FROM inbound_orders

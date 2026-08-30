@@ -69,6 +69,37 @@ function handle_waves($action) {
             json_out(['id' => $id]);
             break;
 
+        case 'release':
+            api_require_write();
+            $id = (int)(body()['id'] ?? query('id'));
+            try {
+                $result = Wave::release($id);
+            } catch (Throwable $e) {
+                json_err($e->getMessage(), 409);
+            }
+            ActivityLogger::log('RELEASE_WAVE', 'waves', 'Wave', $id, null, 'Release wave ID ' . $id . ' menjadi Active');
+            json_out($result);
+            break;
+
+        case 'complete':
+            api_require_write();
+            $id = (int)(body()['id'] ?? query('id'));
+            try {
+                $wave = Wave::getById($id);
+                if (!$wave) {
+                    json_err('Wave tidak ditemukan', 404);
+                }
+                if ($wave['status'] !== 'Active') {
+                    json_err('Wave harus dalam status Active untuk diselesaikan', 409);
+                }
+                db()->prepare("UPDATE waves SET status = 'Completed' WHERE id = ?")->execute([$id]);
+            } catch (Throwable $e) {
+                json_err($e->getMessage(), 409);
+            }
+            ActivityLogger::log('COMPLETE_WAVE', 'waves', 'Wave', $id, null, 'Selesaikan wave ID ' . $id);
+            json_out(['id' => $id, 'status' => 'Completed']);
+            break;
+
         default:
             json_err('Invalid action: ' . $action, 404);
     }

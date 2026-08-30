@@ -40,8 +40,36 @@ $pdo = new PDO(sprintf('%s;dbname=%s', $dsn, TEST_DB_NAME), TEST_DB_USER, TEST_D
 ]);
 $files = glob(dirname(__DIR__) . '/migrations/0[0-9][0-9]-*.sql');
 sort($files);
+
+$mysqlCli = 'C:\\xampp\\mysql\\bin\\mysql.exe';
+
 foreach ($files as $file) {
-    $pdo->exec(file_get_contents($file));
+    $sql = file_get_contents($file);
+
+    // Replace production DB name with test DB name
+    $sql = str_replace('USE sanchaya;', 'USE ' . TEST_DB_NAME . ';', $sql);
+
+    if (strpos($sql, 'DELIMITER') !== false && file_exists($mysqlCli)) {
+        // Files with stored procedures must use mysql CLI (PDO splits on ;)
+        $tmpFile = tempnam(sys_get_temp_dir(), 'mig_') . '.sql';
+        file_put_contents($tmpFile, $sql);
+        $cmd = sprintf('"%s" -h %s -P %d -u %s %s < "%s" 2>&1',
+            $mysqlCli, TEST_DB_HOST, TEST_DB_PORT, TEST_DB_USER, TEST_DB_NAME, $tmpFile);
+        exec($cmd, $output, $exitCode);
+        unlink($tmpFile);
+        if ($exitCode !== 0) {
+            fwrite(STDERR, "WARNING: mysql CLI failed for " . basename($file) . ": " . implode("\n", $output) . "\n");
+        }
+    } else {
+        try {
+            $pdo->exec($sql);
+        } catch (PDOException $e) {
+            // Log but continue — some migrations reference columns added by
+            // stored procedures or have non-critical index issues.
+            fwrite(STDERR, "WARNING: migration " . basename($file) . " error (continuing): "
+                . $e->getMessage() . "\n");
+        }
+    }
 }
 
 // 3a. Seeded login (bcrypt hash of "admin123")

@@ -9,6 +9,421 @@ export interface User {
 
 export type Department = 'inbound' | 'outbound' | 'inventory' | 'ops' | 'all';
 
+// ─── Inbound ─────────────────────────────────────────────────────────────────
+
+export interface InboundOrder {
+  id: number;
+  order_number: string;
+  display_order_no?: string;
+  order_date?: string;
+  status?: string;
+  shipment_no?: string;
+  carrier_name?: string;
+  line_count?: number;
+  total_items?: number;
+  total_qty?: number;
+  total_pallet?: number;
+  cross_dock_count?: number;
+  received_date?: string;
+  item_count?: number;
+  notes?: string;
+  created_by_name?: string;
+}
+
+export interface InboundStats {
+  total?: number;
+  this_month?: number;
+  pending?: number;
+  receiving?: number;
+  dues_in?: number;
+  by_status?: Array<{ status: string; count: number }>;
+}
+
+export interface AsnRow {
+  id: number;
+  asn_number: string;
+  supplier_name?: string;
+  status?: string;
+  expected_arrival_date?: string;
+  total_items?: number;
+  notes?: string;
+}
+
+// ─── Outbound ────────────────────────────────────────────────────────────────
+
+export interface OutboundOrder {
+  id: number;
+  order_number: string;
+  display_order_no?: string;
+  order_date?: string;
+  customer_id?: number;
+  customer_name?: string;
+  so_number?: string;
+  do_number?: string;
+  shipment_number?: string;
+  destination?: string;
+  kota?: string;
+  armada_no?: string;
+  container_no?: string;
+  jenis_armada?: string;
+  expected_date?: string;
+  status?: string;
+  shipped_date?: string;
+  created_by_name?: string;
+  total_items?: number;
+  total_qty?: number;
+  total_pallet?: number;
+  line_count?: number;
+  cross_dock_count?: number;
+  notes?: string;
+  join?: { customer_name?: string };
+}
+
+export interface OutboundOrderDetail {
+  id: number;
+  order_number: string;
+  display_order_no?: string;
+  order_date?: string;
+  customer_id?: number;
+  customer_name?: string;
+  so_number?: string;
+  do_number?: string;
+  shipment_number?: string;
+  destination?: string;
+  kota?: string;
+  armada_no?: string;
+  container_no?: string;
+  jenis_armada?: string;
+  expected_date?: string;
+  status?: string;
+  shipped_date?: string;
+  created_by_name?: string;
+  notes?: string;
+}
+
+export interface OutboundStats {
+  total?: number;
+  pending?: number;
+  this_month?: number;
+  by_status?: Array<{ status: string; count: number }>;
+}
+
+export interface PicklistRow {
+  id: number;
+  picklist_no?: string;
+  outbound_number?: string;
+  status?: string;
+  created_date?: string;
+  total_items?: number;
+  total_qty?: number;
+}
+
+export interface PicklistStats {
+  pending?: number;
+  completed?: number;
+}
+
+export interface WaveRow {
+  id: number;
+  wave_number: string;
+  status?: string;
+  carrier?: string;
+  cutoff_time?: string;
+  order_count?: number;
+}
+
+// ─── Stock ───────────────────────────────────────────────────────────────────
+
+export interface StockItem {
+  id: number;
+  product_code: string;
+  product_name: string;
+  batch_number?: string;
+  location?: string;
+  quantity?: number;
+  uom?: string;
+  pallet?: number;
+  expiry_date?: string;
+  hold_status?: string;
+  manufacture_date?: string;
+}
+
+export interface StockSummaryRow {
+  id: number;
+  product_code: string;
+  product_name: string;
+  uom_type?: string;
+  batches?: number;
+  total_qty: number;
+  total_pallet: number;
+  nearest_expiry?: string;
+  expiring_count?: number;
+}
+
+export interface StockTakeRow {
+  id: number;
+  take_number?: string;
+  take_date?: string;
+  status?: string;
+  scope?: string;
+}
+
+export interface StockTakeStats {
+  total?: number;
+  this_month?: number;
+  avg_accuracy?: number;
+}
+
+export interface StockTakeDetailData {
+  id: number;
+  take_number?: string;
+  take_date?: string;
+  status?: string;
+  notes?: string;
+  created_by_name?: string;
+}
+
+export interface StockTakeAccuracy {
+  accuracy?: number;
+  total_stock_take?: number;
+  plus?: number;
+  minus?: number;
+  clear?: number;
+}
+
+export interface StockTakeItem {
+  id: number;
+  product_code?: string;
+  product_name?: string;
+  batch_number?: string;
+  uom?: string;
+  location?: string;
+  qty_system?: number | null;
+  counter_1?: number | null;
+  counter_2?: number | null;
+  counter_3?: number | null;
+  qty_physical?: number | null;
+  difference?: number | null;
+  status?: string;
+  notes?: string;
+  counter_by?: string;
+}
+
+// ─── Bin Transfer ────────────────────────────────────────────────────────────
+
+export interface BinTransferRow {
+  id: number;
+  transfer_number: string;
+  transfer_date: string;
+  product_id: number;
+  product_code: string;
+  product_name: string;
+  batch_number: string;
+  from_location: string;
+  to_location: string;
+  quantity: number;
+  uom: string;
+  reason: string;
+  status: string;
+  created_by_name: string;
+  completed_by_name: string;
+  created_date?: string;
+  created_at?: string;
+}
+
+// ─── Location ────────────────────────────────────────────────────────────────
+
+export interface Location {
+  id: number;
+  code: string;
+  aisle?: string;
+  rack?: string;
+  row_name?: string;
+  level?: string;
+  bin?: string;
+  zone?: string;
+}
+
+// ─── Product ─────────────────────────────────────────────────────────────────
+
+export interface Product {
+  id: number;
+  product_code: string;
+  product_name: string;
+  uom?: string;
+  uom_per_pallet?: number;
+}
+
+// ─── Supplier ────────────────────────────────────────────────────────────────
+
+export interface Supplier {
+  id: number;
+  supplier_code?: string;
+  supplier_name: string;
+}
+
+// ─── Customer ────────────────────────────────────────────────────────────────
+
+export interface Customer {
+  id: number;
+  customer_code?: string;
+  customer_name: string;
+}
+
+// ─── Dashboard ───────────────────────────────────────────────────────────────
+
+export interface DashboardStats {
+  kpi?: {
+    total_qty?: number;
+    total_drums?: number;
+    total_drums_trend?: number;
+    total_pallets?: number;
+    total_pallets_utilization?: number;
+    total_locations?: number;
+    occupied_locations?: number;
+    aging_batch_count?: number;
+    aging_quantity?: number;
+    dues_in?: number;
+    receiving_now?: number;
+    pending_outbound?: number;
+    shipped_today_orders?: number;
+    shipped_today_quantity?: number;
+    pick_accuracy_percent?: number;
+    pick_accurate_lines?: number;
+    pick_total_lines?: number;
+  };
+  stock_summary?: StockSummaryRow[];
+  monthly_activity?: MonthlyActivity[];
+  stock_by_location?: StockByLocationRow[];
+  pending_inbound?: InboundOrder[];
+  pending_outbound?: OutboundOrder[];
+}
+
+export interface MonthlyActivity {
+  month?: string;
+  inbound_qty?: number;
+  outbound_qty?: number;
+}
+
+export interface StockByLocationRow {
+  aisle: string;
+  total_locs?: number;
+  occupied_locs?: number;
+  total_qty?: number;
+  total_pallet?: number;
+}
+
+export interface AisleDetail {
+  error?: string;
+  stats?: {
+    total?: number;
+    occupied?: number;
+    total_qty?: number;
+    total_pallet?: number;
+  } | null;
+  locations?: AisleLocation[];
+}
+
+export interface AisleLocation {
+  id?: number;
+  code?: string;
+  rack?: string;
+  row_name?: string;
+  zone?: string;
+  product?: string;
+  product_code?: string;
+  qty?: number;
+  pallet?: number;
+  batch?: string;
+  expiry?: string;
+  is_partial?: boolean;
+  is_eceran?: boolean;
+}
+
+export interface AbcStatus {
+  classified?: number;
+  total?: number;
+  last_computed_at?: string;
+}
+
+// ─── Activity Log ────────────────────────────────────────────────────────────
+
+export interface ActivityLogRow {
+  id: number;
+  module?: string;
+  module_icon?: string;
+  action?: string;
+  record_id?: number;
+  full_name?: string;
+  username?: string;
+  old_value?: string;
+  new_value?: string;
+  created_at?: string;
+}
+
+// ─── Replenishment ───────────────────────────────────────────────────────────
+
+export interface ReplSuggestion {
+  target_id?: number;
+  product_id?: number;
+  product_code?: string;
+  product_name?: string;
+  location_id?: number;
+  pick_face_location?: string;
+  current_qty?: number;
+  min_qty?: number;
+  shortage?: number;
+}
+
+// ─── Cycle Count ─────────────────────────────────────────────────────────────
+
+export interface CycleCountSchedule {
+  id: number;
+  schedule_name?: string;
+  frequency?: string;
+  next_run_date?: string;
+  is_due?: boolean | string;
+}
+
+// ─── Ledger ──────────────────────────────────────────────────────────────────
+
+export interface LedgerProduct {
+  id: number;
+  product_code?: string;
+  product_name?: string;
+}
+
+// ─── Report ──────────────────────────────────────────────────────────────────
+
+export interface ReportData {
+  ledger_summary?: {
+    transactions_in?: number;
+    transactions_out?: number;
+    qty_in?: number;
+    qty_out?: number;
+  };
+  stock_summary?: ReportRow[];
+  inbound_activity?: ReportRow[];
+  outbound_activity?: ReportRow[];
+  expiring_items?: ReportRow[];
+  low_stock?: ReportRow[];
+  [key: string]: unknown;
+}
+
+export interface ReportRow {
+  id?: number;
+  [key: string]: unknown;
+}
+
+// ─── Import ──────────────────────────────────────────────────────────────────
+
+export interface PreviewStats {
+  total_rows?: number;
+  valid_rows?: number;
+  invalid_rows?: number;
+  [key: string]: unknown;
+}
+
 export const DEPARTMENTS: Array<{ key: Department; label: string }> = [
   { key: 'inbound', label: 'Inbound' },
   { key: 'outbound', label: 'Outbound' },
@@ -37,6 +452,49 @@ export interface ApiResult<T = any> {
   success: boolean;
   message?: string;
   [key: string]: any;
+}
+
+// ─── Pagination ─────────────────────────────────────────────────────────────
+
+/** Standard pagination metadata returned by all paginated API endpoints. */
+export interface PaginationMeta {
+  page: number;
+  per_page: number;
+  total: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+/** API result that includes pagination metadata. */
+export type PaginatedResult<T = any> = ApiResult<T> & PaginationMeta;
+
+/** Pagination parameters accepted by paginatedApi(). */
+export interface PaginationParams {
+  page?: number;
+  per_page?: number;
+  [key: string]: any;
+}
+
+/**
+ * Call a paginated API endpoint.
+ *
+ * Automatically injects `page` and `per_page` into query params and returns a
+ * strongly-typed `PaginatedResult<T>` that includes both the data and the
+ * pagination metadata (`page`, `total`, `total_pages`, `has_next`, etc.).
+ *
+ * @example
+ * ```ts
+ * const res = await paginatedApi<StockItem[]>('stock', 'list', { page: 2, per_page: 25 });
+ * console.log(res.rows, res.total_pages, res.has_next);
+ * ```
+ */
+export async function paginatedApi<T = any>(
+  module: string,
+  action: string,
+  params: PaginationParams = {},
+): Promise<PaginatedResult<T>> {
+  return api<T>(module, action, { params }) as Promise<PaginatedResult<T>>;
 }
 
 const TOKEN_KEY = 'kone_token';
@@ -77,6 +535,11 @@ export interface RequestOptions {
 }
 
 async function handleResponse(res: Response): Promise<any> {
+  if (res.status === 401) {
+    clearSession();
+    window.location.href = '/login';
+    throw new Error('Session expired');
+  }
   let data: any = null;
   try {
     data = await res.json();
@@ -138,17 +601,18 @@ export async function uploadApi<T = any>(module: string, action: string, formDat
 }
 
 /**
- * Build an absolute URL to a JSON API endpoint for token-based navigation
- * (downloads / print). The token is appended as a query param, which the
- * PHP API accepts as a fallback to the Authorization header.
+ * Build an absolute URL to a JSON API endpoint (downloads / print).
+ *
+ * SECURITY: Tokens must never appear in URL query strings — they are logged
+ * by proxies, browsers, and leaked via Referer headers.  For authenticated
+ * downloads, use a POST request with the `Authorization` header or set up
+ * the server to accept session cookies instead of bearer tokens in URLs.
  */
 export function apiHref(module: string, action: string, params?: Record<string, any>): string {
   const q = new URLSearchParams({ module, action });
   Object.entries(params || {}).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
   });
-  const token = getToken();
-  if (token) q.set('token', token);
   return `${BASE}/index.php?${q.toString()}`;
 }
 

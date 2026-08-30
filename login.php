@@ -4,6 +4,7 @@ date_default_timezone_set('Asia/Jakarta');
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/classes/Auth.php';
 require_once __DIR__ . '/classes/ActivityLogger.php';
+require_once __DIR__ . '/classes/SecurityAudit.php';
 
 if (Auth::check()) {
     header('Location: ' . BASE_URL . '/dashboard.php');
@@ -15,16 +16,17 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = $_POST['username'] ?? '';
     $password = $_POST['password'] ?? '';
+    $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '';
+    $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
 
     if (Auth::login($username, $password)) {
-        ActivityLogger::log('LOGIN', 'user', 'User',
-            $_SESSION['user_id'] ?? null,
-            $_SESSION['username'] ?? $username,
-            'Login berhasil — ' . ($_SERVER['REMOTE_ADDR'] ?? '')
-        );
+        // Log successful login to both systems
+        SecurityAudit::logLogin($username, true, $ipAddress, $userAgent);
         header('Location: ' . BASE_URL . '/dashboard.php');
         exit;
     } else {
+        // Log failed login to security audit for forensics
+        SecurityAudit::logLogin($username, false, $ipAddress, $userAgent);
         $error = 'Username atau password salah';
     }
 }

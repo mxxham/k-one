@@ -30,11 +30,18 @@ import {
   Ruler,
   ListChecks,
   Smartphone,
+  ShieldCheck,
+  RefreshCw,
+  ClipboardCheck as QualityIcon,
+  RotateCcw,
+  Activity,
+  Bell,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { roleLabel } from '@/lib/format';
 import { Department } from '@/lib/api';
 import { LucideIcon } from 'lucide-react';
+import LoadingBar from './LoadingBar';
 
 interface NavItem {
   to: string;
@@ -68,6 +75,7 @@ const NAV: NavSection[] = [
       { to: '/stocktake', label: 'Stock Take', icon: ClipboardList, depts: ['inventory', 'all'] },
       { to: '/cycle-count', label: 'Cycle Count', icon: CalendarCheck2, depts: ['inventory', 'all'] },
       { to: '/bin-transfer', label: 'Bin Transfer', icon: ArrowLeftRight, depts: ['inventory', 'all'] },
+      { to: '/reconciliation', label: 'Reconciliation', icon: RefreshCw, depts: ['inventory', 'all'] },
       { to: '/replenishment', label: 'Replenishment', icon: PackageSearch, depts: ['inventory', 'all'] },
       { to: '/putaway-tasks', label: 'Putaway Tasks', icon: ListChecks, depts: ['inbound', 'inventory', 'ops', 'all'] },
       { to: '/putaway-scan', label: 'Putaway Saya', icon: Smartphone, depts: ['inbound', 'outbound', 'inventory', 'ops', 'all'] },
@@ -99,11 +107,22 @@ const NAV: NavSection[] = [
     items: [{ to: '/reports', label: 'Reports', icon: BarChart3 }],
   },
   {
+    section: 'Operations',
+    depts: ['all'],
+    items: [
+      { to: '/quality', label: 'Quality Control', icon: QualityIcon },
+      { to: '/rma', label: 'Returns (RMA)', icon: RotateCcw },
+      { to: '/monitoring', label: 'System Monitor', icon: Activity },
+      { to: '/notifications', label: 'Notifications', icon: Bell },
+    ],
+  },
+  {
     section: 'Admin',
     adminOnly: true,
     items: [
       { to: '/users', label: 'Users', icon: UserCog },
       { to: '/activity-log', label: 'Activity Log', icon: History },
+      { to: '/security-audit', label: 'Security Audit', icon: ShieldCheck },
       { to: '/reset-data', label: 'Reset Data', icon: ShieldAlert },
     ],
   },
@@ -129,6 +148,7 @@ export default function Layout() {
       stocktake: 'Stock Take',
       'cycle-count': 'Cycle Count',
       'bin-transfer': 'Bin Transfer',
+      reconciliation: 'Reconciliation',
       replenishment: 'Replenishment',
       'putaway-scan': 'Putaway Saya',
       products: 'Products',
@@ -140,7 +160,12 @@ export default function Layout() {
       'import-auto': 'Auto Import',
       users: 'Users',
       'activity-log': 'Activity Log',
+      'security-audit': 'Security Audit',
       'reset-data': 'Reset Data',
+      quality: 'Quality Control',
+      rma: 'Returns (RMA)',
+      monitoring: 'System Monitor',
+      notifications: 'Notifications',
     };
     return map[seg] || 'K-one';
   })();
@@ -151,8 +176,10 @@ export default function Layout() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {sidebarOpen && (
+    <>
+      <LoadingBar />
+      <div className="flex h-screen overflow-hidden">
+        {sidebarOpen && (
         <div className="fixed inset-0 bg-black/50 z-[98] md:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
@@ -276,5 +303,6 @@ export default function Layout() {
         </main>
       </div>
     </div>
+    </>
   );
 }

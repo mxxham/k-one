@@ -1,8 +1,8 @@
 <?php
 
 class Stock {
-    public static function getAll($status = null, $expiring = false, $year = null) {
-        $db = db();
+    public static function getAll($status = null, $expiring = false, $year = null, $db = null) {
+        $db = $db ?? db();
         $sql = "SELECT s.*, p.product_code, p.product_name, p.category, p.uom_type, p.uom_per_pallet, p.velocity_class
                 FROM stock s
                 JOIN products p ON s.product_id = p.id
@@ -31,8 +31,8 @@ class Stock {
         return $stmt->fetchAll();
     }
 
-    public static function getById($id) {
-        $db = db();
+    public static function getById($id, $db = null) {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT s.*, p.product_code, p.product_name, p.category, p.uom_type, p.uom_per_pallet
                 FROM stock s
                 JOIN products p ON s.product_id = p.id
@@ -41,15 +41,15 @@ class Stock {
         return $stmt->fetch();
     }
 
-    public static function getByProduct($productId) {
-        $db = db();
+    public static function getByProduct($productId, $db = null) {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT * FROM stock WHERE product_id = ? AND quantity > 0 ORDER BY expiry_date ASC");
         $stmt->execute([$productId]);
         return $stmt->fetchAll();
     }
 
-    public static function getSummary() {
-        $db = db();
+    public static function getSummary($db = null) {
+        $db = $db ?? db();
         $summary = $db->query("SELECT
                 COUNT(DISTINCT product_id) as total_products,
                 SUM(quantity) as total_drums,
@@ -85,8 +85,8 @@ class Stock {
         return $summary;
     }
 
-    public static function getExpiringSoon($days = 30) {
-        $db = db();
+    public static function getExpiringSoon($days = 30, $db = null) {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT s.*, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
                 DATEDIFF(s.expiry_date, CURDATE()) as days_until_expiry
                 FROM stock s
@@ -167,8 +167,8 @@ class Stock {
         ];
     }
 
-    public static function getMovement($productId = null, $startDate = null, $endDate = null, $limit = 100) {
-        $db = db();
+    public static function getMovement($productId = null, $startDate = null, $endDate = null, $limit = 100, $db = null) {
+        $db = $db ?? db();
         $sql = "SELECT sl.*, p.product_code, p.product_name
                 FROM stock_ledger sl
                 JOIN products p ON sl.product_id = p.id
@@ -202,8 +202,8 @@ class Stock {
         return $stmt->fetchAll();
     }
 
-    public static function getStockByLocation() {
-        $db = db();
+    public static function getStockByLocation($db = null) {
+        $db = $db ?? db();
         return $db->query("SELECT LEFT(location, 2) as area,
                 COUNT(DISTINCT product_id) as products,
                 SUM(quantity) as total_qty,
@@ -213,8 +213,8 @@ class Stock {
                 ORDER BY area")->fetchAll();
     }
 
-    public static function transfer($stockId, $newLocation, $quantity = null) {
-        $db = db();
+    public static function transfer($stockId, $newLocation, $quantity = null, $db = null) {
+        $db = $db ?? db();
         try {
             $db->beginTransaction();
 
@@ -260,8 +260,8 @@ class Stock {
         }
     }
 
-    public static function adjust($stockId, $newQuantity, $reason) {
-        $db = db();
+    public static function adjust($stockId, $newQuantity, $reason, $db = null) {
+        $db = $db ?? db();
         try {
             $db->beginTransaction();
 
@@ -318,7 +318,7 @@ class Stock {
         return "(hold_status = 'available' OR hold_status IS NULL)";
     }
 
-    public static function hold(int $stockId, string $status, ?string $reason = null, ?int $userId = null): bool {
+    public static function hold(int $stockId, string $status, ?string $reason = null, ?int $userId = null, $db = null): bool {
         $status = strtolower(trim($status));
         if (!in_array($status, self::HOLD_STATUSES)) {
             throw new Exception("Status hold tidak valid. Gunakan: " . implode(', ', self::HOLD_STATUSES));
@@ -328,7 +328,7 @@ class Stock {
         }
         $userId = $userId ?? ($_SESSION['user_id'] ?? null);
 
-        $db = db();
+        $db = $db ?? db();
         $ownTx = !$db->inTransaction();
         try {
             if ($ownTx) $db->beginTransaction();
@@ -354,10 +354,10 @@ class Stock {
         }
     }
 
-    public static function release(int $stockId, ?string $reason = null, ?int $userId = null): bool {
+    public static function release(int $stockId, ?string $reason = null, ?int $userId = null, $db = null): bool {
         $userId = $userId ?? ($_SESSION['user_id'] ?? null);
 
-        $db = db();
+        $db = $db ?? db();
         $ownTx = !$db->inTransaction();
         try {
             if ($ownTx) $db->beginTransaction();
@@ -383,8 +383,8 @@ class Stock {
         }
     }
 
-    private static function _addHoldLedger(array $stock, string $txType, string $newStatus, ?string $reason): void {
-        $db = db();
+    private static function _addHoldLedger(array $stock, string $txType, string $newStatus, ?string $reason, $db = null): void {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT COALESCE(SUM(quantity_in),0) - COALESCE(SUM(quantity_out),0) AS running_balance
                 FROM stock_ledger
                 WHERE product_id = ?
@@ -402,7 +402,7 @@ class Stock {
                $txType,
                $stock['id'],
                $stock['batch_number'] ?? null,
-               $stock['uom_type'] ?? $stock['uom'] ?? 'Drum',
+                $stock['uom_type'] ?? $stock['uom'] ?? UOM_DEFAULT_TYPE,
                $balance,
                $stock['location'],
                $txType === 'HOLD'
@@ -419,8 +419,8 @@ class Stock {
      * Single-query product lookup + FEFO-first expected location.
      * Returns array with expected locations, or null when product unknown.
      */
-    public static function scan(string $productCode): ?array {
-        $db = db();
+    public static function scan(string $productCode, $db = null): ?array {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT p.id, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet
                 FROM products p
                 WHERE p.product_code = ? AND p.is_active = 1
@@ -453,9 +453,9 @@ class Stock {
     /**
      * Record a scan mismatch override with reason -> activity_log SCAN_OVERRIDE.
      */
-    public static function scanOverride(int $productId, string $scannedLocation, string $expectedLocation, string $reason, ?int $userId = null): void {
+    public static function scanOverride(int $productId, string $scannedLocation, string $expectedLocation, string $reason, ?int $userId = null, $db = null): void {
         $userId = $userId ?? ($_SESSION['user_id'] ?? null);
-        $db = db();
+        $db = $db ?? db();
         $db->prepare("INSERT INTO activity_log
                 (user_id, username, full_name, action, module, reference_type, reference_id,
                  description, old_value, new_value, scan_override_reason, ip_address)

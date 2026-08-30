@@ -8,14 +8,15 @@ function handle_outbound($action) {
             [$page, $perPage, $offset] = page_params(50);
             $status = query('status') ?: null;
             $odNo = trim(query('od_no') ?: '');
-            $total = Outbound::countAll($status, $odNo ?: null);
-            $rows = Outbound::getAll($status, $perPage, $offset, $odNo ?: null);
+            $search = trim(query('search') ?: '');
+            $total = Outbound::countAll($status, $odNo ?: null, $search ?: null);
+            $rows = Outbound::getAll($status, $perPage, $offset, $odNo ?: null, $search ?: null);
             foreach ($rows as &$r) {
                 $r['id'] = (int)$r['id'];
                 $r['display_order_no'] = Outbound::displayOrderNo($r);
             }
             unset($r);
-            json_out(['rows' => $rows, 'total' => (int)$total, 'page' => $page, 'per_page' => $perPage, 'statuses' => statuses_for('outbound')]);
+            json_out(['rows' => $rows, 'statuses' => statuses_for('outbound')] + paginationMeta($total, $page, $perPage));
             break;
 
         case 'detail':

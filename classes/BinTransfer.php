@@ -356,6 +356,19 @@ class BinTransfer {
                ->execute([$userId, $transferId]);
 
             if ($ownTx) $db->commit();
+
+            // Trigger auto-replenishment check
+            try {
+                AutoReplenishment::onStockDrop(
+                    $productId,
+                    $fromLoc,
+                    $totalAvail,
+                    $totalAvail - $qty
+                );
+            } catch (\Throwable $e) {
+                // Non-critical: log but don't fail the transfer
+            }
+
             return true;
 
         } catch (\Throwable $e) {

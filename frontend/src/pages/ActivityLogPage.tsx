@@ -3,7 +3,7 @@ import {
   History, RefreshCw, Truck, PackageOpen, Boxes, Box, ClipboardList, ClipboardCheck,
   ArrowLeftRight, Users, MapPin, BookOpen, UserCog, BarChart3, LogIn, CalendarCheck2,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, ActivityLogRow } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, EmptyState } from '@/components/Card';
 import Spinner from '@/components/Spinner';
@@ -50,7 +50,7 @@ const TD = 'px-3 py-2.5 whitespace-nowrap';
 export default function ActivityLogPage() {
   const [modules, setModules] = useState<string[]>([]);
   const [moduleFilter, setModuleFilter] = useState('all');
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<ActivityLogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const reqId = useRef(0);

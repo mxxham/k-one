@@ -14,7 +14,7 @@ function handle_inbound($action) {
                 $r['id'] = (int)$r['id'];
             }
             unset($r);
-            json_out(['rows' => $rows, 'total' => (int)$total, 'page' => $page, 'per_page' => $perPage, 'statuses' => statuses_for('inbound')]);
+            json_out(['rows' => $rows, 'statuses' => statuses_for('inbound')] + paginationMeta($total, $page, $perPage));
             break;
 
         case 'detail':

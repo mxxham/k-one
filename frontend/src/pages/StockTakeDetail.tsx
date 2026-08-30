@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -10,7 +10,7 @@ import {
   PackageOpen,
   FileSpreadsheet,
 } from 'lucide-react';
-import { api, apiHref } from '@/lib/api';
+import { api, apiHref, StockTakeItem, StockTakeDetailData, StockTakeAccuracy } from '@/lib/api';
 import { WebBtn } from '@/components/WebBtn';
 import { fmtDate, fmtNum } from '@/lib/format';
 import { useToast } from '@/components/Toast';
@@ -23,24 +23,6 @@ import Modal from '@/components/Modal';
 import Spinner from '@/components/Spinner';
 import ConfirmButton from '@/components/ConfirmButton';
 import { Field, TextInput } from '@/components/Field';
-
-interface StockTakeItem {
-  id: number;
-  product_code?: string;
-  product_name?: string;
-  batch_number?: string;
-  uom?: string;
-  location?: string;
-  qty_system?: number | null;
-  counter_1?: number | null;
-  counter_2?: number | null;
-  counter_3?: number | null;
-  qty_physical?: number | null;
-  difference?: number | null;
-  status?: string;
-  notes?: string;
-  counter_by?: string;
-}
 
 interface CounterRow {
   c1: string;
@@ -62,9 +44,9 @@ export default function StockTakeDetail() {
   const toast = useToast();
   const navigate = useNavigate();
 
-  const [stockTake, setStockTake] = useState<any>(null);
+  const [stockTake, setStockTake] = useState<StockTakeDetailData | null>(null);
   const [items, setItems] = useState<StockTakeItem[]>([]);
-  const [accuracy, setAccuracy] = useState<any>(null);
+  const [accuracy, setAccuracy] = useState<StockTakeAccuracy | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -80,36 +62,47 @@ export default function StockTakeDetail() {
   const [qtySystem, setQtySystem] = useState('');
   const [qtyPhysical, setQtyPhysical] = useState('');
   const [adding, setAdding] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
     setLoading(true);
     try {
-      const res = await api('stocktake', 'detail', { params: { id } });
-      setStockTake(res.stock_take || null);
-      setAccuracy(res.accuracy || null);
-      const list = res.items || [];
-      setItems(list);
-      const c: Record<number, CounterRow> = {};
-      const p: Record<number, string> = {};
-      list.forEach((it: StockTakeItem) => {
-        c[it.id] = {
-          c1: it.counter_1 != null ? String(it.counter_1) : '',
-          c2: it.counter_2 != null ? String(it.counter_2) : '',
-          c3: it.counter_3 != null ? String(it.counter_3) : '',
-        };
-        p[it.id] = it.qty_physical != null ? String(it.qty_physical) : '';
-      });
-      setCounters(c);
-      setPhysicals(p);
+      const res = await api('stocktake', 'detail', { params: { id }, signal: ctrl.signal });
+      if (!ctrl.signal.aborted) {
+        setStockTake(res.stock_take || null);
+        setAccuracy(res.accuracy || null);
+        const list = res.items || [];
+        setItems(list);
+        const c: Record<number, CounterRow> = {};
+        const p: Record<number, string> = {};
+        list.forEach((it: StockTakeItem) => {
+          c[it.id] = {
+            c1: it.counter_1 != null ? String(it.counter_1) : '',
+            c2: it.counter_2 != null ? String(it.counter_2) : '',
+            c3: it.counter_3 != null ? String(it.counter_3) : '',
+          };
+          p[it.id] = it.qty_physical != null ? String(it.qty_physical) : '';
+        });
+        setCounters(c);
+        setPhysicals(p);
+      }
     } catch (err: any) {
+      if (err.name === 'AbortError') return;
       toast('error', err.message || 'Gagal memuat detail stock take');
     } finally {
-      setLoading(false);
+      if (!ctrl.signal.aborted) {
+        setLoading(false);
+      }
     }
   }, [id, toast]);
 
   useEffect(() => {
     load();
+    return () => abortRef.current?.abort();
   }, [load]);
 
   useEffect(() => {
@@ -276,7 +269,7 @@ export default function StockTakeDetail() {
     <>
       <button
         onClick={() => navigate('/stocktake')}
-        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold border border-white/20"
+        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/25 hover:bg-white/35 text-white text-sm font-semibold border border-white/40"
       >
         <ArrowLeft className="w-4 h-4" /> Kembali
       </button>

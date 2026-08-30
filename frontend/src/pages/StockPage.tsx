@@ -147,6 +147,29 @@ export default function StockPage() {
     loadList();
   }, [loadList]);
 
+  useEffect(() => {
+    const pollInterval = setInterval(async () => {
+      if (document.hidden) return;
+
+      try {
+        const lastSync = localStorage.getItem('stock_last_sync');
+        const params: Record<string, string> = { limit: '100' };
+        if (lastSync) params.last_sync = lastSync;
+
+        const res = await api('stock', 'sync', { params });
+
+        if (res.success && res.stocks?.length > 0) {
+          loadList();
+          localStorage.setItem('stock_last_sync', res.last_sync);
+        }
+      } catch (err) {
+        console.error('Stock sync failed:', err);
+      }
+    }, 15000);
+
+    return () => clearInterval(pollInterval);
+  }, [loadList]);
+
   const loadSummary = async () => {
     try {
       const res = await api('stock', 'summary');

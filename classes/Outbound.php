@@ -15,8 +15,8 @@ class Outbound {
 
     
 
-    public static function saveDestinations(int $outboundId, array $names, array $locations, array $streets, array $kotas, array $notes): void {
-        $db = db();
+    public static function saveDestinations(int $outboundId, array $names, array $locations, array $streets, array $kotas, array $notes, $db = null): void {
+        $db = $db ?? db();
         
         $db->prepare("DELETE FROM outbound_destinations WHERE outbound_id = ?")->execute([$outboundId]);
         foreach ($names as $i => $name) {
@@ -39,8 +39,8 @@ class Outbound {
 
     
 
-public static function generateNumber(): string {
-        $db = db();
+public static function generateNumber($db = null): string {
+        $db = $db ?? db();
         $year  = date('Y');
         $month = date('m');
         $prefix = "OUT-{$year}{$month}-";
@@ -82,8 +82,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function getAll($status = null, $limit = null, $offset = 0, $odNo = null) {
-        $db = db();
+    public static function getAll($status = null, $limit = null, $offset = 0, $odNo = null, $db = null) {
+        $db = $db ?? db();
         $db->exec("SET SESSION group_concat_max_len = 65536");
         $conditions = [];
         $params = [];
@@ -116,8 +116,8 @@ public static function generateNumber(): string {
         return $stmt->fetchAll();
     }
 
-    public static function countAll($status = null, $odNo = null) {
-        $db = db();
+    public static function countAll($status = null, $odNo = null, $db = null) {
+        $db = $db ?? db();
         $conditions = [];
         $params = [];
         if ($status) { $conditions[] = "o.status = ?"; $params[] = $status; }
@@ -133,8 +133,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function getById($id) {
-        $db = db();
+    public static function getById($id, $db = null) {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT o.*,
                 c.customer_name, c.customer_code, c.address, c.city,
                 u.full_name as created_by_name,
@@ -150,8 +150,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function getItems($outboundId) {
-        $db = db();
+    public static function getItems($outboundId, $db = null) {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT oi.*,
                 p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
                 COALESCE(oi.batch_number, oi.batch_no) AS resolved_batch,
@@ -259,8 +259,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function getItemPickedLocations($outboundItemId) {
-        $db = db();
+    public static function getItemPickedLocations($outboundItemId, $db = null) {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT oil.quantity AS picked_qty,
                 COALESCE(sl.location_code, oi.location) AS location_code,
                 sl.pallet_seq,
@@ -279,8 +279,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function getAvailableStock($productId, $quantity = 0, ?string $location = null) {
-        $db = db();
+    public static function getAvailableStock($productId, $quantity = 0, ?string $location = null, $db = null) {
+        $db = $db ?? db();
         $location = $location !== null ? trim($location) : '';
         if ($location !== '') {
             $locClause = "AND LOWER(TRIM(st.location)) = LOWER(?)";
@@ -322,8 +322,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function getTotalAvailableQty(int $productId): float {
-        $db   = db();
+    public static function getTotalAvailableQty(int $productId, $db = null): float {
+        $db = $db ?? db();
         $stmt = $db->prepare("SELECT COALESCE(SUM(quantity),0) FROM stock
                 WHERE product_id = ?
                 AND (stock_status IN ('Available','Dues In') OR stock_status IS NULL OR stock_status = '')
@@ -373,8 +373,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function addItemWithFEFO($outboundId, $item) {
-        $db = db();
+    public static function addItemWithFEFO($outboundId, $item, $db = null) {
+        $db = $db ?? db();
 
         
         $product = $db->prepare("SELECT uom_type, uom_per_pallet, max_sku_qty, max_trans_qty
@@ -390,7 +390,7 @@ public static function generateNumber(): string {
         $uom = $item['uom'] ?? $productInfo['uom_type'];
 
         
-        $uomPerPallet = max(1, intval($productInfo['uom_per_pallet'] ?? 4));
+        $uomPerPallet = max(1, intval($productInfo['uom_per_pallet'] ?? DEFAULT_UOM_PER_PALLET));
 
         
         $manualLocs = $item['manual_locs'] ?? null; 
@@ -504,8 +504,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function create($data) {
-        $db = db();
+    public static function create($data, $db = null) {
+        $db = $db ?? db();
         $ownTransaction = !$db->inTransaction();
         try {
             if ($ownTransaction) $db->beginTransaction();
@@ -537,7 +537,7 @@ public static function generateNumber(): string {
                 $data['container_no'] ?? null,
                 $data['jenis_armada'] ?? null,
                 $data['expected_date'] ?? null,
-                $data['status'] ?? 'Open',
+                $data['status'] ?? OUTBOUND_STATUSES['DEFAULT'],
                 $data['notes'] ?? null,
                 $_SESSION['user_id']
             ]);
@@ -600,8 +600,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function update($id, $data) {
-        $db = db();
+    public static function update($id, $data, $db = null) {
+        $db = $db ?? db();
         $ownTransaction = !$db->inTransaction();
         try {
             if ($ownTransaction) $db->beginTransaction();
@@ -640,7 +640,7 @@ public static function generateNumber(): string {
                 $data['container_no'] ?? null,
                 $data['jenis_armada'] ?? null,
                 $data['expected_date'] ?? null,
-                $data['status'] ?? 'Open',
+                $data['status'] ?? OUTBOUND_STATUSES['DEFAULT'],
                 $data['notes'] ?? null,
                 $id
             ]);
@@ -653,7 +653,7 @@ public static function generateNumber(): string {
                         WHERE id = ?");
                 $stmt->execute([
                     $_SESSION['user_id'],
-                    $data['status'] ?? 'Open',
+                    $data['status'] ?? OUTBOUND_STATUSES['DEFAULT'],
                     $id
                 ]);
             }
@@ -672,8 +672,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function updateItem($itemId, $data) {
-        $db = db();
+    public static function updateItem($itemId, $data, $db = null) {
+        $db = $db ?? db();
 
         $stmt = $db->prepare("UPDATE outbound_items SET
                 quantity = ?,
@@ -687,7 +687,7 @@ public static function generateNumber(): string {
 
         return $stmt->execute([
             $data['quantity'] ?? 0,
-            $data['uom'] ?? 'Drum',
+            $data['uom'] ?? OUTBOUND_DEFAULT_UOM,
             $data['actual_qty'] ?? $data['quantity'] ?? 0,
             $data['batch_no'] ?? null,
             $data['exp_date'] ?? null,
@@ -699,8 +699,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function deleteItem($itemId) {
-        $db = db();
+    public static function deleteItem($itemId, $db = null) {
+        $db = $db ?? db();
         $ownTx = !$db->inTransaction();
         try {
             if ($ownTx) $db->beginTransaction();
@@ -765,9 +765,9 @@ public static function generateNumber(): string {
                                    ->execute([$rQty, $found['id']]);
                                 if ($slId) $db->prepare("UPDATE stock_locations SET stock_id=?, status='Available' WHERE id=?")->execute([$found['id'], $slId]);
                             } else {
-                                $uomPerPallet = max(1, intval($item['uom_per_pallet'] ?? 4));
+                                $uomPerPallet = max(1, intval($item['uom_per_pallet'] ?? DEFAULT_UOM_PER_PALLET));
                                 $db->prepare("INSERT INTO stock (product_id,batch_number,location,quantity,uom,pallet,stock_status) VALUES (?,?,?,?,?,?,'Available')")
-                                   ->execute([$pid,$rBatch,$rLoc,$rQty,$item['uom']??'Drum',max(1,(int)ceil($rQty / $uomPerPallet))]);
+                                   ->execute([$pid,$rBatch,$rLoc,$rQty,$item['uom']??OUTBOUND_DEFAULT_UOM,max(1,(int)ceil($rQty / $uomPerPallet))]);
                                 $nid = $db->lastInsertId();
                                 if ($slId) $db->prepare("UPDATE stock_locations SET stock_id=?, status='Available' WHERE id=?")->execute([$nid, $slId]);
                             }
@@ -814,8 +814,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function pickItems($outboundId) {
-        $db = db();
+    public static function pickItems($outboundId, $db = null) {
+        $db = $db ?? db();
         $ownTx = !$db->inTransaction();
         try {
             if ($ownTx) $db->beginTransaction();
@@ -989,7 +989,7 @@ public static function generateNumber(): string {
                             $insSl->execute([
                                 $stock['location'] ?? 'UNALLOCATED',
                                 $deduct,
-                                $stock['uom'] ?? ($item['uom'] ?? 'EA'),
+                                $stock['uom'] ?? ($item['uom'] ?? UOM_DEFAULT_SQL),
                                 $stock['batch_number'] ?? null,
                             ]);
                             $slId = (int)$db->lastInsertId();
@@ -1056,8 +1056,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function ship($outboundId) {
-        $db = db();
+    public static function ship($outboundId, $db = null) {
+        $db = $db ?? db();
         $ownTx = !$db->inTransaction();
         try {
             if ($ownTx) $db->beginTransaction();
@@ -1088,8 +1088,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function complete($outboundId) {
-        $db = db();
+    public static function complete($outboundId, $db = null) {
+        $db = $db ?? db();
 
         $stmt = $db->prepare("UPDATE outbound_orders SET
                 status = 'Completed'
@@ -1101,8 +1101,8 @@ public static function generateNumber(): string {
 
     
 
-    private static function addToLedger($item, $outbound) {
-        $db = db();
+    private static function addToLedger($item, $outbound, $db = null) {
+        $db = $db ?? db();
 
         
         $stmt = $db->prepare("SELECT COALESCE(SUM(quantity_in),0) - COALESCE(SUM(quantity_out),0) AS running_balance
@@ -1139,8 +1139,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function delete($id) {
-        $db = db();
+    public static function delete($id, $db = null) {
+        $db = $db ?? db();
         $ownTx = !$db->inTransaction();
         try {
             if ($ownTx) $db->beginTransaction();
@@ -1173,7 +1173,7 @@ public static function generateNumber(): string {
                     $pickRows = $obLocs->fetchAll();
 
                     if (!empty($pickRows)) {
-                        $uomItem  = $item['uom'] ?? 'Drum';
+                        $uomItem  = $item['uom'] ?? OUTBOUND_DEFAULT_UOM;
                         $expItem  = $item['exp_date'] ?? $item['expiry_date'] ?? null;
 
                         foreach ($pickRows as $pr) {
@@ -1192,7 +1192,7 @@ public static function generateNumber(): string {
                                 $srow->execute([$sid]);
                                 $stockRow = $srow->fetch();
                                 if ($stockRow) {
-                                    $upp = max(1, (int)($stockRow['uom_per_pallet'] ?? 4));
+                                    $upp = max(1, (int)($stockRow['uom_per_pallet'] ?? DEFAULT_UOM_PER_PALLET));
                                     $newQty = floatval($stockRow['quantity']) + $rQty;
                                     $newPlt = ceil($newQty / $upp);
                                     $db->prepare("UPDATE stock SET quantity=?, pallet=?, updated_at=NOW() WHERE id=?")
@@ -1216,7 +1216,7 @@ public static function generateNumber(): string {
                                     }
                                 } else {
                                     
-                                    $uomPerPallet = max(1, intval($item['uom_per_pallet'] ?? 4));
+                                    $uomPerPallet = max(1, intval($item['uom_per_pallet'] ?? DEFAULT_UOM_PER_PALLET));
                                     $db->prepare("INSERT INTO stock
                                         (product_id, batch_number, location, quantity, uom, pallet, expiry_date, stock_status)
                                         VALUES (?,?,?,?,?,?,?,'Available')")
@@ -1251,11 +1251,11 @@ public static function generateNumber(): string {
                                 $db->prepare("UPDATE stock SET quantity=quantity+?, updated_at=NOW() WHERE id=?")
                                    ->execute([$qty, $row['id']]);
                             } else {
-                                $uomPerPallet = max(1, intval($item['uom_per_pallet'] ?? 4));
+                                $uomPerPallet = max(1, intval($item['uom_per_pallet'] ?? DEFAULT_UOM_PER_PALLET));
                                 $db->prepare("INSERT INTO stock
                                     (product_id, batch_number, location, quantity, uom, pallet, stock_status)
                                     VALUES (?,?,?,?,?,?,'Available')")
-                                   ->execute([$pid, $batch, $loc, $qty, $item['uom']??'Drum', max(1,(int)ceil($qty / $uomPerPallet))]);
+                                   ->execute([$pid, $batch, $loc, $qty, $item['uom']??OUTBOUND_DEFAULT_UOM, max(1,(int)ceil($qty / $uomPerPallet))]);
                             }
                         }
                     }
@@ -1300,8 +1300,8 @@ public static function generateNumber(): string {
 
     
 
-    public static function getStats() {
-        $db = db();
+    public static function getStats($db = null) {
+        $db = $db ?? db();
 
         $stats = [];
 

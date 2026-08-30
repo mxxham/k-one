@@ -15,24 +15,20 @@ function handle_dashboard($action) {
             $stmt = $db->prepare("
                 SELECT
                     lm.location_code AS code, lm.rack, lm.row_name, lm.zone,
-                    COALESCE(s1.quantity, s2.quantity, 0) AS qty,
-                    COALESCE(s1.pallet, s2.pallet, 0) AS pallet,
-                    COALESCE(s1.uom, s2.uom) AS uom,
-                    COALESCE(s1.batch_number, s2.batch_number) AS batch,
-                    COALESCE(s1.expiry_date, s2.expiry_date) AS expiry,
-                    COALESCE(p1.product_name, p2.product_name) AS product,
-                    COALESCE(p1.product_code, p2.product_code) AS product_code,
-                    COALESCE(p1.uom_per_pallet, p2.uom_per_pallet) AS uom_per_pallet
+                    COALESCE(s1.quantity, 0) AS qty,
+                    COALESCE(s1.pallet, 0) AS pallet,
+                    s1.uom AS uom,
+                    s1.batch_number AS batch,
+                    s1.expiry_date AS expiry,
+                    p1.product_name AS product,
+                    p1.product_code AS product_code,
+                    p1.uom_per_pallet AS uom_per_pallet
                 FROM location_master lm
                 LEFT JOIN stock_locations sl
                     ON sl.location_code COLLATE utf8mb4_general_ci = lm.location_code COLLATE utf8mb4_general_ci
                     AND sl.status IN ('Available','Reserved')
                 LEFT JOIN stock s1 ON sl.stock_id = s1.id AND s1.quantity > 0
                 LEFT JOIN products p1 ON s1.product_id = p1.id
-                LEFT JOIN stock s2
-                    ON s2.location COLLATE utf8mb4_general_ci = lm.location_code COLLATE utf8mb4_general_ci
-                    AND s2.quantity > 0 AND s2.stock_status = 'Available' AND s1.id IS NULL
-                LEFT JOIN products p2 ON s2.product_id = p2.id
                 WHERE lm.aisle = ? AND lm.is_active = 1
                 ORDER BY lm.rack, lm.row_name, lm.position");
             $stmt->execute([$aisle]);

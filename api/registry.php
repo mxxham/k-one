@@ -163,8 +163,14 @@ set_permission('replenishment', 'generate', 'write');
 set_permission('replenishment', 'for_demand', 'write');
 set_module_departments('replenishment', ['inventory']);
 
+// replenishment_auto (auto replenishment): run_cycle/update_config write; ['inventory']
+set_permission('replenishment_auto', 'run_cycle', 'write');
+set_permission('replenishment_auto', 'update_config', 'admin');
+set_module_departments('replenishment_auto', ['inventory']);
+
 // report (report.actions.ts)
 set_permission('system', 'reset_operational_data', 'admin');
+set_permission('system', 'security_audit', 'admin');
 set_module_departments('dashboard', ['inbound', 'outbound', 'inventory', 'all']);
 set_module_departments('report', ['all']);
 set_module_departments('activitylog', ['all']);
@@ -180,6 +186,19 @@ set_permission('stock', 'scan_override', 'write');
 set_module_departments('stock', ['inventory']);
 set_action_departments('stock', 'scan', ['inbound', 'outbound', 'inventory']);
 set_action_departments('stock', 'scan_override', ['inbound', 'outbound', 'inventory']);
+
+// stock reconciliation
+set_permission('stock', 'reconcile', 'write');
+set_permission('stock', 'reconcile_report', 'any');
+set_permission('stock', 'discrepancies', 'any');
+set_permission('stock', 'zone_stats', 'any');
+set_permission('stock', 'allocate_zone', 'write');
+set_action_departments('stock', 'reconcile', ['inventory']);
+set_action_departments('stock', 'reconcile_report', ['inventory']);
+set_action_departments('stock', 'discrepancies', ['inventory']);
+set_action_departments('stock', 'zone_stats', ['inventory']);
+set_action_departments('stock', 'allocate_zone', ['inventory']);
+
 set_permission('ledger', 'repair_all', 'admin');
 set_module_departments('ledger', ['inventory']);
 
@@ -198,9 +217,11 @@ set_permission('stocktake', 'save_review', 'write');
 set_permission('stocktake', 'apply_adjustment', 'admin');
 set_module_departments('stocktake', ['inventory']);
 
-// waves (waves.actions.ts): create/cancel write; ['outbound']
+// waves (waves.actions.ts): create/cancel/release/complete write; ['outbound']
 set_permission('waves', 'create', 'write');
 set_permission('waves', 'cancel', 'write');
+set_permission('waves', 'release', 'write');
+set_permission('waves', 'complete', 'write');
 set_module_departments('waves', ['outbound']);
 
 // wave (outbound-module): extend with add_order/release; ['outbound','ops']
@@ -252,3 +273,47 @@ set_permission('discrepancy', 'log', 'write');
 set_permission('discrepancy', 'get', 'any');
 set_permission('discrepancy', 'list', 'any');
 set_module_departments('discrepancy', ['outbound']);
+
+// replenishment auto (auto-replenishment system)
+set_permission('replenishment', 'run_cycle', 'write');
+set_permission('replenishment', 'auto_status', 'any');
+set_permission('replenishment', 'auto_config', 'any');
+set_permission('replenishment', 'update_auto_config', 'admin');
+set_action_departments('replenishment', 'run_cycle', ['inventory']);
+set_action_departments('replenishment', 'auto_status', ['inventory']);
+set_action_departments('replenishment', 'auto_config', ['inventory']);
+set_action_departments('replenishment', 'update_auto_config', ['inventory']);
+
+// quality (quality.php): create/record/approve/reject write; get/list any; ['inventory']
+set_permission('quality', 'create', 'write');
+set_permission('quality', 'record', 'write');
+set_permission('quality', 'approve', 'write');
+set_permission('quality', 'reject', 'write');
+set_permission('quality', 'get', 'any');
+set_permission('quality', 'list', 'any');
+set_module_departments('quality', ['inventory']);
+
+// rma (rma.php): create/approve/receive/complete/reject write, get/list any; ['inventory']
+set_permission('rma', 'create', 'write');
+set_permission('rma', 'approve', 'write');
+set_permission('rma', 'receive', 'write');
+set_permission('rma', 'complete', 'write');
+set_permission('rma', 'reject', 'write');
+set_permission('rma', 'get', 'any');
+set_permission('rma', 'list', 'any');
+set_module_departments('rma', ['inventory']);
+
+// monitoring (monitoring.php): health/metrics/alerts/performance — all read-only
+set_permission('monitoring', 'health', 'any');
+set_permission('monitoring', 'metrics', 'any');
+set_permission('monitoring', 'alerts', 'any');
+set_permission('monitoring', 'performance', 'any');
+set_module_departments('monitoring', ['all']);
+
+// notification (notification.php): send/mark_read/delete write, list/get any; ['all']
+set_permission('notification', 'list', 'any');
+set_permission('notification', 'get', 'any');
+set_permission('notification', 'send', 'write');
+set_permission('notification', 'mark_read', 'write');
+set_permission('notification', 'delete', 'write');
+set_module_departments('notification', ['all']);

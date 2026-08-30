@@ -139,6 +139,17 @@ tfoot td.r{text-align:right}
 </head>
 <body>
 
+<div id="back-to-app" style="position:fixed;top:10px;right:10px;z-index:9999;">
+  <a href="javascript:window.close()" style="background:#0d1f1f;color:white;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,0.2);">
+    Close &amp; Back to K-one
+  </a>
+</div>
+<style>
+  @media print {
+    #back-to-app { display: none !important; }
+  }
+</style>
+
 <div class="print-bar no-print">
   <div class="print-bar-title"><i class="fas fa-clipboard-check"></i> Pick List — <?= htmlspecialchars($picklistNo) ?></div>
   <div class="btns">
@@ -320,9 +331,9 @@ tfoot td.r{text-align:right}
 </div>
 
 <script>
-if (location.search.includes('autoprint=1')) {
-  window.onload = () => setTimeout(() => window.print(), 400);
-}
+window.onload = function() {
+  setTimeout(function() { window.print(); }, 500);
+};
 </script>
 </body>
 </html>

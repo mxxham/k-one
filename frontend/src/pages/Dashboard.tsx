@@ -5,7 +5,11 @@ import {
   PackageOpen, Truck, MapPin, Plus, FileText, ClipboardCheck, TrendingUp, TrendingDown,
   BarChart3, RefreshCw,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import {
+  api, DashboardStats, AisleDetail, AisleLocation, ActivityLogRow,
+  AbcStatus, StockSummaryRow, MonthlyActivity, StockByLocationRow,
+  InboundOrder, OutboundOrder,
+} from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { Card, EmptyState } from '@/components/Card';
 import Modal from '@/components/Modal';
@@ -49,17 +53,17 @@ const TD = 'px-3 py-2.5 whitespace-nowrap';
 
 export default function Dashboard() {
   const { user, canAdmin } = useAuth();
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [now, setNow] = useState(new Date());
   const [aisle, setAisle] = useState<string | null>(null);
-  const [aisleDetail, setAisleDetail] = useState<any>(null);
+  const [aisleDetail, setAisleDetail] = useState<AisleDetail | null>(null);
   const [aisleLoading, setAisleLoading] = useState(false);
-  const [scanRows, setScanRows] = useState<any[]>([]);
+  const [scanRows, setScanRows] = useState<ActivityLogRow[]>([]);
   const [scanLoading, setScanLoading] = useState(true);
   const [scanError, setScanError] = useState('');
-  const [abcStatus, setAbcStatus] = useState<any>(null);
+  const [abcStatus, setAbcStatus] = useState<AbcStatus | null>(null);
   const [abcLoading, setAbcLoading] = useState(true);
   const [abcError, setAbcError] = useState('');
   const reqId = useRef(0);
@@ -69,7 +73,7 @@ export default function Dashboard() {
     let alive = true;
     api('dashboard', 'stats')
       .then((res) => {
-        if (alive && id === reqId.current) setData(res);
+        if (alive && id === reqId.current) setData(res as unknown as DashboardStats);
       })
       .catch((e: any) => {
         if (alive && id === reqId.current) setError(e.message || 'Gagal memuat dashboard');
@@ -120,7 +124,7 @@ export default function Dashboard() {
     setAisleLoading(true);
     try {
       const res = await api('dashboard', 'aisle_detail', { params: { aisle: a } });
-      setAisleDetail(res);
+      setAisleDetail(res as unknown as AisleDetail);
     } catch (e: any) {
       setAisleDetail({ locations: [], stats: null, error: e.message || 'Gagal memuat detail aisle' });
     } finally {
@@ -138,7 +142,7 @@ export default function Dashboard() {
 
   // Calculate location utilization percentage
   const locationUtil =
-    kpi.total_locations > 0 ? Math.round((kpi.occupied_locations / kpi.total_locations) * 100) : 0;
+    (kpi.total_locations ?? 0) > 0 ? Math.round(((kpi.occupied_locations ?? 0) / (kpi.total_locations ?? 1)) * 100) : 0;
 
   const maxQty = Math.max(
     1,
@@ -218,7 +222,7 @@ export default function Dashboard() {
               <Boxes className="w-5 h-5 opacity-80" />
               <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi.total_pallets, 0)}</div>
               <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Total Pallets</div>
-              {kpi.total_pallets_utilization > 0 && (
+              {kpi.total_pallets_utilization != null && kpi.total_pallets_utilization > 0 && (
                 <div className="text-xs opacity-75 mt-1">{kpi.total_pallets_utilization}% capacity</div>
               )}
             </div>
@@ -227,7 +231,7 @@ export default function Dashboard() {
             <div className="rounded-xl bg-gradient-to-br from-purple-600 to-purple-400 p-4 text-white shadow-sm">
               <MapPin className="w-5 h-5 opacity-80" />
               <div className="text-2xl font-extrabold mt-2">
-                {kpi.total_locations > 0 ? Math.round((kpi.occupied_locations / kpi.total_locations) * 100) : 0}%
+                {(kpi.total_locations ?? 0) > 0 ? Math.round(((kpi.occupied_locations ?? 0) / (kpi.total_locations ?? 1)) * 100) : 0}%
               </div>
               <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Location Utilization</div>
               <div className="text-xs opacity-75 mt-1">{kpi.occupied_locations || 0}/{kpi.total_locations || 0} occupied</div>
@@ -268,9 +272,9 @@ export default function Dashboard() {
             </div>
 
             {/* Pick Accuracy */}
-            <div className={`rounded-xl bg-gradient-to-br ${kpi.pick_accuracy_percent >= 95 ? 'from-emerald-600 to-emerald-400' : 'from-orange-600 to-orange-400'} p-4 text-white shadow-sm`}>
+            <div className={`rounded-xl bg-gradient-to-br ${(kpi.pick_accuracy_percent ?? 100) >= 95 ? 'from-emerald-600 to-emerald-400' : 'from-orange-600 to-orange-400'} p-4 text-white shadow-sm`}>
               <Warehouse className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{kpi.pick_accuracy_percent || 100}%</div>
+              <div className="text-2xl font-extrabold mt-2">{kpi.pick_accuracy_percent ?? 100}%</div>
               <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Pick Accuracy</div>
               <div className="text-xs opacity-75 mt-1">{kpi.pick_accurate_lines || 0}/{kpi.pick_total_lines || 0} lines</div>
             </div>
@@ -439,8 +443,8 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-2xl font-extrabold">
-                          {fmtNum(abcStatus.classified, 0)}
-                          <span className="text-sm text-gray-400 font-semibold"> / {fmtNum(abcStatus.total, 0)}</span>
+                          {fmtNum(abcStatus.classified ?? 0, 0)}
+                          <span className="text-sm text-gray-400 font-semibold"> / {fmtNum(abcStatus.total ?? 0, 0)}</span>
                         </div>
                         <div className="text-[11px] uppercase tracking-wide text-gray-500 mt-0.5">Produk Terklasifikasi</div>
                       </div>
@@ -449,7 +453,7 @@ export default function Dashboard() {
                     <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
                       <div
                         className="h-full bg-gradient-to-r from-brand-500 to-brand-300"
-                        style={{ width: `${abcStatus.total > 0 ? Math.round((abcStatus.classified / abcStatus.total) * 100) : 0}%` }}
+                        style={{ width: `${(abcStatus.total ?? 0) > 0 ? Math.round(((abcStatus.classified ?? 0) / (abcStatus.total ?? 1)) * 100) : 0}%` }}
                       />
                     </div>
                     {abcStatus.last_computed_at ? (

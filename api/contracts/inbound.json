@@ -1,0 +1,128 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Inbound API Contracts",
+    "description": "Validation schemas for the inbound module (api/index.php?module=inbound).",
+    "actions": {
+        "create": {
+            "description": "Create a new inbound order",
+            "required": [],
+            "properties": {
+                "po_number": { "type": "string", "maxLength": 50 },
+                "od_no": { "type": "string", "maxLength": 50 },
+                "supplier_id": { "type": "integer" },
+                "expected_date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                "notes": { "type": "string", "maxLength": 500 }
+            },
+            "items_field": "items",
+            "items": {
+                "required": ["product_id"],
+                "properties": {
+                    "product_id": { "type": "integer" },
+                    "quantity": { "type": "number", "minimum": 0 },
+                    "pallet": { "type": "number", "minimum": 0 },
+                    "uom": { "type": "string" },
+                    "batch_number": { "type": "string", "maxLength": 50 },
+                    "manufacture_date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                    "exp_date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                    "location": { "type": "string", "maxLength": 20 }
+                }
+            }
+        },
+        "update": {
+            "description": "Update an existing inbound order",
+            "required": ["id"],
+            "properties": {
+                "id": { "type": "integer" },
+                "po_number": { "type": "string", "maxLength": 50 },
+                "od_no": { "type": "string", "maxLength": 50 },
+                "supplier_id": { "type": "integer" },
+                "expected_date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                "notes": { "type": "string", "maxLength": 500 }
+            }
+        },
+        "delete": {
+            "description": "Delete an inbound order",
+            "required": ["id"],
+            "properties": {
+                "id": { "type": "integer" }
+            }
+        },
+        "add_item": {
+            "description": "Add an item to an inbound order",
+            "required": ["inbound_id"],
+            "properties": {
+                "inbound_id": { "type": "integer" },
+                "product_id": { "type": "integer" },
+                "quantity": { "type": "number", "minimum": 0 },
+                "pallet": { "type": "number", "minimum": 0 },
+                "in_process_status": { "type": "string", "enum": ["Dues In", "Goods Received", "ATP", "Unserviceable"] }
+            }
+        },
+        "update_item": {
+            "description": "Update an inbound item",
+            "required": ["item_id"],
+            "properties": {
+                "item_id": { "type": "integer" },
+                "quantity": { "type": "number", "minimum": 0 },
+                "pallet_no": { "type": "string", "maxLength": 50 }
+            }
+        },
+        "update_item_qty": {
+            "description": "Update quantity of an inbound item",
+            "required": ["item_id", "quantity"],
+            "properties": {
+                "item_id": { "type": "integer" },
+                "quantity": { "type": "number", "minimum": 0 }
+            }
+        },
+        "delete_item": {
+            "description": "Delete an inbound item",
+            "required": ["item_id"],
+            "properties": {
+                "item_id": { "type": "integer" },
+                "inbound_id": { "type": "integer" }
+            }
+        },
+        "update_item_status": {
+            "description": "Update inbound item in-process status",
+            "required": ["item_id", "status"],
+            "properties": {
+                "item_id": { "type": "integer" },
+                "status": { "type": "string", "enum": ["Dues In", "Goods Received", "Unserviceable", "ATP"] }
+            }
+        },
+        "advance_status": {
+            "description": "Advance inbound order status",
+            "required": ["id", "status"],
+            "properties": {
+                "id": { "type": "integer" },
+                "status": { "type": "string", "enum": ["Dues In", "Receiving"] },
+                "received_by_id": { "type": "integer" },
+                "received_date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}" }
+            }
+        },
+        "complete": {
+            "description": "Mark inbound order as completed",
+            "required": ["id"],
+            "properties": {
+                "id": { "type": "integer" }
+            }
+        },
+        "save_pallet_locations": {
+            "description": "Save pallet locations for an inbound item",
+            "required": ["item_id", "pallet_locations"],
+            "properties": {
+                "item_id": { "type": "integer" },
+                "pallet_locations": { "type": "array" }
+            }
+        },
+        "save_item_location": {
+            "description": "Assign location to an inbound item",
+            "required": ["item_id", "location"],
+            "properties": {
+                "item_id": { "type": "integer" },
+                "location": { "type": "string", "maxLength": 20 }
+            }
+        }
+    }
+}

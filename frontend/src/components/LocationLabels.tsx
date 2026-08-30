@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import JsBarcode from 'jsbarcode';
 import { Printer, X } from 'lucide-react';
 
@@ -10,6 +10,9 @@ export interface LocationLabelRow {
   position: string | null;
   zone: string | null;
 }
+
+// Labels per A4 page: 4 columns × 12 rows = 48
+const LABELS_PER_PAGE = 48;
 
 function BinLabel({ code }: { code: string }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -43,10 +46,9 @@ function BinLabel({ code }: { code: string }) {
 }
 
 /**
- * Rack-walk bin labels (S44). Renders one barcode label per location inside a
- * print-only grid (.bin-print-area); window.print() prints only that grid via
- * the @media print CSS in index.css. Each label's barcode (CODE128) is drawn
- * client-side with JsBarcode — the same technique as LpnLabel.
+ * Rack-walk bin labels (S44). Renders paginated label sheets for reliable
+ * multi-page printing. Each page contains 48 labels (4 cols × 12 rows) with
+ * explicit page breaks so 2561 labels print across ~54 pages.
  */
 export default function LocationLabels({
   labels,
@@ -55,17 +57,31 @@ export default function LocationLabels({
   labels: LocationLabelRow[];
   onClose?: () => void;
 }) {
+  const pages = useMemo(() => {
+    const result: LocationLabelRow[][] = [];
+    for (let i = 0; i < labels.length; i += LABELS_PER_PAGE) {
+      result.push(labels.slice(i, i + LABELS_PER_PAGE));
+    }
+    return result;
+  }, [labels]);
+
   return (
     <div>
       <div className="bin-print-area bg-white text-black rounded-xl">
         {labels.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-8">Tidak ada lokasi untuk dicetak.</p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-            {labels.map((l) => (
-              <BinLabel key={l.location_code} code={l.location_code} />
+          <>
+            {pages.map((pageLabels, pageIdx) => (
+              <div key={pageIdx} className="bin-page" style={{ pageBreakAfter: pageIdx < pages.length - 1 ? 'always' : 'auto' }}>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {pageLabels.map((l) => (
+                    <BinLabel key={l.location_code} code={l.location_code} />
+                  ))}
+                </div>
+              </div>
             ))}
-          </div>
+          </>
         )}
       </div>
 

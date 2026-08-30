@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, FormEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, RefreshCw, FileInput } from 'lucide-react';
+import { Plus, RefreshCw, FileInput, Search } from 'lucide-react';
 import { api } from '@/lib/api';
 import { fmtDate, fmtNum } from '@/lib/format';
 import { useToast } from '@/components/Toast';
@@ -49,7 +49,12 @@ export default function PicklistList() {
   const [loading, setLoading] = useState(true);
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [outboundId, setOutboundId] = useState('');
+  const [outboundId, setOutboundId] = useState<number | null>(null);
+  const [outboundSearch, setOutboundSearch] = useState('');
+  const [outboundResults, setOutboundResults] = useState<Array<{ id: number; order_number: string; customer_name?: string; status?: string; so_number?: string }>>([]);
+  const [outboundDropdownOpen, setOutboundDropdownOpen] = useState(false);
+  const [outboundSearching, setOutboundSearching] = useState(false);
+  const outboundTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -78,16 +83,16 @@ export default function PicklistList() {
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
-    const id = Number(outboundId);
-    if (!id) {
-      toast('error', 'Masukkan nomor outbound order');
+    if (!outboundId) {
+      toast('error', 'Pilih outbound order terlebih dahulu');
       return;
     }
     setSaving(true);
     try {
-      const res = await api('picklist', 'create_from_outbound', { body: { outbound_id: id } });
+      const res = await api('picklist', 'create_from_outbound', { body: { outbound_id: outboundId } });
       toast('success', 'Picklist berhasil dibuat');
       setCreateOpen(false);
+      clearOutbound();
       navigate(`/picklist/${res.id}`);
     } catch (err: any) {
       toast('error', err.message || 'Gagal membuat picklist');
@@ -104,6 +109,39 @@ export default function PicklistList() {
     } catch (err: any) {
       toast('error', err.message || 'Gagal menghapus picklist');
     }
+  };
+
+  const handleOutboundSearch = useCallback((q: string) => {
+    setOutboundSearch(q);
+    if (outboundTimer.current) clearTimeout(outboundTimer.current);
+    if (!q.trim()) {
+      setOutboundResults([]);
+      setOutboundDropdownOpen(false);
+      return;
+    }
+    outboundTimer.current = setTimeout(async () => {
+      setOutboundSearching(true);
+      try {
+        const res = await api('outbound', 'list', { params: { search: q, per_page: 20, status: 'Open' } });
+        setOutboundResults(res.rows || []);
+        setOutboundDropdownOpen(true);
+      } catch {
+      } finally {
+        setOutboundSearching(false);
+      }
+    }, 300);
+  }, []);
+
+  const selectOutbound = (row: { id: number; order_number: string; customer_name?: string; so_number?: string }) => {
+    setOutboundId(row.id);
+    setOutboundSearch(`${row.order_number}${row.customer_name ? ' — ' + row.customer_name : ''}`);
+    setOutboundDropdownOpen(false);
+  };
+
+  const clearOutbound = () => {
+    setOutboundId(null);
+    setOutboundSearch('');
+    setOutboundResults([]);
   };
 
   return (
@@ -217,29 +255,68 @@ export default function PicklistList() {
         )}
       </Card>
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create Picklist from Outbound" size="sm">
+      <Modal open={createOpen} onClose={() => { setCreateOpen(false); clearOutbound(); }} title="Create Picklist from Outbound" size="md">
         <form onSubmit={handleCreate} className="space-y-4">
-          <Field label="Outbound Order ID" required hint="Picklist hanya bisa dibuat dari outbound order yang sudah ada.">
-            <TextInput
-              type="number"
-              min={1}
-              value={outboundId}
-              onChange={(e) => setOutboundId(e.target.value)}
-              placeholder="Contoh: 12"
-              autoFocus
-            />
+          <Field label="Outbound Order" required hint="Cari berdasarkan nomor order, customer, atau SO number.">
+            <div className="relative">
+              {outboundId ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 px-3 py-2 rounded-lg bg-brand-50 border border-brand-100 text-sm">
+                    <div className="font-semibold text-brand-900">{outboundSearch}</div>
+                  </div>
+                  <button type="button" onClick={clearOutbound} className="px-2 py-1 text-xs font-semibold text-gray-500 hover:text-red-600 flex-shrink-0">
+                    Clear
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <TextInput
+                    value={outboundSearch}
+                    onChange={(e) => handleOutboundSearch(e.target.value)}
+                    onFocus={() => outboundResults.length && setOutboundDropdownOpen(true)}
+                    placeholder="Cari outbound order…"
+                    className="pl-9"
+                    autoFocus
+                  />
+                  {outboundSearching && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-brand-600 font-semibold">Searching...</span>
+                  )}
+                </>
+              )}
+              {outboundDropdownOpen && !outboundId && (
+                <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                  {outboundResults.length === 0 && !outboundSearching && (
+                    <div className="px-3 py-2 text-xs text-gray-400">Tidak ada outbound order ditemukan</div>
+                  )}
+                  {outboundResults.map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => selectOutbound(r)}
+                      className="w-full text-left px-3 py-2 hover:bg-brand-50 border-b border-gray-50 last:border-0"
+                    >
+                      <div className="text-sm font-semibold text-gray-800">{r.order_number}</div>
+                      <div className="text-[11px] text-gray-500">
+                        {r.customer_name || '—'}{r.so_number ? ` · SO: ${r.so_number}` : ''}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </Field>
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
               type="button"
-              onClick={() => setCreateOpen(false)}
+              onClick={() => { setCreateOpen(false); clearOutbound(); }}
               className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-sm font-semibold hover:bg-gray-200"
             >
               Batal
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || !outboundId}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold disabled:opacity-60"
             >
               <FileInput className="w-4 h-4" /> {saving ? 'Membuat…' : 'Buat Picklist'}

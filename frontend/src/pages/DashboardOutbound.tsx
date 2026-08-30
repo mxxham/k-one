@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PackageOpen, ClipboardCheck, Truck, ShoppingCart, Layers } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, OutboundStats, OutboundOrder, PicklistRow, PicklistStats, WaveRow } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { Card, EmptyState } from '@/components/Card';
 import Spinner from '@/components/Spinner';
@@ -19,12 +19,12 @@ function greeting(name: string) {
 
 export default function DashboardOutbound() {
   const { user } = useAuth();
-  const [stats, setStats] = useState<any>(null);
-  const [pending, setPending] = useState<any[]>([]);
-  const [picklists, setPicklists] = useState<any[]>([]);
-  const [pickStats, setPickStats] = useState<any>(null);
+  const [stats, setStats] = useState<OutboundStats | null>(null);
+  const [pending, setPending] = useState<OutboundOrder[]>([]);
+  const [picklists, setPicklists] = useState<PicklistRow[]>([]);
+  const [pickStats, setPickStats] = useState<PicklistStats | null>(null);
   const [waveCount, setWaveCount] = useState(0);
-  const [waveRows, setWaveRows] = useState<any[]>([]);
+  const [waveRows, setWaveRows] = useState<WaveRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [waveLoading, setWaveLoading] = useState(true);

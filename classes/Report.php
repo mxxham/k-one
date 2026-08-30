@@ -242,15 +242,13 @@ class Report {
         $stockByLocation = $db->query(
             "SELECT lm.aisle,
                     COUNT(DISTINCT lm.location_code) as total_locs,
-                    COUNT(DISTINCT CASE WHEN s1.quantity > 0 OR s2.quantity > 0 THEN lm.location_code END) as occupied_locs,
-                    COALESCE(SUM(CASE WHEN s1.quantity > 0 THEN s1.quantity ELSE s2.quantity END), 0) as total_qty,
-                    CEIL(COALESCE(SUM(CASE WHEN s1.quantity > 0 THEN s1.pallet ELSE s2.pallet END), 0)) as total_pallet
+                    COUNT(DISTINCT CASE WHEN s1.quantity > 0 THEN lm.location_code END) as occupied_locs,
+                    COALESCE(SUM(s1.quantity), 0) as total_qty,
+                    CEIL(COALESCE(SUM(s1.pallet), 0)) as total_pallet
              FROM location_master lm
              LEFT JOIN stock_locations sl ON sl.location_code COLLATE utf8mb4_general_ci = lm.location_code COLLATE utf8mb4_general_ci
                  AND sl.status IN ('Available','Reserved')
              LEFT JOIN stock s1 ON sl.stock_id = s1.id AND s1.quantity > 0
-             LEFT JOIN stock s2 ON s2.location COLLATE utf8mb4_general_ci = lm.location_code COLLATE utf8mb4_general_ci
-                 AND s2.quantity > 0 AND s2.stock_status = 'Available' AND s1.id IS NULL
              WHERE lm.is_active = 1
                AND LEFT(lm.location_code, 2) IN ('" . implode("','", $activeRacks) . "')
              GROUP BY lm.aisle ORDER BY lm.aisle"
@@ -626,14 +624,12 @@ $locationUtil = $db->query(
                     ELSE lm.aisle
                 END AS aisle,
                 COUNT(DISTINCT lm.location_code) as total_locations,
-                COUNT(DISTINCT CASE WHEN s1.quantity > 0 OR s2.quantity > 0 THEN lm.location_code END) as occupied,
-                ROUND(100.0 * COUNT(DISTINCT CASE WHEN s1.quantity > 0 OR s2.quantity > 0 THEN lm.location_code END) / NULLIF(COUNT(DISTINCT lm.location_code), 0), 1) as utilization_percent
+                COUNT(DISTINCT CASE WHEN s1.quantity > 0 THEN lm.location_code END) as occupied,
+                ROUND(100.0 * COUNT(DISTINCT CASE WHEN s1.quantity > 0 THEN lm.location_code END) / NULLIF(COUNT(DISTINCT lm.location_code), 0), 1) as utilization_percent
             FROM location_master lm
             LEFT JOIN stock_locations sl ON sl.location_code COLLATE utf8mb4_general_ci = lm.location_code COLLATE utf8mb4_general_ci
                 AND sl.status IN ('Available','Reserved')
             LEFT JOIN stock s1 ON sl.stock_id = s1.id AND s1.quantity > 0
-            LEFT JOIN stock s2 ON s2.location COLLATE utf8mb4_general_ci = lm.location_code COLLATE utf8mb4_general_ci
-                AND s2.quantity > 0 AND s2.stock_status = 'Available' AND s1.id IS NULL
             WHERE lm.is_active = 1
               AND lm.location_code NOT IN ('STAGING','QUA_SHELL','UNALLOCATED')
               AND LEFT(lm.location_code, 2) IN ('" . implode("','", $activeRacks) . "')
@@ -705,6 +701,374 @@ $locationUtil = $db->query(
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
+    }
+
+    // =========================================================================
+    // Advanced Reports
+    // =========================================================================
+
+    /**
+     * Stock Valuation Report — current inventory value by product.
+     * Shows quantity, pallets, and unit cost (if available in products table).
+     * Since products table may not have a cost column, this gracefully degrades
+     * to showing quantity-only valuation when unit_cost is NULL.
+     */
+    public static function getStockValuation(): array {
+        $db = db();
+
+        // Check if products table has a unit_cost column
+        $hasCost = $db->query("SHOW COLUMNS FROM products LIKE 'unit_cost'")->fetch();
+        $costSelect = $hasCost ? 'COALESCE(p.unit_cost, 0)' : '0';
+
+        $rows = $db->query(
+            "SELECT p.id, p.product_code, p.product_name, p.uom_type,
+                    p.uom_per_pallet, p.category,
+                    $costSelect AS unit_cost,
+                    COUNT(DISTINCT s.id) AS batch_count,
+                    SUM(s.quantity) AS total_qty,
+                    SUM(COALESCE(s.pallet, 0)) AS total_pallets,
+                    MIN(s.expiry_date) AS nearest_expiry,
+                    MAX(s.expiry_date) AS furthest_expiry,
+                    COUNT(DISTINCT s.location) AS location_count
+             FROM stock s
+             JOIN products p ON s.product_id = p.id
+             WHERE s.quantity > 0 AND s.stock_status = 'Available'
+             GROUP BY p.id
+             ORDER BY p.product_name"
+        )->fetchAll();
+
+        $totalQty      = 0;
+        $totalPallets  = 0;
+        $totalValue    = 0;
+        $batchCount    = 0;
+        $productCount  = count($rows);
+
+        foreach ($rows as &$row) {
+            $row['total_qty']     = (float)$row['total_qty'];
+            $row['total_pallets'] = (float)$row['total_pallets'];
+            $row['unit_cost']     = (float)$row['unit_cost'];
+            $row['batch_count']   = (int)$row['batch_count'];
+            $row['location_count']= (int)$row['location_count'];
+            $row['total_value']   = $row['total_qty'] * $row['unit_cost'];
+
+            $totalQty     += $row['total_qty'];
+            $totalPallets += $row['total_pallets'];
+            $totalValue   += $row['total_value'];
+            $batchCount   += $row['batch_count'];
+        }
+        unset($row);
+
+        return [
+            'has_cost_data' => $hasCost !== false,
+            'generated_at'  => date('Y-m-d H:i:s'),
+            'summary' => [
+                'total_products'  => $productCount,
+                'total_batches'   => $batchCount,
+                'total_qty'       => $totalQty,
+                'total_pallets'   => $totalPallets,
+                'total_value'     => $totalValue,
+            ],
+            'items' => $rows,
+        ];
+    }
+
+    /**
+     * Inbound Receipt Summary — aggregated receipts by date range.
+     * Groups by received date and product, showing total quantities received.
+     */
+    public static function getInboundReceiptSummary(string $dateFrom, string $dateTo): array {
+        $db = db();
+
+        // Overall summary
+        $summaryStmt = $db->prepare(
+            "SELECT
+                COUNT(DISTINCT io.id) AS total_orders,
+                COUNT(DISTINCT ii.product_id) AS total_products,
+                SUM(COALESCE(ii.actual_qty, ii.quantity, 0)) AS total_qty_received,
+                SUM(COALESCE(ii.pallet, 0)) AS total_pallets,
+                COUNT(CASE WHEN io.status IN ('Goods Received','Good Received','Completed') THEN 1 END) AS completed_orders,
+                COUNT(CASE WHEN io.status = 'Receiving' THEN 1 END) AS in_progress_orders,
+                COUNT(CASE WHEN io.status = 'Dues In' THEN 1 END) AS pending_orders
+             FROM inbound_orders io
+             LEFT JOIN inbound_items ii ON io.id = ii.inbound_order_id
+             WHERE (DATE(COALESCE(io.received_date, io.order_date, io.created_at)) BETWEEN ? AND ?)"
+        );
+        $summaryStmt->execute([$dateFrom, $dateTo]);
+        $summary = $summaryStmt->fetch();
+
+        // Daily breakdown
+        $dailyStmt = $db->prepare(
+            "SELECT
+                DATE(COALESCE(io.received_date, io.order_date)) AS receipt_date,
+                COUNT(DISTINCT io.id) AS order_count,
+                SUM(COALESCE(ii.actual_qty, ii.quantity, 0)) AS total_qty,
+                SUM(COALESCE(ii.pallet, 0)) AS total_pallets
+             FROM inbound_orders io
+             LEFT JOIN inbound_items ii ON io.id = ii.inbound_order_id
+             WHERE (DATE(COALESCE(io.received_date, io.order_date, io.created_at)) BETWEEN ? AND ?)
+             GROUP BY DATE(COALESCE(io.received_date, io.order_date))
+             ORDER BY receipt_date ASC"
+        );
+        $dailyStmt->execute([$dateFrom, $dateTo]);
+        $dailyBreakdown = $dailyStmt->fetchAll();
+
+        // Product breakdown
+        $productStmt = $db->prepare(
+            "SELECT
+                p.product_code, p.product_name, p.uom_type,
+                COUNT(DISTINCT io.id) AS order_count,
+                SUM(COALESCE(ii.actual_qty, ii.quantity, 0)) AS total_qty,
+                SUM(COALESCE(ii.pallet, 0)) AS total_pallets,
+                COUNT(DISTINCT DATE(COALESCE(io.received_date, io.order_date))) AS receipt_days
+             FROM inbound_orders io
+             JOIN inbound_items ii ON io.id = ii.inbound_order_id
+             JOIN products p ON ii.product_id = p.id
+             WHERE (DATE(COALESCE(io.received_date, io.order_date, io.created_at)) BETWEEN ? AND ?)
+             GROUP BY p.id
+             ORDER BY total_qty DESC"
+        );
+        $productStmt->execute([$dateFrom, $dateTo]);
+        $productBreakdown = $productStmt->fetchAll();
+
+        // Status breakdown
+        $statusStmt = $db->prepare(
+            "SELECT
+                io.status,
+                COUNT(DISTINCT io.id) AS order_count,
+                SUM(COALESCE(ii.actual_qty, ii.quantity, 0)) AS total_qty
+             FROM inbound_orders io
+             LEFT JOIN inbound_items ii ON io.id = ii.inbound_order_id
+             WHERE (DATE(COALESCE(io.received_date, io.order_date, io.created_at)) BETWEEN ? AND ?)
+             GROUP BY io.status
+             ORDER BY order_count DESC"
+        );
+        $statusStmt->execute([$dateFrom, $dateTo]);
+        $statusBreakdown = $statusStmt->fetchAll();
+
+        return [
+            'date_from'         => $dateFrom,
+            'date_to'           => $dateTo,
+            'generated_at'      => date('Y-m-d H:i:s'),
+            'summary'           => $summary,
+            'daily_breakdown'   => $dailyBreakdown,
+            'product_breakdown' => $productBreakdown,
+            'status_breakdown'  => $statusBreakdown,
+        ];
+    }
+
+    /**
+     * Outbound Shipment Summary — aggregated shipments by date range.
+     * Groups by shipped date and product, showing total quantities shipped.
+     */
+    public static function getOutboundShipmentSummary(string $dateFrom, string $dateTo): array {
+        $db = db();
+
+        // Overall summary
+        $summaryStmt = $db->prepare(
+            "SELECT
+                COUNT(DISTINCT oo.id) AS total_orders,
+                COUNT(DISTINCT oi.product_id) AS total_products,
+                SUM(COALESCE(oi.actual_qty, oi.quantity, 0)) AS total_qty_shipped,
+                SUM(COALESCE(oi.pallet, 0)) AS total_pallets,
+                COUNT(DISTINCT oo.customer_id) AS total_customers,
+                COUNT(CASE WHEN oo.status IN ('Shipped','Completed') THEN 1 END) AS shipped_orders,
+                COUNT(CASE WHEN oo.status IN ('Open','Picking') THEN 1 END) AS pending_orders
+             FROM outbound_orders oo
+             LEFT JOIN outbound_items oi ON oo.id = oi.outbound_order_id
+             WHERE (DATE(COALESCE(oo.shipped_date, oo.order_date, oo.created_at)) BETWEEN ? AND ?)"
+        );
+        $summaryStmt->execute([$dateFrom, $dateTo]);
+        $summary = $summaryStmt->fetch();
+
+        // Daily breakdown
+        $dailyStmt = $db->prepare(
+            "SELECT
+                DATE(COALESCE(oo.shipped_date, oo.order_date)) AS ship_date,
+                COUNT(DISTINCT oo.id) AS order_count,
+                SUM(COALESCE(oi.actual_qty, oi.quantity, 0)) AS total_qty,
+                SUM(COALESCE(oi.pallet, 0)) AS total_pallets,
+                COUNT(DISTINCT oo.customer_id) AS customer_count
+             FROM outbound_orders oo
+             LEFT JOIN outbound_items oi ON oo.id = oi.outbound_order_id
+             WHERE (DATE(COALESCE(oo.shipped_date, oo.order_date, oo.created_at)) BETWEEN ? AND ?)
+             GROUP BY DATE(COALESCE(oo.shipped_date, oo.order_date))
+             ORDER BY ship_date ASC"
+        );
+        $dailyStmt->execute([$dateFrom, $dateTo]);
+        $dailyBreakdown = $dailyStmt->fetchAll();
+
+        // Product breakdown
+        $productStmt = $db->prepare(
+            "SELECT
+                p.product_code, p.product_name, p.uom_type,
+                COUNT(DISTINCT oo.id) AS order_count,
+                SUM(COALESCE(oi.actual_qty, oi.quantity, 0)) AS total_qty,
+                SUM(COALESCE(oi.pallet, 0)) AS total_pallets,
+                COUNT(DISTINCT oo.customer_id) AS customer_count
+             FROM outbound_orders oo
+             JOIN outbound_items oi ON oo.id = oi.outbound_order_id
+             JOIN products p ON oi.product_id = p.id
+             WHERE (DATE(COALESCE(oo.shipped_date, oo.order_date, oo.created_at)) BETWEEN ? AND ?)
+             GROUP BY p.id
+             ORDER BY total_qty DESC"
+        );
+        $productStmt->execute([$dateFrom, $dateTo]);
+        $productBreakdown = $productStmt->fetchAll();
+
+        // Customer breakdown
+        $customerStmt = $db->prepare(
+            "SELECT
+                COALESCE(c.customer_code, 'N/A') AS customer_code,
+                COALESCE(c.customer_name, 'Unknown') AS customer_name,
+                COUNT(DISTINCT oo.id) AS order_count,
+                SUM(COALESCE(oi.actual_qty, oi.quantity, 0)) AS total_qty,
+                SUM(COALESCE(oi.pallet, 0)) AS total_pallets
+             FROM outbound_orders oo
+             LEFT JOIN outbound_items oi ON oo.id = oi.outbound_order_id
+             LEFT JOIN customers c ON oo.customer_id = c.id
+             WHERE (DATE(COALESCE(oo.shipped_date, oo.order_date, oo.created_at)) BETWEEN ? AND ?)
+             GROUP BY oo.customer_id
+             ORDER BY total_qty DESC"
+        );
+        $customerStmt->execute([$dateFrom, $dateTo]);
+        $customerBreakdown = $customerStmt->fetchAll();
+
+        // Status breakdown
+        $statusStmt = $db->prepare(
+            "SELECT
+                oo.status,
+                COUNT(DISTINCT oo.id) AS order_count,
+                SUM(COALESCE(oi.actual_qty, oi.quantity, 0)) AS total_qty
+             FROM outbound_orders oo
+             LEFT JOIN outbound_items oi ON oo.id = oi.outbound_order_id
+             WHERE (DATE(COALESCE(oo.shipped_date, oo.order_date, oo.created_at)) BETWEEN ? AND ?)
+             GROUP BY oo.status
+             ORDER BY order_count DESC"
+        );
+        $statusStmt->execute([$dateFrom, $dateTo]);
+        $statusBreakdown = $statusStmt->fetchAll();
+
+        return [
+            'date_from'          => $dateFrom,
+            'date_to'            => $dateTo,
+            'generated_at'       => date('Y-m-d H:i:s'),
+            'summary'            => $summary,
+            'daily_breakdown'    => $dailyBreakdown,
+            'product_breakdown'  => $productBreakdown,
+            'customer_breakdown' => $customerBreakdown,
+            'status_breakdown'   => $statusBreakdown,
+        ];
+    }
+
+    /**
+     * Inventory Turnover Report — measures how quickly inventory is consumed.
+     * Turnover rate = total outbound quantity / average inventory over period.
+     * Also provides days-of-stock (how many days current stock would last
+     * based on average daily outbound rate).
+     */
+    public static function getInventoryTurnover(string $dateFrom, string $dateTo): array {
+        $db = db();
+
+        // Calculate the number of days in the period
+        $startDate = new DateTime($dateFrom);
+        $endDate   = new DateTime($dateTo);
+        $periodDays = max(1, $endDate->diff($startDate)->days + 1);
+
+        // Per-product turnover
+        $turnoverStmt = $db->prepare(
+            "SELECT
+                p.id AS product_id,
+                p.product_code,
+                p.product_name,
+                p.uom_type,
+                -- Total outbound during period
+                COALESCE(out.total_out, 0) AS total_outbound,
+                -- Total inbound during period
+                COALESCE(inp.total_in, 0) AS total_inbound,
+                -- Current stock
+                COALESCE(cur.current_qty, 0) AS current_stock,
+                -- Average daily outbound
+                COALESCE(out.total_out, 0) / ? AS avg_daily_outbound,
+                -- Turnover rate (outbound / current stock)
+                CASE
+                    WHEN COALESCE(cur.current_qty, 0) > 0
+                    THEN ROUND(COALESCE(out.total_out, 0) / cur.current_qty, 2)
+                    ELSE 0
+                END AS turnover_rate,
+                -- Days of stock remaining
+                CASE
+                    WHEN COALESCE(out.total_out, 0) > 0
+                    THEN ROUND(cur.current_qty / (COALESCE(out.total_out, 0) / ?), 1)
+                    ELSE NULL
+                END AS days_of_stock,
+                -- Net movement
+                COALESCE(out.total_out, 0) - COALESCE(inp.total_in, 0) AS net_movement
+             FROM products p
+             LEFT JOIN (
+                 SELECT product_id, SUM(quantity_out) AS total_out
+                 FROM stock_ledger
+                 WHERE transaction_type = 'OUT'
+                   AND transaction_date BETWEEN ? AND ?
+                 GROUP BY product_id
+             ) out ON out.product_id = p.id
+             LEFT JOIN (
+                 SELECT product_id, SUM(quantity_in) AS total_in
+                 FROM stock_ledger
+                 WHERE transaction_type = 'IN'
+                   AND transaction_date BETWEEN ? AND ?
+                 GROUP BY product_id
+             ) inp ON inp.product_id = p.id
+             LEFT JOIN (
+                 SELECT product_id, SUM(quantity) AS current_qty
+                 FROM stock
+                 WHERE stock_status = 'Available' AND quantity > 0
+                 GROUP BY product_id
+             ) cur ON cur.product_id = p.id
+             WHERE COALESCE(out.total_out, 0) > 0 OR COALESCE(cur.current_qty, 0) > 0
+             ORDER BY turnover_rate DESC"
+        );
+        $turnoverStmt->execute([
+            $periodDays, $periodDays,
+            $dateFrom, $dateTo,
+            $dateFrom, $dateTo,
+        ]);
+        $turnoverData = $turnoverStmt->fetchAll();
+
+        // Process and cast types
+        foreach ($turnoverData as &$row) {
+            $row['total_outbound']  = (float)$row['total_outbound'];
+            $row['total_inbound']   = (float)$row['total_inbound'];
+            $row['current_stock']   = (float)$row['current_stock'];
+            $row['avg_daily_outbound'] = round((float)$row['avg_daily_outbound'], 2);
+            $row['turnover_rate']   = (float)$row['turnover_rate'];
+            $row['days_of_stock']   = $row['days_of_stock'] !== null ? (float)$row['days_of_stock'] : null;
+            $row['net_movement']    = (float)$row['net_movement'];
+        }
+        unset($row);
+
+        // Aggregate summary
+        $totalOutbound   = array_sum(array_column($turnoverData, 'total_outbound'));
+        $totalInbound    = array_sum(array_column($turnoverData, 'total_inbound'));
+        $totalCurrentStock = array_sum(array_column($turnoverData, 'current_stock'));
+        $avgTurnover     = count($turnoverData) > 0
+            ? round(array_sum(array_column($turnoverData, 'turnover_rate')) / count($turnoverData), 2)
+            : 0;
+
+        return [
+            'date_from'      => $dateFrom,
+            'date_to'        => $dateTo,
+            'period_days'    => $periodDays,
+            'generated_at'   => date('Y-m-d H:i:s'),
+            'summary' => [
+                'products_analyzed'  => count($turnoverData),
+                'total_outbound'     => $totalOutbound,
+                'total_inbound'      => $totalInbound,
+                'total_current_stock'=> $totalCurrentStock,
+                'avg_turnover_rate'  => $avgTurnover,
+                'avg_daily_outbound' => $periodDays > 0 ? round($totalOutbound / $periodDays, 2) : 0,
+            ],
+            'items' => $turnoverData,
+        ];
     }
 
     // =========================================================================

@@ -1397,17 +1397,30 @@ class Putaway {
                 $lvlStmt->execute([$target]);
                 $binLevel = strtoupper((string)$lvlStmt->fetchColumn());
                 $palletFunction = ($binLevel === 'A') ? 'PICK_FACE' : 'RESERVE';
-                $db->prepare("INSERT INTO stock_locations
-                        (stock_id, location_code, pallet_seq, quantity, original_quantity,
-                         uom, is_full_pallet, batch_number, lpn_code, inbound_item_id, status, pallet_function)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Available', ?)")
-                   ->execute([
-                       $stockId, $target, $i['pallet_seq'] ?? 1, $qty, $qty,
-                       $i['uom'] ?? 'Drum',
-                       (int)$i['quantity'] >= max(1, intval($db->query("SELECT uom_per_pallet FROM products WHERE id = " . (int)$pid)->fetchColumn() ?: 4)) ? 1 : 0,
-                       $batch, $i['lpn_code'], $i['inbound_item_id'] ?? null,
-                       $palletFunction,
-                   ]);
+                $isFull = (int)$i['quantity'] >= max(1, intval($db->query("SELECT uom_per_pallet FROM products WHERE id = " . (int)$pid)->fetchColumn() ?: 4)) ? 1 : 0;
+
+                // Check if stock_locations row already exists for this stock_id+location
+                $existingSl = $db->prepare("SELECT id FROM stock_locations WHERE stock_id = ? AND location_code = ? AND status = 'Available' LIMIT 1");
+                $existingSl->execute([$stockId, $target]);
+                $existingSlId = (int)$existingSl->fetchColumn();
+
+                if ($existingSlId) {
+                    // Merge: update quantity and add LPN info
+                    $db->prepare("UPDATE stock_locations SET quantity = quantity + ?, lpn_code = ?, pallet_seq = ?, updated_at = NOW() WHERE id = ?")
+                       ->execute([$qty, $i['lpn_code'], $i['pallet_seq'] ?? 1, $existingSlId]);
+                } else {
+                    $db->prepare("INSERT INTO stock_locations
+                            (stock_id, location_code, pallet_seq, quantity, original_quantity,
+                             uom, is_full_pallet, batch_number, lpn_code, inbound_item_id, status, pallet_function)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Available', ?)")
+                       ->execute([
+                           $stockId, $target, $i['pallet_seq'] ?? 1, $qty, $qty,
+                           $i['uom'] ?? 'Drum',
+                           $isFull,
+                           $batch, $i['lpn_code'], $i['inbound_item_id'] ?? null,
+                           $palletFunction,
+                       ]);
+                }
 
                 // Ledger: TRANSFER_OUT (STAGING) + TRANSFER_IN (target)
                 self::_taskLedger($pid, 'TRANSFER_OUT', $task['task_number'], $batch, 0, $qty, $i['uom'] ?? 'Drum', 'STAGING', 'Putaway task ke ' . $target);

@@ -1,0 +1,75 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Stock API Contracts",
+    "description": "Validation schemas for the stock module (api/index.php?module=stock).",
+    "actions": {
+        "transfer": {
+            "description": "Transfer stock to a new location",
+            "required": ["stock_id", "to_location"],
+            "properties": {
+                "stock_id": { "type": "integer" },
+                "to_location": { "type": "string", "maxLength": 20 },
+                "quantity": { "type": "number", "minimum": 0 }
+            }
+        },
+        "adjust": {
+            "description": "Adjust stock quantity (admin only)",
+            "required": ["stock_id", "quantity"],
+            "properties": {
+                "stock_id": { "type": "integer" },
+                "quantity": { "type": "number", "minimum": 0 },
+                "reason": { "type": "string", "maxLength": 500 }
+            }
+        },
+        "hold": {
+            "description": "Place stock on hold",
+            "required": ["stock_id", "status", "reason"],
+            "properties": {
+                "stock_id": { "type": "integer" },
+                "status": { "type": "string", "enum": ["on_hold", "quarantine", "damaged"] },
+                "reason": { "type": "string", "maxLength": 500 }
+            }
+        },
+        "release": {
+            "description": "Release stock from hold",
+            "required": ["stock_id"],
+            "properties": {
+                "stock_id": { "type": "integer" }
+            }
+        },
+        "scan": {
+            "description": "Scan a product code to look up stock info",
+            "required": ["code"],
+            "properties": {
+                "code": { "type": "string", "maxLength": 50 }
+            }
+        },
+        "scan_override": {
+            "description": "Override a scan mismatch with a reason",
+            "required": ["code", "reason"],
+            "properties": {
+                "code": { "type": "string", "maxLength": 50 },
+                "reason": { "type": "string", "maxLength": 500 },
+                "context": { "type": "string", "maxLength": 100 }
+            }
+        },
+        "reconcile": {
+            "description": "Reconcile stock with actual count",
+            "required": ["stock_id", "actual_qty"],
+            "properties": {
+                "stock_id": { "type": "integer" },
+                "actual_qty": { "type": "number", "minimum": 0 },
+                "reason": { "type": "string", "maxLength": 500 }
+            }
+        },
+        "allocate_zone": {
+            "description": "Allocate stock to a preferred zone",
+            "required": ["product_id", "quantity"],
+            "properties": {
+                "product_id": { "type": "integer" },
+                "quantity": { "type": "number", "minimum": 0 },
+                "zone": { "type": "string", "maxLength": 20 }
+            }
+        }
+    }
+}

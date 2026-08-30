@@ -25,6 +25,12 @@ export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Days until expiry to show as "critical" (≤ this = critical) */
+export const EXPIRY_CRITICAL_DAYS = 30;
+
+/** Days until expiry to show as "warning" (≤ this = warning, > critical) */
+export const EXPIRY_WARNING_DAYS = 120;
+
 export function expiryInfo(expiry: string | null | undefined): {
   text: string;
   level: 'ok' | 'warning' | 'critical' | 'expired' | 'none';
@@ -35,8 +41,8 @@ export function expiryInfo(expiry: string | null | undefined): {
   const ms = exp.getTime() - now.getTime();
   const days = Math.floor(ms / 86400000);
   if (days < 0) return { text: `Expired ${Math.abs(days)}d ago`, level: 'expired' };
-  if (days <= 120) return { text: `${days}d left`, level: 'critical' };
-  if (days <= 180) return { text: `${days}d left`, level: 'warning' };
+  if (days <= EXPIRY_CRITICAL_DAYS) return { text: `${days}d left`, level: 'critical' };
+  if (days <= EXPIRY_WARNING_DAYS) return { text: `${days}d left`, level: 'warning' };
   const months = Math.floor(days / 30);
   return { text: `${months}m left`, level: 'ok' };
 }

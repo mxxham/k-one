@@ -19,6 +19,8 @@ define('JWT_EXPIRES_HOURS', Kone\Config\Env::int('JWT_EXPIRES_HOURS', 12));
 define('TIMEZONE', Kone\Config\Env::get('TIMEZONE', 'Asia/Jakarta'));
 define('API_ENV', Kone\Config\Env::get('API_ENV', 'dev'));
 
+require_once __DIR__ . '/business_rules.php';
+
 
 class Database {
     private static $instance = null;

@@ -1,42 +1,52 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ToastProvider } from '@/components/Toast';
 import Layout from '@/components/Layout';
 import Spinner from '@/components/Spinner';
 import Login from '@/pages/Login';
-import Dashboard from '@/pages/Dashboard';
-import DashboardInbound from '@/pages/DashboardInbound';
-import DashboardOutbound from '@/pages/DashboardOutbound';
-import DashboardInventory from '@/pages/DashboardInventory';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { departmentHome } from '@/lib/api';
-import InboundList from '@/pages/InboundList';
-import InboundDetail from '@/pages/InboundDetail';
-import OutboundList from '@/pages/OutboundList';
-import OutboundDetail from '@/pages/OutboundDetail';
-import StockPage from '@/pages/StockPage';
-import LedgerPage from '@/pages/LedgerPage';
-import PicklistList from '@/pages/PicklistList';
-import PicklistDetail from '@/pages/PicklistDetail';
-import StockTakeList from '@/pages/StockTakeList';
-import StockTakeDetail from '@/pages/StockTakeDetail';
-import CycleCountPage from '@/pages/CycleCountPage';
-import BinTransferPage from '@/pages/BinTransferPage';
-import PutawayTasksPage from '@/pages/PutawayTasksPage';
-import PutawayScanPage from '@/pages/PutawayScanPage';
-import ReplenishmentPage from '@/pages/ReplenishmentPage';
-import WavesPage from '@/pages/WavesPage';
-import AsnList from '@/pages/AsnList';
-import AsnDetail from '@/pages/AsnDetail';
-import ProductsPage from '@/pages/ProductsPage';
-import CustomersPage from '@/pages/CustomersPage';
-import LocationsPage from '@/pages/LocationsPage';
-import ZoningPage from '@/pages/ZoningPage';
-import ReportsPage from '@/pages/ReportsPage';
-import ImportPage from '@/pages/ImportPage';
-import AutoImportPage from '@/pages/AutoImportPage';
-import UsersPage from '@/pages/UsersPage';
-import ActivityLogPage from '@/pages/ActivityLogPage';
-import ResetDataPage from '@/pages/ResetDataPage';
+
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const DashboardInbound = lazy(() => import('@/pages/DashboardInbound'));
+const DashboardOutbound = lazy(() => import('@/pages/DashboardOutbound'));
+const DashboardInventory = lazy(() => import('@/pages/DashboardInventory'));
+const InboundList = lazy(() => import('@/pages/InboundList'));
+const InboundDetail = lazy(() => import('@/pages/InboundDetail'));
+const OutboundList = lazy(() => import('@/pages/OutboundList'));
+const OutboundDetail = lazy(() => import('@/pages/OutboundDetail'));
+const StockPage = lazy(() => import('@/pages/StockPage'));
+const LedgerPage = lazy(() => import('@/pages/LedgerPage'));
+const PicklistList = lazy(() => import('@/pages/PicklistList'));
+const PicklistDetail = lazy(() => import('@/pages/PicklistDetail'));
+const StockTakeList = lazy(() => import('@/pages/StockTakeList'));
+const StockTakeDetail = lazy(() => import('@/pages/StockTakeDetail'));
+const CycleCountPage = lazy(() => import('@/pages/CycleCountPage'));
+const BinTransferPage = lazy(() => import('@/pages/BinTransferPage'));
+const PutawayTasksPage = lazy(() => import('@/pages/PutawayTasksPage'));
+const PutawayScanPage = lazy(() => import('@/pages/PutawayScanPage'));
+const ReplenishmentPage = lazy(() => import('@/pages/ReplenishmentPage'));
+const StockReconciliationPage = lazy(() => import('@/pages/StockReconciliationPage'));
+const WavesPage = lazy(() => import('@/pages/WavesPage'));
+const WaveDetail = lazy(() => import('@/pages/WaveDetail'));
+const AsnList = lazy(() => import('@/pages/AsnList'));
+const AsnDetail = lazy(() => import('@/pages/AsnDetail'));
+const ProductsPage = lazy(() => import('@/pages/ProductsPage'));
+const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
+const LocationsPage = lazy(() => import('@/pages/LocationsPage'));
+const ZoningPage = lazy(() => import('@/pages/ZoningPage'));
+const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
+const ImportPage = lazy(() => import('@/pages/ImportPage'));
+const AutoImportPage = lazy(() => import('@/pages/AutoImportPage'));
+const UsersPage = lazy(() => import('@/pages/UsersPage'));
+const ActivityLogPage = lazy(() => import('@/pages/ActivityLogPage'));
+const SecurityAuditPage = lazy(() => import('@/pages/SecurityAuditPage'));
+const ResetDataPage = lazy(() => import('@/pages/ResetDataPage'));
+const QualityPage = lazy(() => import('@/pages/QualityPage'));
+const RmaPage = lazy(() => import('@/pages/RmaPage'));
+const MonitoringPage = lazy(() => import('@/pages/MonitoringPage'));
+const NotificationsPage = lazy(() => import('@/pages/NotificationsPage'));
 
 function RequireAuth() {
   const { isAuthenticated, department } = useAuth();
@@ -68,51 +78,62 @@ export default function App() {
     <BrowserRouter>
       <ToastProvider>
         <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route element={<RequireAuth />}>
-              <Route element={<Layout />}>
-                <Route path="/" element={<HomeRedirect />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/dashboard/inbound" element={<DashboardInbound />} />
-                <Route path="/dashboard/outbound" element={<DashboardOutbound />} />
-                <Route path="/dashboard/inventory" element={<DashboardInventory />} />
-                <Route path="/inbound" element={<InboundList />} />
-                <Route path="/inbound/:id" element={<InboundDetail />} />
-                <Route path="/outbound" element={<OutboundList />} />
-                <Route path="/outbound/:id" element={<OutboundDetail />} />
-                <Route path="/stock" element={<StockPage />} />
-                <Route path="/ledger" element={<LedgerPage />} />
-                <Route path="/picklist" element={<PicklistList />} />
-                <Route path="/picklist/:id" element={<PicklistDetail />} />
-                <Route path="/waves" element={<WavesPage />} />
-                <Route path="/asn" element={<AsnList />} />
-                <Route path="/asn/:id" element={<AsnDetail />} />
-                <Route path="/stocktake" element={<StockTakeList />} />
-                <Route path="/stocktake/:id" element={<StockTakeDetail />} />
-                <Route path="/cycle-count" element={<CycleCountPage />} />
-                <Route path="/bin-transfer" element={<BinTransferPage />} />
-                <Route path="/replenishment" element={<ReplenishmentPage />} />
-                <Route path="/putaway-tasks" element={<PutawayTasksPage />} />
-                <Route path="/putaway-scan" element={<PutawayScanPage />} />
-                <Route path="/reports" element={<ReportsPage />} />
-                <Route element={<RequireWrite />}>
-                  <Route path="/import" element={<ImportPage />} />
-                  <Route path="/import-auto" element={<AutoImportPage />} />
-                  <Route path="/products" element={<ProductsPage />} />
-                  <Route path="/customers" element={<CustomersPage />} />
-                  <Route path="/locations" element={<LocationsPage />} />
-                  <Route path="/zoning" element={<ZoningPage />} />
+          <ErrorBoundary>
+            <Suspense fallback={<div className="flex items-center justify-center h-screen"><Spinner /></div>}>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route element={<RequireAuth />}>
+                <Route element={<Layout />}>
+                  <Route path="/" element={<HomeRedirect />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/dashboard/inbound" element={<DashboardInbound />} />
+                  <Route path="/dashboard/outbound" element={<DashboardOutbound />} />
+                  <Route path="/dashboard/inventory" element={<DashboardInventory />} />
+                  <Route path="/inbound" element={<InboundList />} />
+                  <Route path="/inbound/:id" element={<InboundDetail />} />
+                  <Route path="/outbound" element={<OutboundList />} />
+                  <Route path="/outbound/:id" element={<OutboundDetail />} />
+                  <Route path="/stock" element={<StockPage />} />
+                  <Route path="/ledger" element={<LedgerPage />} />
+                  <Route path="/picklist" element={<PicklistList />} />
+                  <Route path="/picklist/:id" element={<PicklistDetail />} />
+                  <Route path="/waves" element={<WavesPage />} />
+                  <Route path="/waves/:id" element={<WaveDetail />} />
+                  <Route path="/asn" element={<AsnList />} />
+                  <Route path="/asn/:id" element={<AsnDetail />} />
+                  <Route path="/stocktake" element={<StockTakeList />} />
+                  <Route path="/stocktake/:id" element={<StockTakeDetail />} />
+                  <Route path="/cycle-count" element={<CycleCountPage />} />
+                  <Route path="/bin-transfer" element={<BinTransferPage />} />
+                  <Route path="/replenishment" element={<ReplenishmentPage />} />
+                  <Route path="/reconciliation" element={<StockReconciliationPage />} />
+                  <Route path="/putaway-tasks" element={<PutawayTasksPage />} />
+                  <Route path="/putaway-scan" element={<PutawayScanPage />} />
+                  <Route path="/reports" element={<ReportsPage />} />
+                  <Route path="/quality" element={<QualityPage />} />
+                  <Route path="/rma" element={<RmaPage />} />
+                  <Route path="/monitoring" element={<MonitoringPage />} />
+                  <Route path="/notifications" element={<NotificationsPage />} />
+                  <Route element={<RequireWrite />}>
+                    <Route path="/import" element={<ImportPage />} />
+                    <Route path="/import-auto" element={<AutoImportPage />} />
+                    <Route path="/products" element={<ProductsPage />} />
+                    <Route path="/customers" element={<CustomersPage />} />
+                    <Route path="/locations" element={<LocationsPage />} />
+                    <Route path="/zoning" element={<ZoningPage />} />
+                  </Route>
+                  <Route element={<RequireAdmin />}>
+                    <Route path="/users" element={<UsersPage />} />
+                    <Route path="/activity-log" element={<ActivityLogPage />} />
+                    <Route path="/security-audit" element={<SecurityAuditPage />} />
+                    <Route path="/reset-data" element={<ResetDataPage />} />
+                  </Route>
+                  <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
-                <Route element={<RequireAdmin />}>
-                  <Route path="/users" element={<UsersPage />} />
-                  <Route path="/activity-log" element={<ActivityLogPage />} />
-                  <Route path="/reset-data" element={<ResetDataPage />} />
-                </Route>
-                <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
-            </Route>
-          </Routes>
+            </Routes>
+            </Suspense>
+          </ErrorBoundary>
         </AuthProvider>
       </ToastProvider>
     </BrowserRouter>

@@ -2,23 +2,15 @@
 
 class PalletHelper {
     
-    const UOM_PALLET = [
-        'Drum' => 4,        
-        'Carton' => [36, 44, 48],  
-        'Pail' => 24        
-    ];
+    const UOM_PALLET = UOM_PALLET_OPTIONS;
 
     
-    const DEFAULT_PALLET = [
-        'Drum' => 4,
-        'Carton' => 44,
-        'Pail' => 24
-    ];
+    const DEFAULT_PALLET = UOM_DEFAULT_PALLET;
 
     
 
     public static function calculatePallet($quantity, $uom = 'Drum', $customPalletQty = null) {
-        $palletCapacity = $customPalletQty ?? self::DEFAULT_PALLET[$uom] ?? 4;
+        $palletCapacity = $customPalletQty ?? self::DEFAULT_PALLET[$uom] ?? UOM_FALLBACK_UPP;
 
         $pallets = floor($quantity / $palletCapacity);
         $remainder = $quantity % $palletCapacity;
@@ -35,14 +27,14 @@ class PalletHelper {
     
 
     public static function palletToUnits($pallets, $uom = 'Drum', $customPalletQty = null) {
-        $palletCapacity = $customPalletQty ?? self::DEFAULT_PALLET[$uom] ?? 4;
+        $palletCapacity = $customPalletQty ?? self::DEFAULT_PALLET[$uom] ?? UOM_FALLBACK_UPP;
         return $pallets * $palletCapacity;
     }
 
     
 
     public static function getPalletCapacity($uom) {
-        return self::DEFAULT_PALLET[$uom] ?? 4;
+        return self::DEFAULT_PALLET[$uom] ?? UOM_FALLBACK_UPP;
     }
 
     
@@ -57,8 +49,8 @@ class PalletHelper {
             return ['valid' => false, 'message' => 'Product not found'];
         }
 
-        $maxSku = $product['max_sku_qty'] ?? 44;
-        $maxTrans = $product['max_trans_qty'] ?? 80;
+        $maxSku = $product['max_sku_qty'] ?? DEFAULT_MAX_SKU_QTY;
+        $maxTrans = $product['max_trans_qty'] ?? DEFAULT_MAX_TRANS_QTY;
 
         
         if ($quantity > $maxTrans) {
@@ -85,7 +77,7 @@ class PalletHelper {
 
     
 
-    public static function calculateExpiryDate($productionDate, $years = 4) {
+    public static function calculateExpiryDate($productionDate, $years = DEFAULT_SHELF_LIFE_YEARS) {
         $date = new DateTime($productionDate);
         $date->add(new DateInterval("P{$years}Y"));
         return $date->format('Y-m-d');
@@ -106,7 +98,7 @@ class PalletHelper {
         $months = ($interval->y * 12) + $interval->m;
 
         
-        $isCritical = $interval->invert ? true : ($days <= 120);
+        $isCritical = $interval->invert ? true : ($days <= EXPIRY_CRITICAL_DAYS);
 
         if ($interval->invert) {
             $text = "Expired {$days} days ago";
@@ -126,7 +118,7 @@ class PalletHelper {
 
     
 
-    public static function generateLocations($totalPallets, $baseLocation = 'SUB50') {
+    public static function generateLocations($totalPallets, $baseLocation = LOCATION_BASE_PREFIX) {
         $locations = [];
         for ($i = 1; $i <= $totalPallets; $i++) {
             $locations[] = [
@@ -147,22 +139,22 @@ class PalletHelper {
 
         if (!$product) {
             return [
-                'uom_type' => 'Drum',
-                'uom_per_pallet' => 4,
-                'liters_per_unit' => 209
+                'uom_type' => UOM_DEFAULT_TYPE,
+                'uom_per_pallet' => DEFAULT_UOM_PER_PALLET,
+                'liters_per_unit' => UOM_DEFAULT_LITERS_PER_UNIT
             ];
         }
 
         return [
-            'uom_type' => $product['uom_type'] ?? 'Drum',
-            'uom_per_pallet' => $product['uom_per_pallet'] ?? 4,
-            'liters_per_unit' => $product['liters_per_unit'] ?? 209
+            'uom_type' => $product['uom_type'] ?? UOM_DEFAULT_TYPE,
+            'uom_per_pallet' => $product['uom_per_pallet'] ?? DEFAULT_UOM_PER_PALLET,
+            'liters_per_unit' => $product['liters_per_unit'] ?? UOM_DEFAULT_LITERS_PER_UNIT
         ];
     }
 
     
 
-    public static function calculateLiters($quantity, $litersPerUnit = 209) {
+    public static function calculateLiters($quantity, $litersPerUnit = UOM_DEFAULT_LITERS_PER_UNIT) {
         return $quantity * $litersPerUnit;
     }
 
@@ -216,14 +208,7 @@ class PalletHelper {
 
     /** UOM pallet options (maps to v2 getUomOptions). */
     public static function getUomOptions(string $uomType): array {
-        $options = [
-            'Drum'   => [4],
-            'Carton' => [36, 44, 48],
-            'Pail'   => [24],
-            'EA'     => [4],
-            'Bags'   => [1],
-        ];
-        return $options[$uomType] ?? [4];
+        return UOM_OPTIONS[$uomType] ?? [UOM_FALLBACK_UPP];
     }
 
     /** Full pallets + remainder distribution (maps to v2 calculatePalletDistribution). */
@@ -252,8 +237,8 @@ class PalletHelper {
 
     /** Level = 5th char of location code (maps to v2 levelOf). */
     public static function levelOf(?string $locationCode): string {
-        if (!$locationCode) return 'B';
-        return strtoupper($locationCode[4] ?? 'B');
+        if (!$locationCode) return DEFAULT_LEVEL;
+        return strtoupper($locationCode[4] ?? DEFAULT_LEVEL);
     }
 
     /** PICK_FACE at pick-face level A, otherwise RESERVE (maps to v2 palletFunctionFor). */
@@ -263,7 +248,7 @@ class PalletHelper {
 
     /** is_full_pallet flag: 1 when qty reaches UPP (maps to v2 isFullPallet). */
     public static function isFullPallet($qty, ?int $uomPerPallet): int {
-        $upp = (int)($uomPerPallet ?? 4);
+        $upp = (int)($uomPerPallet ?? UOM_FALLBACK_UPP);
         if (!($upp > 0)) return 1;
         return (int)$qty >= ($upp - 0.001) ? 1 : 0;
     }
@@ -284,8 +269,8 @@ class PalletHelper {
         array $product,
         int $currentStock = 0
     ): array {
-        $maxSku   = $product['max_sku_qty']   ?? 44;
-        $maxTrans = $product['max_trans_qty'] ?? 80;
+        $maxSku   = $product['max_sku_qty']   ?? DEFAULT_MAX_SKU_QTY;
+        $maxTrans = $product['max_trans_qty'] ?? DEFAULT_MAX_TRANS_QTY;
         if ($qty > $maxTrans) {
             return ['valid' => false, 'message' => "Quantity cannot exceed {$maxTrans} per transaction"];
         }

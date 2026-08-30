@@ -279,6 +279,11 @@ $_isViewer = $_authUser && $_authUser['role'] === 'viewer';
             <i class="fas fa-history" style="width:16px;text-align:center;opacity:.8"></i>
             <span>Activity Log</span>
         </a>
+
+        <a href="<?= BASE_URL ?>/security_audit.php" class="sidebar-link" onclick="autoCloseSidebar()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:rgba(255,255,255,.75);text-decoration:none;font-size:.85rem;transition:all .15s <?= ($currentPage??'')==='security_audit'?';background:linear-gradient(90deg,#026766,#014f4e);color:#fff':'' ?>">
+            <i class="fas fa-shield-alt" style="width:16px;text-align:center;opacity:.8"></i>
+            <span>Security Audit</span>
+        </a>
         <?php endif; ?>
 
     </nav>

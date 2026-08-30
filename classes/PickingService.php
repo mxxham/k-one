@@ -85,6 +85,19 @@ class PickingService
             ]);
 
             $db->commit();
+
+            // Trigger auto-replenishment check
+            try {
+                AutoReplenishment::onStockDrop(
+                    (int)$item['product_id'],
+                    $item['bin_location'],
+                    (float)$stockLoc['quantity'],
+                    $newQty
+                );
+            } catch (\Throwable $e) {
+                // Non-critical: log but don't fail the pick
+            }
+
             return [
                 'picklist_item_id' => $picklistItemId,
                 'qty_picked'       => $qty,

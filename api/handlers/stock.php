@@ -10,9 +10,9 @@ function handle_stock($action) {
             $location = trim(query('location') ?: '');
             $yearRaw = trim(query('year') ?: '');
             $year = preg_match('/^\d{4}$/', $yearRaw) ? (int)$yearRaw : null;
-            $rows = Stock::getAll($status, $expiring, $year);
+            $allRows = Stock::getAll($status, $expiring, $year);
             if ($search) {
-                $rows = array_values(array_filter($rows, function ($r) use ($search) {
+                $allRows = array_values(array_filter($allRows, function ($r) use ($search) {
                     $needle = strtolower($search);
                     return strpos(strtolower($r['product_code'] ?? ''), $needle) !== false
                         || strpos(strtolower($r['product_name'] ?? ''), $needle) !== false
@@ -21,9 +21,13 @@ function handle_stock($action) {
                 }));
             }
             if ($location) {
-                $rows = array_values(array_filter($rows, fn($r) => strcasecmp($r['location'] ?? '', $location) === 0));
+                $allRows = array_values(array_filter($allRows, fn($r) => strcasecmp($r['location'] ?? '', $location) === 0));
             }
-            json_out(['rows' => $rows, 'summary' => Stock::getSummary()]);
+            $total = count($allRows);
+            [$page, $perPage] = page_params(50);
+            $offset = ($page - 1) * $perPage;
+            $rows = array_slice($allRows, $offset, $perPage);
+            json_out(['rows' => $rows, 'summary' => Stock::getSummary()] + paginationMeta($total, $page, $perPage));
             break;
 
         case 'list_grouped':
@@ -90,7 +94,11 @@ function handle_stock($action) {
                 unset($g);
             }
             $grouped = array_values($grouped);
-            json_out(['rows' => $grouped, 'summary' => Stock::getSummary()]);
+            $total = count($grouped);
+            [$page, $perPage] = page_params(50);
+            $offset = ($page - 1) * $perPage;
+            $rows = array_slice($grouped, $offset, $perPage);
+            json_out(['rows' => $rows, 'summary' => Stock::getSummary()] + paginationMeta($total, $page, $perPage));
             break;
 
         case 'summary':
@@ -303,6 +311,114 @@ function handle_stock($action) {
                 ['scanned' => $code, 'context' => $context !== '' ? $context : null],
                 ['reason' => $reason]);
             json_out(['ok' => true]);
+            break;
+
+        case 'sync':
+            api_require_auth();
+            $lastSync = query('last_sync');
+            $limit = min((int)query('limit', 100), 500);
+            $db = db();
+
+            if ($lastSync) {
+                $stmt = $db->prepare("
+                    SELECT s.*, p.product_name, p.product_code,
+                           lm.location_code, lm.row_name as zone,
+                           sl.lpn_code, sl.status as location_status
+                    FROM stock s
+                    JOIN products p ON p.id = s.product_id
+                    JOIN location_master lm ON lm.location_code = s.location
+                    LEFT JOIN stock_locations sl ON sl.stock_id = s.id
+                    WHERE s.updated_at > ?
+                    ORDER BY s.updated_at ASC
+                    LIMIT ?
+                ");
+                $stmt->execute([$lastSync, $limit]);
+            } else {
+                $stmt = $db->prepare("
+                    SELECT s.*, p.product_name, p.product_code,
+                           lm.location_code, lm.row_name as zone,
+                           sl.lpn_code, sl.status as location_status
+                    FROM stock s
+                    JOIN products p ON p.id = s.product_id
+                    JOIN location_master lm ON lm.location_code = s.location
+                    LEFT JOIN stock_locations sl ON sl.stock_id = s.id
+                    ORDER BY s.updated_at DESC
+                    LIMIT ?
+                ");
+                $stmt->execute([$limit]);
+            }
+
+            $stocks = $stmt->fetchAll();
+            $currentSync = $db->query("SELECT NOW()")->fetchColumn();
+            $total = $db->query("SELECT COUNT(*) FROM stock")->fetchColumn();
+
+            json_out([
+                'stocks' => $stocks,
+                'last_sync' => $currentSync,
+                'total' => (int)$total,
+                'count' => count($stocks),
+                'has_more' => count($stocks) >= $limit,
+            ]);
+            break;
+
+        case 'reconcile':
+            api_require_write();
+            $data = body();
+            $stockId = (int)($data['stock_id'] ?? 0);
+            $actualQty = floatval($data['actual_qty'] ?? 0);
+            $reason = $data['reason'] ?? '';
+
+            if (!$stockId || !is_finite($actualQty)) {
+                json_err('stock_id and actual_qty are required', 400);
+            }
+
+            $result = StockReconciliation::reconcile(
+                $stockId,
+                $actualQty,
+                $_SESSION['user_id'] ?? 0,
+                $reason
+            );
+            json_out($result);
+            break;
+
+        case 'reconcile_report':
+            api_require_auth();
+            $productId = query('product_id') ? (int)query('product_id') : null;
+            $dateFrom = query('date_from');
+            $dateTo = query('date_to');
+
+            $result = StockReconciliation::getVarianceReport($productId, $dateFrom, $dateTo);
+            json_out(['report' => $result]);
+            break;
+
+        case 'discrepancies':
+            api_require_auth();
+            $result = StockReconciliation::detectDiscrepancies();
+            json_out(['discrepancies' => $result]);
+            break;
+
+        case 'zone_stats':
+            api_require_auth();
+            $productId = (int)query('product_id');
+            if (!$productId) json_err('product_id is required', 400);
+
+            $result = ZoneAllocation::getZoneStats($productId);
+            json_out(['zones' => $result]);
+            break;
+
+        case 'allocate_zone':
+            api_require_write();
+            $data = body();
+            $productId = (int)($data['product_id'] ?? 0);
+            $quantity = floatval($data['quantity'] ?? 0);
+            $preferredZone = $data['zone'] ?? null;
+
+            if (!$productId || !is_finite($quantity) || $quantity <= 0) {
+                json_err('product_id and quantity are required', 400);
+            }
+
+            $result = ZoneAllocation::allocateByZone($productId, $quantity, $preferredZone);
+            json_out(['allocation' => $result]);
             break;
 
         default:

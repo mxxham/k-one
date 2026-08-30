@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ClipboardCheck, ArrowLeftRight, Boxes, Timer, ShieldAlert, PackageSearch, CalendarCheck2 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, StockTakeStats, StockTakeRow, BinTransferRow, ReplSuggestion, CycleCountSchedule } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { Card, EmptyState } from '@/components/Card';
 import Spinner from '@/components/Spinner';
@@ -19,14 +19,14 @@ function greeting(name: string) {
 
 export default function DashboardInventory() {
   const { user } = useAuth();
-  const [stStats, setStStats] = useState<any>(null);
-  const [stockTakes, setStockTakes] = useState<any[]>([]);
-  const [transfers, setTransfers] = useState<any[]>([]);
+  const [stStats, setStStats] = useState<StockTakeStats | null>(null);
+  const [stockTakes, setStockTakes] = useState<StockTakeRow[]>([]);
+  const [transfers, setTransfers] = useState<BinTransferRow[]>([]);
   const [heldCount, setHeldCount] = useState(0);
   const [replCount, setReplCount] = useState(0);
-  const [replRows, setReplRows] = useState<any[]>([]);
+  const [replRows, setReplRows] = useState<ReplSuggestion[]>([]);
   const [dueCount, setDueCount] = useState(0);
-  const [dueRows, setDueRows] = useState<any[]>([]);
+  const [dueRows, setDueRows] = useState<CycleCountSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [heldLoading, setHeldLoading] = useState(true);

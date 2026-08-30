@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CheckCheck, PackageCheck, RefreshCw, Save, Printer, AlertTriangle } from 'lucide-react';
 import { api, apiHref, webBase, getToken } from '@/lib/api';
@@ -66,30 +66,43 @@ export default function PicklistDetail() {
   const [scanCode, setScanCode] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
 
+  const abortRef = useRef<AbortController | null>(null);
+
   const load = useCallback(async () => {
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
     setLoading(true);
     try {
-      const res = await api('picklist', 'detail', { params: { id } });
-      setPicklist(res.picklist || null);
-      const list = res.items || [];
-      setItems(list);
-      const map: Record<number, { qty: string; status: string }> = {};
-      list.forEach((it: PicklistItem) => {
-        map[it.id] = {
-          qty: it.picked_quantity != null ? String(it.picked_quantity) : '',
-          status: it.status || 'Pending',
-        };
-      });
-      setEdits(map);
+      const res = await api('picklist', 'detail', { params: { id }, signal: ctrl.signal });
+      if (!ctrl.signal.aborted) {
+        setPicklist(res.picklist || null);
+        const list = res.items || [];
+        setItems(list);
+        const map: Record<number, { qty: string; status: string }> = {};
+        list.forEach((it: PicklistItem) => {
+          map[it.id] = {
+            qty: it.picked_quantity != null ? String(it.picked_quantity) : '',
+            status: it.status || 'Pending',
+          };
+        });
+        setEdits(map);
+      }
     } catch (err: any) {
-      toast('error', err.message || 'Gagal memuat detail picklist');
+      if (err.name !== 'AbortError') {
+        toast('error', err.message || 'Gagal memuat detail picklist');
+      }
     } finally {
-      setLoading(false);
+      if (!ctrl.signal.aborted) {
+        setLoading(false);
+      }
     }
   }, [id, toast]);
 
   useEffect(() => {
     load();
+    return () => abortRef.current?.abort();
   }, [load]);
 
   const run = async (action: string, body: Record<string, any>, successMsg: string) => {
@@ -233,7 +246,7 @@ export default function PicklistDetail() {
     <>
       <button
         onClick={() => navigate('/picklist')}
-        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold border border-white/20"
+        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/25 hover:bg-white/35 text-white text-sm font-semibold border border-white/40"
       >
         <ArrowLeft className="w-4 h-4" /> Kembali
       </button>

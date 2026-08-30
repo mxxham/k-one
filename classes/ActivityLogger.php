@@ -195,6 +195,17 @@ class ActivityLogger {
             'DEMAND_REPLENISHMENT'    => 'Demand Replenishment',
             'SAVE_PICK_FACE_TARGET'   => 'Simpan Target Pick-Face',
             'DELETE_PICK_FACE_TARGET' => 'Hapus Target Pick-Face',
+            // Security audit event labels
+            'LOGIN_SUCCESS'      => 'Login Berhasil',
+            'LOGIN_FAILED'       => 'Login Gagal',
+            'LOGOUT'             => 'Logout',
+            'PRIVILEGE_CHANGE'   => 'Perubahan Hak Akses',
+            'DATA_EXPORT'        => 'Export Data',
+            'CONFIG_CHANGE'      => 'Perubahan Konfigurasi',
+            'PASSWORD_CHANGE'    => 'Perubahan Password',
+            'CREATE_USER'        => 'Buat User Baru',
+            'UPDATE_USER'        => 'Edit User',
+            'DELETE_USER'        => 'Hapus User',
         ];
         return $labels[$action] ?? ucwords(strtolower(str_replace('_', ' ', $action)));
     }
@@ -210,6 +221,8 @@ class ActivityLogger {
             'cyclecount'    => 'fas fa-calendar-check',
             'system'        => 'fas fa-cog',
             'replenishment' => 'fas fa-sync-alt',
+            'auth'          => 'fas fa-shield-alt',
+            'export'        => 'fas fa-file-export',
         ];
         return $icons[$module] ?? 'fas fa-circle';
     }
@@ -222,6 +235,8 @@ class ActivityLogger {
             'stock'         => '#e65100',
             'user'          => '#37474f',
             'replenishment' => '#6a1b9a',
+            'auth'          => '#b71c1c',
+            'export'        => '#1565c0',
         ];
         return $colors[$module] ?? '#607d8b';
     }

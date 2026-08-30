@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Search, Trash2, FileSpreadsheet, MapPin } from 'lucide-react';
-import { api, apiHref } from '@/lib/api';
+import { api, apiHref, Customer } from '@/lib/api';
 import { WebBtn } from '@/components/WebBtn';
 import { fmtNum, fmtDate, todayISO } from '@/lib/format';
 import { useAuth } from '@/context/AuthContext';
@@ -266,7 +266,7 @@ function NewOutboundModal({ open, onClose, onCreated }: { open: boolean; onClose
   const [expectedDate, setExpectedDate] = useState('');
   const [status, setStatus] = useState('Open');
   const [notes, setNotes] = useState('');
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [items, setItems] = useState<DraftItem[]>([]);
   const [destinations, setDestinations] = useState<DraftDest[]>([]);
   const [saving, setSaving] = useState(false);

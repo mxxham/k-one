@@ -137,15 +137,15 @@ class LocationManager {
 
     
 
-    public static function suggestLocationsForInbound($quantity, $uom, $uomPerPallet = 4, $preferZone = null) {
-        if ($uomPerPallet <= 0) $uomPerPallet = 4;
+    public static function suggestLocationsForInbound($quantity, $uom, $uomPerPallet = DEFAULT_UOM_PER_PALLET, $preferZone = null) {
+        if ($uomPerPallet <= 0) $uomPerPallet = DEFAULT_UOM_PER_PALLET;
 
         $fullPallets  = intdiv((int)$quantity, (int)$uomPerPallet);
         $remainder    = fmod($quantity, $uomPerPallet);
         $totalPallets = $fullPallets + ($remainder > 0 ? 1 : 0);
 
         
-        $fullLocations = self::getAvailableLocationsByLevel($fullPallets + 20, $preferZone, ['B','C','D','E']);
+        $fullLocations = self::getAvailableLocationsByLevel($fullPallets + 20, $preferZone, RESERVE_LEVELS);
 
         
         if (count($fullLocations) < $fullPallets) {
@@ -168,7 +168,7 @@ class LocationManager {
         
         $partialLocations = [];
         if ($remainder > 0) {
-            $partialLocations = self::getAvailableLocationsByLevel(5, $preferZone, ['A']);
+            $partialLocations = self::getAvailableLocationsByLevel(5, $preferZone, [PICK_FACE_LEVEL]);
             if (empty($partialLocations)) {
                 
                 $usedCodes   = array_slice(array_column($fullLocations, 'location_code'), 0, $canAssignFull);
@@ -201,7 +201,7 @@ class LocationManager {
         if ($remainder > 0) {
             $pallets[] = [
                 'pallet_seq'    => $palletSeq,
-                'location_code' => $partialLocations[0]['location_code'] ?? 'STAGING',
+                'location_code' => $partialLocations[0]['location_code'] ?? LOCATION_STAGING,
                 'quantity'      => $remainder,
                 'is_full'       => false,
                 'uom'           => $uom,
@@ -219,7 +219,7 @@ class LocationManager {
 
     
 
-    public static function getAvailableLocationsByLevel($count = 20, $preferZone = null, $levels = ['B','C','D','E']) {
+    public static function getAvailableLocationsByLevel($count = 20, $preferZone = null, $levels = RESERVE_LEVELS) {
         $db = db();
         $placeholders = implode(',', array_fill(0, count($levels), '?'));
 
@@ -267,7 +267,7 @@ class LocationManager {
                 $pallet['location_code'],
                 $pallet['pallet_seq'],
                 $pallet['quantity'],
-                $pallet['uom'] ?? 'EA',
+                $pallet['uom'] ?? UOM_DEFAULT_SQL,
                 $pallet['is_full'] ? 1 : 0,
                 $batchNumber,
                 $itemId,

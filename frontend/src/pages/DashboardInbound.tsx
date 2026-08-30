@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Truck, ArrowDownToLine, PackageOpen, ClipboardList, CalendarClock } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, InboundStats, InboundOrder, AsnRow } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { Card, EmptyState } from '@/components/Card';
 import Spinner from '@/components/Spinner';
@@ -19,10 +19,10 @@ function greeting(name: string) {
 
 export default function DashboardInbound() {
   const { user } = useAuth();
-  const [stats, setStats] = useState<any>(null);
-  const [pending, setPending] = useState<any[]>([]);
+  const [stats, setStats] = useState<InboundStats | null>(null);
+  const [pending, setPending] = useState<InboundOrder[]>([]);
   const [asnCount, setAsnCount] = useState(0);
-  const [asnRows, setAsnRows] = useState<any[]>([]);
+  const [asnRows, setAsnRows] = useState<AsnRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [asnLoading, setAsnLoading] = useState(true);

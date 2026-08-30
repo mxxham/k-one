@@ -326,10 +326,21 @@ $customerLabel = count($customerList) > 1
 </head>
 <body>
 
+<div id="back-to-app" style="position:fixed;top:10px;right:10px;z-index:9999;">
+  <a href="javascript:window.close()" style="background:#0d1f1f;color:white;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,0.2);">
+    Close &amp; Back to K-one
+  </a>
+</div>
+<style>
+  @media print {
+    #back-to-app { display: none !important; }
+  }
+</style>
+
 <div class="print-bar no-print">
   <span>🖨️ Outbound Report Preview</span>
   <div class="btns">
-    <a class="btn-back" href="outbound.php?action=view&id=<?= $id ?>">← Kembali</a>
+    <a class="btn-back" href="http://localhost:5173/">← Kembali</a>
     <button class="btn-print" onclick="window.print()">🖨️ Print / Save PDF</button>
   </div>
 </div>
@@ -622,9 +633,9 @@ $customerLabel = count($customerList) > 1
 </div>
 
 <script>
-if (location.search.includes('autoprint=1')) {
-  window.onload = () => setTimeout(() => window.print(), 400);
-}
+window.onload = function() {
+  setTimeout(function() { window.print(); }, 500);
+};
 </script>
 
 </body>

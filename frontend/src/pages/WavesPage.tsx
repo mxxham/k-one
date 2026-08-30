@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Plus, Layers, Search, X, Eye, Truck, CalendarClock } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, EmptyState } from '@/components/Card';
 import Modal from '@/components/Modal';
@@ -52,6 +52,7 @@ const WAVE_STATUSES = ['Planning', 'Active', 'Completed', 'Cancelled'];
 
 export default function WavesPage() {
   const toast = useToast();
+  const navigate = useNavigate();
   const { canWrite } = useAuth();
 
   const [waves, setWaves] = useState<WaveRow[]>([]);
@@ -245,7 +246,7 @@ export default function WavesPage() {
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => openDetail(w.id)}
+                          onClick={() => navigate(`/waves/${w.id}`)}
                           className="px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 border border-brand-200 text-xs font-semibold hover:bg-brand-100"
                         >
                           <Eye className="w-3 h-3" />

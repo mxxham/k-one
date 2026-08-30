@@ -936,5 +936,518 @@ class ExcelExport {
 
         $excel->download($stockTake['take_number'] . '_Accuracy_' . date('Y-m-d_His') . '.xlsx');
     }
+
+    // =========================================================================
+    // Advanced Report Exports
+    // =========================================================================
+
+    /**
+     * Export Stock Valuation report to Excel.
+     *
+     * @param array $data  Result from Report::getStockValuation()
+     */
+    public static function exportStockValuation(array $data) {
+        if (empty($data['items'])) {
+            die('Tidak ada data stock untuk valuation report.');
+        }
+
+        $sp    = new Spreadsheet();
+        $sheet = $sp->getActiveSheet();
+        $sheet->setTitle('Stock Valuation');
+
+        $headerColor = '013D3C';
+        $subColor    = '026766';
+        $hasCost     = $data['has_cost_data'] ?? false;
+        $summary     = $data['summary'] ?? [];
+
+        $headers = [
+            'No', 'Product Code', 'Product Name', 'Category', 'UOM Type',
+            'Batches', 'Total Qty', 'Total Pallets',
+            'Nearest Expiry', 'Locations',
+        ];
+        if ($hasCost) {
+            $headers[] = 'Unit Cost';
+            $headers[] = 'Total Value';
+        }
+
+        $totalCols     = count($headers);
+        $lastColLetter = Coordinate::stringFromColumnIndex($totalCols);
+
+        $sheet->mergeCells("A1:{$lastColLetter}1");
+        $sheet->setCellValue('A1',
+            'K-one — Stock Valuation Report   |   Generated: ' . ($data['generated_at'] ?? date('Y-m-d H:i')) .
+            '   |   ' . ($summary['total_products'] ?? 0) . ' products, ' .
+            ($summary['total_batches'] ?? 0) . ' batches');
+        $sheet->getStyle('A1')->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 12, 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $headerColor]],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        $sheet->getRowDimension(1)->setRowHeight(24);
+        $sheet->getRowDimension(2)->setRowHeight(4);
+
+        foreach ($headers as $c => $h) {
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($c + 1) . '3', $h);
+        }
+        $sheet->getStyle("A3:{$lastColLetter}3")->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 10, 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $subColor]],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '014F4E']]],
+        ]);
+        $sheet->getRowDimension(3)->setRowHeight(20);
+        $sheet->freezePane('A4');
+
+        $row = 4;
+        $num = 0;
+        foreach ($data['items'] as $item) {
+            $num++;
+            $nearestExpiry = $item['nearest_expiry'] ? date('d M Y', strtotime($item['nearest_expiry'])) : '-';
+            $rowData = [
+                $num, $item['product_code'], $item['product_name'],
+                $item['category'] ?? '-', $item['uom_type'] ?? '-',
+                $item['batch_count'], $item['total_qty'], round($item['total_pallets'], 2),
+                $nearestExpiry, $item['location_count'],
+            ];
+            if ($hasCost) {
+                $rowData[] = $item['unit_cost'] > 0 ? number_format($item['unit_cost'], 2) : '-';
+                $rowData[] = $item['total_value'] > 0 ? number_format($item['total_value'], 2) : '-';
+            }
+            foreach ($rowData as $c => $val) {
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c + 1) . $row, $val);
+            }
+            $rangeFull = "A{$row}:{$lastColLetter}{$row}";
+            $sheet->getStyle($rangeFull)->applyFromArray([
+                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'D1D5DB']]],
+                'font'    => ['size' => 9],
+            ]);
+            if ($row % 2 === 0) {
+                $sheet->getStyle($rangeFull)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F0FDFC');
+            }
+            $row++;
+        }
+
+        $totalRowData = ['', 'TOTAL', '', '', '',
+            $summary['total_batches'] ?? 0, $summary['total_qty'] ?? 0,
+            round($summary['total_pallets'] ?? 0, 2), '', '',
+        ];
+        if ($hasCost) { $totalRowData[] = ''; $totalRowData[] = number_format($summary['total_value'] ?? 0, 2); }
+        foreach ($totalRowData as $c => $val) {
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($c + 1) . $row, $val);
+        }
+        $sheet->getStyle("A{$row}:{$lastColLetter}{$row}")->applyFromArray([
+            'font'    => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill'    => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $headerColor]],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '013D3C']]],
+        ]);
+
+        foreach (range(1, $totalCols) as $c) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($c))->setAutoSize(true);
+        }
+        $sheet->getStyle('G4:G' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0');
+        $sheet->getStyle('H4:H' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+
+        self::_download($sp, 'Stock_Valuation_' . date('Y-m-d_His') . '.xlsx');
+    }
+
+    /**
+     * Export Inbound Receipt Summary to Excel.
+     */
+    public static function exportInboundSummary(array $data, string $dateFrom, string $dateTo) {
+        $sp    = new Spreadsheet();
+        $sheet = $sp->getActiveSheet();
+        $sheet->setTitle('Inbound Summary');
+
+        $headerColor = '013D3C';
+        $subColor    = '026766';
+        $summary     = $data['summary'] ?? [];
+
+        $sheet->mergeCells('A1:G1');
+        $sheet->setCellValue('A1',
+            'K-one — Inbound Receipt Summary   |   ' . $dateFrom . ' to ' . $dateTo .
+            '   |   Generated: ' . date('d M Y H:i'));
+        $sheet->getStyle('A1')->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 12, 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $headerColor]],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        $sheet->getRowDimension(1)->setRowHeight(24);
+
+        // Summary KPIs
+        $kpis = [
+            ['A3' => 'Total Orders',     'B3' => $summary['total_orders'] ?? 0,       'D3' => 'Total Qty Received', 'E3' => number_format($summary['total_qty_received'] ?? 0, 0)],
+            ['A4' => 'Completed',        'B4' => $summary['completed_orders'] ?? 0,    'D4' => 'Total Pallets',      'E4' => number_format($summary['total_pallets'] ?? 0, 2)],
+            ['A5' => 'In Progress',      'B5' => $summary['in_progress_orders'] ?? 0,  'D5' => 'Total Products',     'E5' => $summary['total_products'] ?? 0],
+            ['A6' => 'Pending',          'B6' => $summary['pending_orders'] ?? 0],
+        ];
+        foreach ($kpis as $kpi) {
+            foreach ($kpi as $cell => $val) {
+                $sheet->setCellValue($cell, $val);
+            }
+        }
+        foreach (['A3','A4','A5','A6','D3','D4','D5'] as $cell) {
+            $sheet->getStyle($cell)->getFont()->setBold(true);
+        }
+
+        // Daily Breakdown
+        $row = 8;
+        $sheet->setCellValue("A{$row}", 'DAILY BREAKDOWN');
+        $sheet->getStyle("A{$row}")->getFont()->setBold(true)->setSize(11);
+        $row++;
+
+        $dailyHeaders = ['Date', 'Orders', 'Total Qty', 'Total Pallets'];
+        self::_writeHeaderRow($sheet, $row, $dailyHeaders, $subColor);
+        $row++;
+
+        foreach (($data['daily_breakdown'] ?? []) as $d) {
+            $sheet->setCellValue("A{$row}", $d['receipt_date'] ? date('d M Y', strtotime($d['receipt_date'])) : '-');
+            $sheet->setCellValue("B{$row}", (int)$d['order_count']);
+            $sheet->setCellValue("C{$row}", (float)$d['total_qty']);
+            $sheet->setCellValue("D{$row}", round((float)$d['total_pallets'], 2));
+            self::_styleDataRow($sheet, $row, 4, $row % 2 === 0);
+            $row++;
+        }
+
+        // Product Breakdown
+        $row += 2;
+        $sheet->setCellValue("A{$row}", 'PRODUCT BREAKDOWN');
+        $sheet->getStyle("A{$row}")->getFont()->setBold(true)->setSize(11);
+        $row++;
+
+        $prodHeaders = ['Product Code', 'Product Name', 'UOM', 'Orders', 'Total Qty', 'Total Pallets', 'Receipt Days'];
+        self::_writeHeaderRow($sheet, $row, $prodHeaders, $subColor);
+        $row++;
+
+        foreach (($data['product_breakdown'] ?? []) as $p) {
+            $sheet->setCellValue("A{$row}", $p['product_code']);
+            $sheet->setCellValue("B{$row}", $p['product_name']);
+            $sheet->setCellValue("C{$row}", $p['uom_type'] ?? '-');
+            $sheet->setCellValue("D{$row}", (int)$p['order_count']);
+            $sheet->setCellValue("E{$row}", (float)$p['total_qty']);
+            $sheet->setCellValue("F{$row}", round((float)$p['total_pallets'], 2));
+            $sheet->setCellValue("G{$row}", (int)$p['receipt_days']);
+            self::_styleDataRow($sheet, $row, 7, $row % 2 === 0);
+            $row++;
+        }
+
+        foreach (range(1, 7) as $c) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($c))->setAutoSize(true);
+        }
+
+        self::_download($sp, 'Inbound_Summary_' . $dateFrom . '_to_' . $dateTo . '.xlsx');
+    }
+
+    /**
+     * Export Outbound Shipment Summary to Excel.
+     */
+    public static function exportOutboundSummary(array $data, string $dateFrom, string $dateTo) {
+        $sp    = new Spreadsheet();
+        $sheet = $sp->getActiveSheet();
+        $sheet->setTitle('Outbound Summary');
+
+        $headerColor = '013D3C';
+        $subColor    = '026766';
+        $summary     = $data['summary'] ?? [];
+
+        $sheet->mergeCells('A1:F1');
+        $sheet->setCellValue('A1',
+            'K-one — Outbound Shipment Summary   |   ' . $dateFrom . ' to ' . $dateTo .
+            '   |   Generated: ' . date('d M Y H:i'));
+        $sheet->getStyle('A1')->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 12, 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $headerColor]],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        $sheet->getRowDimension(1)->setRowHeight(24);
+
+        // Summary KPIs
+        $kpis = [
+            ['A3' => 'Total Orders',       'B3' => $summary['total_orders'] ?? 0,      'D3' => 'Total Qty Shipped',   'E3' => number_format($summary['total_qty_shipped'] ?? 0, 0)],
+            ['A4' => 'Shipped/Completed',  'B4' => $summary['shipped_orders'] ?? 0,    'D4' => 'Total Pallets',       'E4' => number_format($summary['total_pallets'] ?? 0, 2)],
+            ['A5' => 'Pending',            'B5' => $summary['pending_orders'] ?? 0,    'D5' => 'Unique Customers',    'E5' => $summary['total_customers'] ?? 0],
+            ['A6' => 'Total Products',     'B6' => $summary['total_products'] ?? 0],
+        ];
+        foreach ($kpis as $kpi) {
+            foreach ($kpi as $cell => $val) {
+                $sheet->setCellValue($cell, $val);
+            }
+        }
+        foreach (['A3','A4','A5','A6','D3','D4','D5'] as $cell) {
+            $sheet->getStyle($cell)->getFont()->setBold(true);
+        }
+
+        // Daily Breakdown
+        $row = 8;
+        $sheet->setCellValue("A{$row}", 'DAILY BREAKDOWN');
+        $sheet->getStyle("A{$row}")->getFont()->setBold(true)->setSize(11);
+        $row++;
+
+        $dailyHeaders = ['Date', 'Orders', 'Total Qty', 'Total Pallets', 'Customers'];
+        self::_writeHeaderRow($sheet, $row, $dailyHeaders, $subColor);
+        $row++;
+
+        foreach (($data['daily_breakdown'] ?? []) as $d) {
+            $sheet->setCellValue("A{$row}", $d['ship_date'] ? date('d M Y', strtotime($d['ship_date'])) : '-');
+            $sheet->setCellValue("B{$row}", (int)$d['order_count']);
+            $sheet->setCellValue("C{$row}", (float)$d['total_qty']);
+            $sheet->setCellValue("D{$row}", round((float)$d['total_pallets'], 2));
+            $sheet->setCellValue("E{$row}", (int)$d['customer_count']);
+            self::_styleDataRow($sheet, $row, 5, $row % 2 === 0);
+            $row++;
+        }
+
+        // Product Breakdown
+        $row += 2;
+        $sheet->setCellValue("A{$row}", 'PRODUCT BREAKDOWN');
+        $sheet->getStyle("A{$row}")->getFont()->setBold(true)->setSize(11);
+        $row++;
+
+        $prodHeaders = ['Product Code', 'Product Name', 'UOM', 'Orders', 'Total Qty', 'Total Pallets', 'Customers'];
+        self::_writeHeaderRow($sheet, $row, $prodHeaders, $subColor);
+        $row++;
+
+        foreach (($data['product_breakdown'] ?? []) as $p) {
+            $sheet->setCellValue("A{$row}", $p['product_code']);
+            $sheet->setCellValue("B{$row}", $p['product_name']);
+            $sheet->setCellValue("C{$row}", $p['uom_type'] ?? '-');
+            $sheet->setCellValue("D{$row}", (int)$p['order_count']);
+            $sheet->setCellValue("E{$row}", (float)$p['total_qty']);
+            $sheet->setCellValue("F{$row}", round((float)$p['total_pallets'], 2));
+            $sheet->setCellValue("G{$row}", (int)$p['customer_count']);
+            self::_styleDataRow($sheet, $row, 7, $row % 2 === 0);
+            $row++;
+        }
+
+        // Customer Breakdown
+        $row += 2;
+        $sheet->setCellValue("A{$row}", 'CUSTOMER BREAKDOWN');
+        $sheet->getStyle("A{$row}")->getFont()->setBold(true)->setSize(11);
+        $row++;
+
+        $custHeaders = ['Customer Code', 'Customer Name', 'Orders', 'Total Qty', 'Total Pallets'];
+        self::_writeHeaderRow($sheet, $row, $custHeaders, $subColor);
+        $row++;
+
+        foreach (($data['customer_breakdown'] ?? []) as $c) {
+            $sheet->setCellValue("A{$row}", $c['customer_code']);
+            $sheet->setCellValue("B{$row}", $c['customer_name']);
+            $sheet->setCellValue("C{$row}", (int)$c['order_count']);
+            $sheet->setCellValue("D{$row}", (float)$c['total_qty']);
+            $sheet->setCellValue("E{$row}", round((float)$c['total_pallets'], 2));
+            self::_styleDataRow($sheet, $row, 5, $row % 2 === 0);
+            $row++;
+        }
+
+        foreach (range(1, 7) as $c) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($c))->setAutoSize(true);
+        }
+
+        self::_download($sp, 'Outbound_Summary_' . $dateFrom . '_to_' . $dateTo . '.xlsx');
+    }
+
+    /**
+     * Export Inventory Turnover report to Excel.
+     */
+    public static function exportInventoryTurnover(array $data, string $dateFrom, string $dateTo) {
+        if (empty($data['items'])) {
+            die('Tidak ada data turnover untuk periode ini.');
+        }
+
+        $sp    = new Spreadsheet();
+        $sheet = $sp->getActiveSheet();
+        $sheet->setTitle('Inventory Turnover');
+
+        $headerColor = '013D3C';
+        $subColor    = '026766';
+        $summary     = $data['summary'] ?? [];
+        $periodDays  = $data['period_days'] ?? 1;
+
+        $sheet->mergeCells('A1:K1');
+        $sheet->setCellValue('A1',
+            'K-one — Inventory Turnover Report   |   ' . $dateFrom . ' to ' . $dateTo .
+            ' (' . $periodDays . ' days)   |   Generated: ' . date('d M Y H:i'));
+        $sheet->getStyle('A1')->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 12, 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $headerColor]],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        $sheet->getRowDimension(1)->setRowHeight(24);
+
+        // Summary KPIs
+        $kpis = [
+            ['A3' => 'Products Analyzed',  'B3' => $summary['products_analyzed'] ?? 0,  'D3' => 'Avg Turnover Rate',   'E3' => $summary['avg_turnover_rate'] ?? 0],
+            ['A4' => 'Total Outbound',     'B4' => number_format($summary['total_outbound'] ?? 0, 0), 'D4' => 'Avg Daily Outbound', 'E4' => number_format($summary['avg_daily_outbound'] ?? 0, 2)],
+            ['A5' => 'Total Inbound',      'B5' => number_format($summary['total_inbound'] ?? 0, 0),  'D5' => 'Current Stock',       'E5' => number_format($summary['total_current_stock'] ?? 0, 0)],
+        ];
+        foreach ($kpis as $kpi) {
+            foreach ($kpi as $cell => $val) {
+                $sheet->setCellValue($cell, $val);
+            }
+        }
+        foreach (['A3','A4','A5','D3','D4','D5'] as $cell) {
+            $sheet->getStyle($cell)->getFont()->setBold(true);
+        }
+
+        // Turnover table
+        $row = 7;
+        $headers = [
+            'No', 'Product Code', 'Product Name', 'UOM',
+            'Total Outbound', 'Total Inbound', 'Current Stock',
+            'Avg Daily Out', 'Turnover Rate', 'Days of Stock', 'Net Movement',
+        ];
+        self::_writeHeaderRow($sheet, $row, $headers, $subColor);
+        $sheet->getRowDimension($row)->setRowHeight(28);
+        $sheet->freezePane('A' . ($row + 1));
+        $row++;
+
+        $num = 0;
+        foreach ($data['items'] as $item) {
+            $num++;
+            $daysOfStock = $item['days_of_stock'] !== null ? $item['days_of_stock'] : 'N/A';
+
+            $rowData = [
+                $num, $item['product_code'], $item['product_name'], $item['uom_type'] ?? '-',
+                $item['total_outbound'], $item['total_inbound'], $item['current_stock'],
+                $item['avg_daily_outbound'], $item['turnover_rate'], $daysOfStock, $item['net_movement'],
+            ];
+            foreach ($rowData as $c => $val) {
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($c + 1) . $row, $val);
+            }
+
+            $rangeFull = "A{$row}:K{$row}";
+            $sheet->getStyle($rangeFull)->applyFromArray([
+                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'D1D5DB']]],
+                'font'    => ['size' => 9],
+            ]);
+            if ($row % 2 === 0) {
+                $sheet->getStyle($rangeFull)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F0FDFC');
+            }
+
+            // Color-code turnover rate
+            if ($item['turnover_rate'] >= 1.0)
+                $sheet->getStyle('I' . $row)->getFont()->getColor()->setRGB('166534');
+            elseif ($item['turnover_rate'] >= 0.5)
+                $sheet->getStyle('I' . $row)->getFont()->getColor()->setRGB('92400E');
+            else
+                $sheet->getStyle('I' . $row)->getFont()->getColor()->setRGB('991B1B');
+
+            // Color-code days of stock
+            if ($daysOfStock !== 'N/A') {
+                if ($daysOfStock > 180)
+                    $sheet->getStyle('J' . $row)->getFont()->getColor()->setRGB('991B1B');
+                elseif ($daysOfStock > 90)
+                    $sheet->getStyle('J' . $row)->getFont()->getColor()->setRGB('92400E');
+                else
+                    $sheet->getStyle('J' . $row)->getFont()->getColor()->setRGB('166534');
+            }
+
+            $row++;
+        }
+
+        foreach ([5, 6, 7, 8, 11] as $c) {
+            $colLetter = Coordinate::stringFromColumnIndex($c);
+            $sheet->getStyle("{$colLetter}8:{$colLetter}" . ($row - 1))->getNumberFormat()->setFormatCode('#,##0');
+        }
+        $sheet->getStyle("I8:I" . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle("J8:J" . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.0');
+
+        foreach (range(1, 11) as $c) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($c))->setAutoSize(true);
+        }
+
+        self::_download($sp, 'Inventory_Turnover_' . $dateFrom . '_to_' . $dateTo . '.xlsx');
+    }
+
+    // =========================================================================
+    // PDF Export (browser-printable HTML)
+    // =========================================================================
+
+    /**
+     * Export a report as a browser-printable HTML page (PDF-ready).
+     * Uses well-formatted HTML+CSS that renders via browser Print > Save as PDF.
+     *
+     * @param string $html     Full HTML body content for the report
+     * @param string $filename Download filename (without extension)
+     */
+    public static function exportPdfReport(string $html, string $filename) {
+        if (ob_get_length()) ob_end_clean();
+
+        $fullHtml = '<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>' . htmlspecialchars($filename) . '</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Segoe UI",Arial,Helvetica,sans-serif;font-size:11px;color:#1a1a1a;background:#fff;padding:20px}
+.rpt-hdr{background:#013D3C;color:#fff;padding:16px 24px;margin-bottom:16px;border-radius:4px}
+.rpt-hdr h1{font-size:18px;font-weight:700;margin-bottom:4px}
+.rpt-hdr .sub{font-size:11px;opacity:.85}
+.rpt-hdr .gen{font-size:10px;opacity:.7;margin-top:4px}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+.kpi-card{background:#f0fdfc;border:1px solid #d1d5db;border-radius:4px;padding:12px 16px;text-align:center}
+.kpi-val{font-size:22px;font-weight:700;color:#013D3C}
+.kpi-lbl{font-size:10px;color:#555;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:10px}
+th{background:#026766;color:#fff;padding:8px 10px;text-align:left;font-weight:600;border:1px solid #014F4E}
+td{padding:6px 10px;border:1px solid #d1d5db}
+tr:nth-child(even) td{background:#f0fdfc}
+.total td{background:#013D3C!important;color:#fff;font-weight:700}
+.sec-title{font-size:14px;font-weight:700;color:#013D3C;margin:20px 0 10px 0;padding-bottom:4px;border-bottom:2px solid #026766}
+.txt-r{text-align:right}.txt-c{text-align:center}
+.tg{color:#166534}.ta{color:#92400E}.tr{color:#991B1B}
+@media print{body{padding:0}.no-print{display:none}}
+</style>
+</head>
+<body>
+' . $html . '
+<div class="no-print" style="text-align:center;margin-top:20px;padding:10px;background:#f5f5f5;border-radius:4px">
+<button onclick="window.print()" style="padding:10px 24px;font-size:14px;background:#013D3C;color:#fff;border:none;border-radius:4px;cursor:pointer">
+Print / Save as PDF
+</button>
+</div>
+</body></html>';
+
+        header('Content-Type: text/html; charset=UTF-8');
+        header('Content-Disposition: inline;filename="' . $filename . '.html"');
+        echo $fullHtml;
+        exit;
+    }
+
+    // =========================================================================
+    // Shared formatting helpers for advanced exports
+    // =========================================================================
+
+    /**
+     * Write a styled header row.
+     */
+    private static function _writeHeaderRow($sheet, int $row, array $headers, string $bgColor) {
+        $lastCol = Coordinate::stringFromColumnIndex(count($headers));
+        foreach ($headers as $c => $h) {
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($c + 1) . $row, $h);
+        }
+        $sheet->getStyle("A{$row}:{$lastCol}{$row}")->applyFromArray([
+            'font'      => ['bold' => true, 'size' => 10, 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $bgColor]],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '014F4E']]],
+        ]);
+    }
+
+    /**
+     * Style a data row with borders and optional zebra stripe.
+     */
+    private static function _styleDataRow($sheet, int $row, int $colCount, bool $isEven) {
+        $lastCol = Coordinate::stringFromColumnIndex($colCount);
+        $range = "A{$row}:{$lastCol}{$row}";
+        $sheet->getStyle($range)->applyFromArray([
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'D1D5DB']]],
+            'font'    => ['size' => 9],
+        ]);
+        if ($isEven) {
+            $sheet->getStyle($range)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F0FDFC');
+        }
+    }
 }
 ?>
