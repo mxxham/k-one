@@ -1044,11 +1044,11 @@ export default function ZoningPage() {
                       </div>
                       <div className="text-[11px] uppercase tracking-wider text-amber-600 font-bold mt-1">Bulk</div>
                     </div>
-                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
-                      <div className="text-2xl font-bold text-blue-700">
+                    <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-center">
+                      <div className="text-2xl font-bold text-sky-700">
                         {zoneStats.filter((z) => z.zone.toUpperCase().includes('RESERVE')).length}
                       </div>
-                      <div className="text-[11px] uppercase tracking-wider text-blue-600 font-bold mt-1">Reserve</div>
+                      <div className="text-[11px] uppercase tracking-wider text-sky-600 font-bold mt-1">Reserve</div>
                     </div>
                   </div>
 

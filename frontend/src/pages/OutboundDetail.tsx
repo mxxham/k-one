@@ -57,7 +57,7 @@ function InfoItem({ label, value }: { label: string; value?: ReactNode }) {
 
 function InProcessPill({ status }: { status?: string }) {
   const map: Record<string, string> = {
-    'Goods Received': 'bg-blue-50 text-blue-700 border-blue-300',
+    'Goods Received': 'bg-brand-50 text-brand-700 border-brand-300',
     ATP: 'bg-emerald-50 text-emerald-700 border-emerald-300',
     Unserviceable: 'bg-red-50 text-red-700 border-red-300',
   };

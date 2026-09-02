@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { api, ActivityLogRow } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
+import { useToast } from '@/components/Toast';
 import { Card, EmptyState } from '@/components/Card';
 import Spinner from '@/components/Spinner';
 import { Field, Select } from '@/components/Field';
@@ -52,13 +53,12 @@ export default function ActivityLogPage() {
   const [moduleFilter, setModuleFilter] = useState('all');
   const [rows, setRows] = useState<ActivityLogRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const toast = useToast();
   const reqId = useRef(0);
 
   const load = async (mod: string) => {
     const id = ++reqId.current;
     setLoading(true);
-    setError('');
     try {
       const params: Record<string, string | number> = { limit: 200 };
       if (mod !== 'all') params.module = mod;
@@ -67,7 +67,7 @@ export default function ActivityLogPage() {
       setRows(res.rows ?? []);
     } catch (e: any) {
       if (reqId.current !== id) return;
-      setError(e.message || 'Gagal memuat activity log');
+      toast('error', e.message || 'Gagal memuat activity log');
     } finally {
       if (reqId.current === id) setLoading(false);
     }
@@ -116,10 +116,6 @@ export default function ActivityLogPage() {
             </Select>
           </Field>
         </div>
-
-        {error && (
-          <div className="mb-4 px-3 py-2 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">{error}</div>
-        )}
 
         {loading ? (
           <Spinner label="Memuat..." />

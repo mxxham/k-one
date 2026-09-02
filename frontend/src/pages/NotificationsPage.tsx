@@ -49,7 +49,7 @@ const TYPE_ICONS: Record<string, typeof Mail> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  email: 'bg-blue-50 text-blue-600',
+  email: 'bg-brand-50 text-brand-600',
   system: 'bg-green-50 text-green-600',
   alert: 'bg-orange-50 text-orange-600',
 };

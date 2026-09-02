@@ -9,6 +9,7 @@ import { Card, EmptyState } from '@/components/Card';
 import Spinner from '@/components/Spinner';
 import { Field, Select, TextInput } from '@/components/Field';
 import { fmtDateTime } from '@/lib/format';
+import { useToast } from '@/components/Toast';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ const EVENT_COLORS: Record<string, string> = {
   LOGIN_FAILED: 'bg-red-100 text-red-700',
   LOGIN_SUCCESS: 'bg-green-100 text-green-700',
   CONFIG_CHANGE: 'bg-amber-100 text-amber-700',
-  DATA_EXPORT: 'bg-blue-100 text-blue-700',
+  DATA_EXPORT: 'bg-sky-100 text-sky-700',
   PRIVILEGE_CHANGE: 'bg-purple-100 text-purple-700',
   PASSWORD_RESET: 'bg-orange-100 text-orange-700',
   USER_CREATED: 'bg-teal-100 text-teal-700',
@@ -176,7 +177,6 @@ export default function SecurityAuditPage() {
     privilege_changes_24h: 0,
   });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
   // Filters
@@ -186,12 +186,12 @@ export default function SecurityAuditPage() {
   const [dateTo, setDateTo] = useState('');
   const [search, setSearch] = useState('');
 
+  const toast = useToast();
   const reqId = useRef(0);
 
   const load = async () => {
     const id = ++reqId.current;
     setLoading(true);
-    setError('');
     try {
       const params: Record<string, any> = { limit: 100 };
       if (eventType) params.event_type = eventType;
@@ -206,7 +206,7 @@ export default function SecurityAuditPage() {
       if (res.summary) setSummary(res.summary);
     } catch (e: any) {
       if (reqId.current !== id) return;
-      setError(e.message || 'Failed to load security audit log');
+      toast('error', e.message || 'Failed to load security audit log');
     } finally {
       if (reqId.current === id) setLoading(false);
     }
@@ -229,7 +229,7 @@ export default function SecurityAuditPage() {
         actions={
           <div className="flex items-center gap-2">
             <button
-              onClick={() => exportToCsv(logs)}
+              onClick={() => { exportToCsv(logs); toast('success', 'CSV exported successfully'); }}
               disabled={loading || logs.length === 0}
               className="inline-flex items-center gap-1.5 bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-sm font-semibold hover:bg-white/20 disabled:opacity-60"
             >
@@ -264,7 +264,7 @@ export default function SecurityAuditPage() {
           label="Exports (24h)"
           value={summary.exports_24h}
           icon={FileDown}
-          color="bg-blue-50 text-blue-600"
+          color="bg-sky-50 text-sky-600"
         />
         <SummaryCard
           label="Privilege Changes (24h)"
@@ -324,12 +324,6 @@ export default function SecurityAuditPage() {
         title="Audit Log"
         actions={<span className="text-xs text-gray-500">{logs.length} records</span>}
       >
-        {error && (
-          <div className="mb-4 px-3 py-2 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
-            {error}
-          </div>
-        )}
-
         {loading ? (
           <Spinner label="Loading..." />
         ) : logs.length === 0 ? (

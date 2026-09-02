@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { Search, ArrowRight, Plus, Play, X, Boxes, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
-import { EmptyState } from '@/components/Card';
+import { Card, EmptyState } from '@/components/Card';
 import StatusBadge from '@/components/StatusBadge';
 
 import Modal from '@/components/Modal';
@@ -316,9 +316,9 @@ export default function BinTransferPage() {
         }
       />
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-gray-100 bg-brand-50/50 flex items-center justify-between">
-          <h3 className="font-bold text-sm text-brand-700">Daftar Transfer</h3>
+      <Card
+        title="Daftar Transfer"
+        actions={
           <div className="w-40">
             <Select value={status} onChange={(e) => handleStatusChange(e.target.value)} className="!py-1.5 text-xs">
               <option value="">Semua Status</option>
@@ -329,87 +329,90 @@ export default function BinTransferPage() {
               ))}
             </Select>
           </div>
-        </div>
-        {loading ? (
-          <Spinner label="Memuat transfer…" />
-        ) : rows.length === 0 ? (
-          <EmptyState message="Tidak ada data transfer" />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[1100px]">
-              <thead>
-                <tr className="bg-brand-50 text-[11px] uppercase tracking-wider text-brand-700">
-                  <th className="px-3 py-2.5 text-left font-bold">No. Transfer</th>
-                  <th className="px-3 py-2.5 text-left font-bold">Tanggal</th>
-                  <th className="px-3 py-2.5 text-left font-bold">Produk</th>
-                  <th className="px-3 py-2.5 text-left font-bold">Batch</th>
-                  <th className="px-3 py-2.5 text-left font-bold">Lokasi</th>
-                  <th className="px-3 py-2.5 text-right font-bold">Qty</th>
-                  <th className="px-3 py-2.5 text-left font-bold">UOM</th>
-                  <th className="px-3 py-2.5 text-left font-bold">Alasan</th>
-                  <th className="px-3 py-2.5 text-left font-bold">Status</th>
-                  <th className="px-3 py-2.5 text-left font-bold">Dibuat</th>
-                  <th className="px-3 py-2.5 text-left font-bold">Dieksekusi</th>
-                  <th className="px-3 py-2.5 text-right font-bold">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {rows.map((r) => (
-                  <tr key={r.id} onClick={() => openDetail(r.id)} className="hover:bg-brand-50/50 cursor-pointer">
-                    <td className="px-3 py-2.5 font-semibold text-brand-800">{r.transfer_number}</td>
-                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{fmtDate(r.transfer_date)}</td>
-                    <td className="px-3 py-2.5">
-                      <div className="font-semibold text-brand-800">{r.product_code}</div>
-                      <div className="text-xs text-gray-500">{r.product_name}</div>
-                    </td>
-                    <td className="px-3 py-2.5 text-gray-600">{r.batch_number || '—'}</td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1 flex-wrap font-mono text-xs">
-                        {r.from_location || '—'}
-                        <ArrowRight className="w-3 h-3 text-brand-500" />
-                        {r.to_location || '—'}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 text-right font-semibold">{fmtNum(r.quantity, 0)}</td>
-                    <td className="px-3 py-2.5 text-gray-600">{r.uom || '—'}</td>
-                    <td className="px-3 py-2.5 text-gray-500 max-w-[150px] truncate" title={r.reason || ''}>
-                      {r.reason || '—'}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <StatusBadge status={r.status} />
-                    </td>
-                    <td className="px-3 py-2.5 text-gray-600">{r.created_by_name || '—'}</td>
-                    <td className="px-3 py-2.5 text-gray-600">{r.completed_by_name || '—'}</td>
-                    <td className="px-3 py-2.5">
-                      {r.status === 'Pending' && (
-                        <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => execute(r.id)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold hover:bg-emerald-100"
-                          >
-                            <Play className="w-3 h-3" /> Execute
-                          </button>
-                          <ConfirmButton
-                            label="Cancel"
-                            confirmText="Batalkan transfer ini?"
-                            onConfirm={() => cancel(r.id)}
-                            variant="danger"
-                          >
-                            Cancel
-                          </ConfirmButton>
-                        </div>
-                      )}
-                    </td>
+        }
+      >
+        <div className="-mx-5 -mt-5">
+          {loading ? (
+            <Spinner label="Memuat transfer…" />
+          ) : rows.length === 0 ? (
+            <EmptyState message="Tidak ada data transfer" />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[1100px]">
+                <thead>
+                  <tr className="bg-brand-50 text-[11px] uppercase tracking-wider text-brand-700">
+                    <th className="px-3 py-2.5 text-left font-bold">No. Transfer</th>
+                    <th className="px-3 py-2.5 text-left font-bold">Tanggal</th>
+                    <th className="px-3 py-2.5 text-left font-bold">Produk</th>
+                    <th className="px-3 py-2.5 text-left font-bold">Batch</th>
+                    <th className="px-3 py-2.5 text-left font-bold">Lokasi</th>
+                    <th className="px-3 py-2.5 text-right font-bold">Qty</th>
+                    <th className="px-3 py-2.5 text-left font-bold">UOM</th>
+                    <th className="px-3 py-2.5 text-left font-bold">Alasan</th>
+                    <th className="px-3 py-2.5 text-left font-bold">Status</th>
+                    <th className="px-3 py-2.5 text-left font-bold">Dibuat</th>
+                    <th className="px-3 py-2.5 text-left font-bold">Dieksekusi</th>
+                    <th className="px-3 py-2.5 text-right font-bold">Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {rows.map((r) => (
+                    <tr key={r.id} onClick={() => openDetail(r.id)} className="hover:bg-brand-50/50 cursor-pointer">
+                      <td className="px-3 py-2.5 font-semibold text-brand-800">{r.transfer_number}</td>
+                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{fmtDate(r.transfer_date)}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="font-semibold text-brand-800">{r.product_code}</div>
+                        <div className="text-xs text-gray-500">{r.product_name}</div>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-600">{r.batch_number || '—'}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1 flex-wrap font-mono text-xs">
+                          {r.from_location || '—'}
+                          <ArrowRight className="w-3 h-3 text-brand-500" />
+                          {r.to_location || '—'}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-semibold">{fmtNum(r.quantity, 0)}</td>
+                      <td className="px-3 py-2.5 text-gray-600">{r.uom || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-500 max-w-[150px] truncate" title={r.reason || ''}>
+                        {r.reason || '—'}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <StatusBadge status={r.status} />
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-600">{r.created_by_name || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-600">{r.completed_by_name || '—'}</td>
+                      <td className="px-3 py-2.5">
+                        {r.status === 'Pending' && (
+                          <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => execute(r.id)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold hover:bg-emerald-100"
+                            >
+                              <Play className="w-3 h-3" /> Execute
+                            </button>
+                            <ConfirmButton
+                              label="Cancel"
+                              confirmText="Batalkan transfer ini?"
+                              onConfirm={() => cancel(r.id)}
+                              variant="danger"
+                            >
+                              Cancel
+                            </ConfirmButton>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="px-5 py-3.5 border-t border-gray-100">
+            <Pagination page={page} totalPages={totalPages} total={total} onChange={setPage} />
           </div>
-        )}
-        <div className="px-5 py-3.5 border-t border-gray-100">
-          <Pagination page={page} totalPages={totalPages} total={total} onChange={setPage} />
         </div>
-      </div>
+      </Card>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Bin Transfer Baru" size="md">
         <form onSubmit={submit} className="space-y-4">

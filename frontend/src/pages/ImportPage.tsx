@@ -7,6 +7,7 @@ import {
 import { api, apiHref, uploadApi, PreviewStats } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import { Card } from '@/components/Card';
+import { useToast } from '@/components/Toast';
 
 import { Field, TextInput, Select } from '@/components/Field';
 import { fmtNum, fmtDate } from '@/lib/format';
@@ -154,6 +155,7 @@ function ResultLog({ result }: { result: ImportResult }) {
 }
 
 export default function ImportPage() {
+  const toast = useToast();
   const [tab, setTab] = useState<TabKey>('inbound');
   const [file, setFile] = useState<File | null>(null);
   const [carrier, setCarrier] = useState('');
@@ -194,12 +196,15 @@ export default function ImportPage() {
         setPreview((res.rows || []) as StockRow[]);
         setPreviewStats(res.stats || null);
         setResult({ message: res.message });
+        toast('success', res.message || 'Preview berhasil');
       } else {
         const res = await uploadApi('import', tab === 'inbound' ? 'inbound' : 'outbound', fd);
         setResult(res as ImportResult);
+        toast(res.has_errors ? 'error' : 'success', res.message || 'Import selesai');
       }
     } catch (e: any) {
       setError(e.message || 'Gagal memproses file');
+      toast('error', e.message || 'Gagal memproses file');
     } finally {
       setBusy(false);
     }
@@ -212,8 +217,11 @@ export default function ImportPage() {
     try {
       const res = await api('import', 'stock_commit', { method: 'POST', body: { rows: preview, mode } });
       setCommitResult(res as ImportResult);
+      const hasSkipped = (res.stats?.skipped ?? 0) > 0;
+      toast(hasSkipped ? 'info' : 'success', res.message || 'Commit stok selesai');
     } catch (e: any) {
       setError(e.message || 'Gagal commit stok');
+      toast('error', e.message || 'Gagal commit stok');
     } finally {
       setBusy(false);
     }

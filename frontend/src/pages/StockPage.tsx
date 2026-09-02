@@ -411,7 +411,7 @@ export default function StockPage() {
             { label: 'Segera Expire', value: summary.expiring_soon, icon: <CalendarClock className="w-4 h-4" />, cls: 'bg-orange-50 text-orange-600' },
             { label: 'Expired', value: summary.expired, icon: <PackageX className="w-4 h-4" />, cls: 'bg-red-50 text-red-600' },
             { label: 'Reserved', value: summary.reserved_items, icon: <Lock className="w-4 h-4" />, cls: 'bg-indigo-50 text-indigo-600' },
-            { label: 'Dues In', value: summary.dues_in_items, icon: <Clock className="w-4 h-4" />, cls: 'bg-blue-50 text-blue-600' },
+            { label: 'Dues In', value: summary.dues_in_items, icon: <Clock className="w-4 h-4" />, cls: 'bg-brand-50 text-brand-600' },
           ].map((c) => (
             <div key={c.label} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
               <div className={`w-8 h-8 rounded-lg ${c.cls} flex items-center justify-center mb-2`}>{c.icon}</div>

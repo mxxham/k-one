@@ -269,7 +269,7 @@ export default function RmaPage() {
     ? [
         { label: 'Total', value: stats.total, icon: <ClipboardCheck className="w-4 h-4" />, cls: 'bg-brand-50 text-brand-600' },
         { label: 'Pending', value: stats.pending, icon: <Clock className="w-4 h-4" />, cls: 'bg-yellow-50 text-yellow-600' },
-        { label: 'Approved', value: stats.approved, icon: <CheckCircle2 className="w-4 h-4" />, cls: 'bg-blue-50 text-blue-600' },
+        { label: 'Approved', value: stats.approved, icon: <CheckCircle2 className="w-4 h-4" />, cls: 'bg-sky-50 text-sky-600' },
         { label: 'Received', value: stats.received, icon: <PackageX className="w-4 h-4" />, cls: 'bg-emerald-50 text-emerald-600' },
         { label: 'Completed', value: stats.completed, icon: <CheckCircle2 className="w-4 h-4" />, cls: 'bg-green-50 text-green-600' },
         { label: 'Rejected', value: stats.rejected, icon: <XCircle className="w-4 h-4" />, cls: 'bg-red-50 text-red-600' },
@@ -394,7 +394,7 @@ export default function RmaPage() {
                           </button>
                         )}
                         {canReceive(r) && (
-                          <button onClick={() => openReceive(r)} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600" title="Receive">
+                          <button onClick={() => openReceive(r)} className="p-1.5 rounded-lg hover:bg-brand-100 text-brand-600" title="Receive">
                             <PackageX className="w-4 h-4" />
                           </button>
                         )}
@@ -584,7 +584,7 @@ export default function RmaPage() {
                       <button onClick={() => openReject(detailRow)} disabled={submitting} className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-50">Reject</button>
                     )}
                     {canReceive(detailRow) && (
-                      <button onClick={() => openReceive(detailRow)} disabled={submitting} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">Receive</button>
+                      <button onClick={() => openReceive(detailRow)} disabled={submitting} className="px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50">Receive</button>
                     )}
                     {canComplete(detailRow) && (
                       <button onClick={() => handleComplete(detailRow)} disabled={submitting} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50">Complete</button>
@@ -628,7 +628,7 @@ export default function RmaPage() {
       <Modal open={!!receiveRow} onClose={() => setReceiveRow(null)} title="Terima RMA" size="sm">
         {receiveRow && (
           <form onSubmit={submitReceive} className="space-y-4">
-            <div className="bg-blue-50 rounded-lg p-3 text-xs text-blue-800">
+            <div className="bg-sky-50 rounded-lg p-3 text-xs text-sky-800">
               <div className="flex justify-between">
                 <span className="text-gray-500">Nomor RMA</span>
                 <span className="font-semibold">{receiveRow.rma_number}</span>
@@ -654,7 +654,7 @@ export default function RmaPage() {
             </Field>
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setReceiveRow(null)} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm font-semibold hover:bg-gray-200">Batal</button>
-              <button type="submit" disabled={submitting || !receiveQty || Number(receiveQty) <= 0} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+              <button type="submit" disabled={submitting || !receiveQty || Number(receiveQty) <= 0} className="px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50">
                 {submitting ? 'Menerima...' : 'Terima'}
               </button>
             </div>

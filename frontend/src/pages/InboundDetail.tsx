@@ -23,7 +23,7 @@ const WORKFLOW_STEPS = ['Draft', 'Dues In', 'Receiving', 'Goods Received', 'ATP'
 
 const ITEM_STATUS_PILL: Record<string, string> = {
   'Dues In': 'bg-amber-50 text-amber-700 border-amber-300',
-  'Goods Received': 'bg-blue-50 text-blue-700 border-blue-300',
+  'Goods Received': 'bg-emerald-50 text-emerald-700 border-emerald-300',
   ATP: 'bg-emerald-50 text-emerald-700 border-emerald-300',
   Unserviceable: 'bg-red-50 text-red-700 border-red-300',
 };

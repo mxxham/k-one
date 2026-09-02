@@ -27,7 +27,7 @@ const STATUS_OPTIONS = ['Pending', 'In Progress', 'Passed', 'Failed', 'Quarantin
 
 const STATUS_CONFIG: Record<string, { color: string; icon: typeof ShieldCheck }> = {
   Pending: { color: 'bg-yellow-50 text-yellow-600', icon: ClipboardCheck },
-  'In Progress': { color: 'bg-blue-50 text-blue-600', icon: Eye },
+  'In Progress': { color: 'bg-brand-50 text-brand-600', icon: Eye },
   Passed: { color: 'bg-green-50 text-green-600', icon: CheckCircle2 },
   Failed: { color: 'bg-red-50 text-red-600', icon: XCircle },
   Quarantine: { color: 'bg-orange-50 text-orange-600', icon: ShieldAlert },
@@ -313,7 +313,7 @@ export default function QualityPage() {
           {[
             { label: 'Total', value: summary.total, icon: <ClipboardCheck className="w-4 h-4" />, cls: 'bg-brand-50 text-brand-600' },
             { label: 'Pending', value: summary.pending, icon: <AlertTriangle className="w-4 h-4" />, cls: 'bg-yellow-50 text-yellow-600' },
-            { label: 'In Progress', value: summary.in_progress, icon: <Eye className="w-4 h-4" />, cls: 'bg-blue-50 text-blue-600' },
+            { label: 'In Progress', value: summary.in_progress, icon: <Eye className="w-4 h-4" />, cls: 'bg-brand-50 text-brand-600' },
             { label: 'Passed', value: summary.passed, icon: <CheckCircle2 className="w-4 h-4" />, cls: 'bg-green-50 text-green-600' },
             { label: 'Failed', value: summary.failed, icon: <XCircle className="w-4 h-4" />, cls: 'bg-red-50 text-red-600' },
           ].map((c) => (

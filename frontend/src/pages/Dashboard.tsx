@@ -14,7 +14,9 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, EmptyState } from '@/components/Card';
 import Modal from '@/components/Modal';
 import Spinner from '@/components/Spinner';
+import Skeleton from '@/components/Skeleton';
 import StatusBadge from '@/components/StatusBadge';
+import { useToast } from '@/components/Toast';
 
 import { fmtNum, fmtDate, fmtDateTime, expiryInfo } from '@/lib/format';
 import DashboardAlerts from '@/components/dashboard/DashboardAlerts';
@@ -53,6 +55,7 @@ const TD = 'px-3 py-2.5 whitespace-nowrap';
 
 export default function Dashboard() {
   const { user, canAdmin } = useAuth();
+  const toast = useToast();
   const [data, setData] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -76,7 +79,10 @@ export default function Dashboard() {
         if (alive && id === reqId.current) setData(res as unknown as DashboardStats);
       })
       .catch((e: any) => {
-        if (alive && id === reqId.current) setError(e.message || 'Gagal memuat dashboard');
+        if (alive && id === reqId.current) {
+          setError(e.message || 'Gagal memuat dashboard');
+          toast('error', e.message || 'Gagal memuat dashboard');
+        }
       })
       .finally(() => {
         if (alive && id === reqId.current) setLoading(false);
@@ -88,7 +94,10 @@ export default function Dashboard() {
           if (alive && id === reqId.current) setScanRows((l.rows || []).slice(0, 10));
         })
         .catch((e: any) => {
-          if (alive && id === reqId.current) setScanError(e.message || 'Gagal memuat scan override');
+          if (alive && id === reqId.current) {
+            setScanError(e.message || 'Gagal memuat scan override');
+            toast('error', e.message || 'Gagal memuat scan override');
+          }
         })
         .finally(() => {
           if (alive && id === reqId.current) setScanLoading(false);
@@ -99,7 +108,10 @@ export default function Dashboard() {
           if (alive && id === reqId.current) setAbcStatus(s);
         })
         .catch((e: any) => {
-          if (alive && id === reqId.current) setAbcError(e.message || 'Gagal memuat status ABC');
+          if (alive && id === reqId.current) {
+            setAbcError(e.message || 'Gagal memuat status ABC');
+            toast('error', e.message || 'Gagal memuat status ABC');
+          }
         })
         .finally(() => {
           if (alive && id === reqId.current) setAbcLoading(false);
@@ -125,8 +137,9 @@ export default function Dashboard() {
     try {
       const res = await api('dashboard', 'aisle_detail', { params: { aisle: a } });
       setAisleDetail(res as unknown as AisleDetail);
-    } catch (e: any) {
-      setAisleDetail({ locations: [], stats: null, error: e.message || 'Gagal memuat detail aisle' });
+      } catch (e: any) {
+        toast('error', e.message || 'Gagal memuat detail aisle');
+        setAisleDetail({ locations: [], stats: null, error: e.message || 'Gagal memuat detail aisle' });
     } finally {
       setAisleLoading(false);
     }
@@ -192,7 +205,20 @@ export default function Dashboard() {
       </div>
 
       {loading ? (
-        <Spinner label="Memuat dashboard..." />
+        <>
+          {/* KPI Cards Row 1 skeleton */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={`kpi1-${i}`} variant="card" lines={2} className="h-28" />
+            ))}
+          </div>
+          {/* KPI Cards Row 2 skeleton */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={`kpi2-${i}`} variant="card" lines={2} className="h-28" />
+            ))}
+          </div>
+        </>
       ) : error ? (
         <div className="mb-5 px-4 py-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">{error}</div>
       ) : (
@@ -264,7 +290,7 @@ export default function Dashboard() {
             </div>
 
             {/* Shipped Today */}
-            <div className="rounded-xl bg-gradient-to-br from-blue-600 to-blue-400 p-4 text-white shadow-sm">
+            <div className="rounded-xl bg-gradient-to-br from-brand-600 to-brand-400 p-4 text-white shadow-sm">
               <Truck className="w-5 h-5 opacity-80" />
               <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi.shipped_today_orders || 0, 0)}</div>
               <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Shipped Today</div>
@@ -277,6 +303,41 @@ export default function Dashboard() {
               <div className="text-2xl font-extrabold mt-2">{kpi.pick_accuracy_percent ?? 100}%</div>
               <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Pick Accuracy</div>
               <div className="text-xs opacity-75 mt-1">{kpi.pick_accurate_lines || 0}/{kpi.pick_total_lines || 0} lines</div>
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="mb-5">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-brand-700 mb-3">Quick Actions</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Link
+                to="/inbound"
+                className="flex items-center gap-3 bg-brand-600 text-white px-4 py-3 rounded-xl hover:bg-brand-700 transition shadow-sm"
+              >
+                <ArrowDownToLine className="w-5 h-5 shrink-0" />
+                <span className="font-semibold text-sm">Inbound</span>
+              </Link>
+              <Link
+                to="/outbound"
+                className="flex items-center gap-3 bg-brand-600 text-white px-4 py-3 rounded-xl hover:bg-brand-700 transition shadow-sm"
+              >
+                <Truck className="w-5 h-5 shrink-0" />
+                <span className="font-semibold text-sm">Outbound</span>
+              </Link>
+              <Link
+                to="/stock"
+                className="flex items-center gap-3 bg-brand-600 text-white px-4 py-3 rounded-xl hover:bg-brand-700 transition shadow-sm"
+              >
+                <Boxes className="w-5 h-5 shrink-0" />
+                <span className="font-semibold text-sm">Stock</span>
+              </Link>
+              <Link
+                to="/picklist"
+                className="flex items-center gap-3 bg-brand-600 text-white px-4 py-3 rounded-xl hover:bg-brand-700 transition shadow-sm"
+              >
+                <ClipboardCheck className="w-5 h-5 shrink-0" />
+                <span className="font-semibold text-sm">Picklist</span>
+              </Link>
             </div>
           </div>
 

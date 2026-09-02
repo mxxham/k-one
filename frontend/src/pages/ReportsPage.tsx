@@ -10,6 +10,7 @@ import { Card, EmptyState } from '@/components/Card';
 import Spinner from '@/components/Spinner';
 import StatusBadge from '@/components/StatusBadge';
 import { Field, TextInput } from '@/components/Field';
+import { useToast } from '@/components/Toast';
 import { fmtNum, fmtDate, todayISO, expiryInfo } from '@/lib/format';
 
 interface Col {
@@ -199,15 +200,14 @@ export default function ReportsPage() {
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [tabData, setTabData] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const reqId = useRef(0);
+  const toast = useToast();
 
   const load = async (tab?: string) => {
     const key = tab ?? activeTab;
     const cfg = TABS.find((t) => t.key === key)!;
     const id = ++reqId.current;
     setLoading(true);
-    setError('');
     try {
       const params: Record<string, string> = {};
       if (cfg.needsRange) {
@@ -223,9 +223,10 @@ export default function ReportsPage() {
       if (reqId.current !== id) return;
       if (cfg.daily) setReportData(res.report);
       else setTabData((Array.isArray(res.rows) ? res.rows : res) as any[]);
+      toast('success', 'Data berhasil dimuat');
     } catch (e: any) {
       if (reqId.current !== id) return;
-      setError(e.message || 'Gagal memuat data');
+      toast('error', e.message || 'Gagal memuat data');
     } finally {
       if (reqId.current === id) setLoading(false);
     }
@@ -309,10 +310,6 @@ export default function ReportsPage() {
           </button>
         ))}
       </div>
-
-      {error && (
-        <div className="mb-5 px-4 py-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">{error}</div>
-      )}
 
       {loading ? (
         <Spinner label="Memuat data..." />

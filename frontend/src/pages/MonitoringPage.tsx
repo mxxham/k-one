@@ -22,6 +22,7 @@ import { api } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, EmptyState } from '@/components/Card';
 import Spinner from '@/components/Spinner';
+import { useToast } from '@/components/Toast';
 import { fmtNum, fmtDate, fmtDateTime } from '@/lib/format';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -95,7 +96,7 @@ const HEALTH_BG_COLORS: Record<string, string> = {
 };
 
 const ALERT_LEVEL_CONFIG: Record<string, { icon: typeof Info; color: string; bg: string }> = {
-  info: { icon: Info, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200' },
+  info: { icon: Info, color: 'text-sky-600', bg: 'bg-sky-50 border-sky-200' },
   warning: { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
   critical: { icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50 border-red-200' },
 };
@@ -103,6 +104,7 @@ const ALERT_LEVEL_CONFIG: Record<string, { icon: typeof Info; color: string; bg:
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function MonitoringPage() {
+  const toast = useToast();
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -131,6 +133,7 @@ export default function MonitoringPage() {
       if (uptimeRes.status === 'fulfilled') setUptime(uptimeRes.value.data as UptimeStats);
     } catch (err: any) {
       console.error('Failed to load monitoring data:', err);
+      toast('error', 'Gagal memuat data monitoring');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -256,7 +259,7 @@ export default function MonitoringPage() {
             { label: 'Total Inbound', value: metrics.total_inbound, icon: <Package className="w-4 h-4" />, cls: 'bg-brand-50 text-brand-600' },
             { label: 'Total Outbound', value: metrics.total_outbound, icon: <Package className="w-4 h-4" />, cls: 'bg-brand-50 text-brand-600' },
             { label: 'Total Stock', value: metrics.total_stock, icon: <BarChart3 className="w-4 h-4" />, cls: 'bg-brand-50 text-brand-600' },
-            { label: 'Active Users', value: metrics.active_users, icon: <Users className="w-4 h-4" />, cls: 'bg-blue-50 text-blue-600' },
+            { label: 'Active Users', value: metrics.active_users, icon: <Users className="w-4 h-4" />, cls: 'bg-sky-50 text-sky-600' },
             { label: 'Orders Today', value: metrics.orders_today, icon: <ShoppingCart className="w-4 h-4" />, cls: 'bg-emerald-50 text-emerald-600' },
             { label: 'Picks Today', value: metrics.picks_today, icon: <Zap className="w-4 h-4" />, cls: 'bg-purple-50 text-purple-600' },
           ].map((c) => (

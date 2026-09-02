@@ -36,7 +36,7 @@ const LIMIT_OPTIONS = [50, 100, 200, 500, 1000];
 function typeBadge(t: string) {
   const up = (t || '').toUpperCase();
   let cls = 'bg-gray-100 text-gray-600 border-gray-300';
-  if (up.includes('TRANSFER')) cls = 'bg-blue-50 text-blue-700 border-blue-300';
+  if (up.includes('TRANSFER')) cls = 'bg-brand-50 text-brand-700 border-brand-300';
   else if (up.includes('ADJUST')) cls = 'bg-amber-50 text-amber-700 border-amber-300';
   else if (up.includes('OUT')) cls = 'bg-red-50 text-red-700 border-red-300';
   else if (up.includes('IN')) cls = 'bg-green-50 text-green-700 border-green-300';

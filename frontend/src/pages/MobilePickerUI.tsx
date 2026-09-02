@@ -228,10 +228,10 @@ export default function MobilePickerUI() {
                   <div className="text-4xl font-black text-purple-900">{fmtNum(activeItemData.quantity, 0)}</div>
                   <div className="text-sm text-purple-700 mt-1">{activeItemData.uom}</div>
                 </div>
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-200">
-                  <div className="text-xs text-blue-600 font-semibold uppercase mb-1">Pallets</div>
-                  <div className="text-4xl font-black text-blue-900">{Math.ceil(activeItemData.pallet)}</div>
-                  <div className="text-sm text-blue-700 mt-1">Total</div>
+                <div className="bg-gradient-to-br from-sky-50 to-sky-100 rounded-xl p-5 border border-sky-200">
+                  <div className="text-xs text-sky-600 font-semibold uppercase mb-1">Pallets</div>
+                  <div className="text-4xl font-black text-sky-900">{Math.ceil(activeItemData.pallet)}</div>
+                  <div className="text-sm text-sky-700 mt-1">Total</div>
                 </div>
               </div>
 
@@ -283,7 +283,7 @@ export default function MobilePickerUI() {
         <div className="bg-white border-t border-gray-200 p-4 shadow-lg">
           <button
             onClick={completePicking}
-            className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-bold text-lg py-5 px-6 rounded-2xl shadow-md active:scale-95 transition-all flex items-center justify-center gap-3"
+            className="w-full bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-700 hover:to-brand-600 text-white font-bold text-lg py-5 px-6 rounded-2xl shadow-md active:scale-95 transition-all flex items-center justify-center gap-3"
           >
             <CheckCircle2 className="w-6 h-6" />
             Complete Picklist
