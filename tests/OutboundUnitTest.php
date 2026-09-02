@@ -322,14 +322,14 @@ class OutboundUnitTest extends TestCase
             'customer_id'  => $custId,
         ], self::$pdo);
 
-        $rows = Outbound::getAll(null, null, 0, null, self::$pdo);
+        $rows = Outbound::getAll(null, null, 0, null, null, self::$pdo);
         $this->assertNotEmpty($rows);
     }
 
     /** countAll: returns 0 when empty. */
     public function testCountAllEmpty(): void
     {
-        $count = Outbound::countAll(null, null, self::$pdo);
+        $count = Outbound::countAll(null, null, null, self::$pdo);
         $this->assertSame(0, $count);
     }
 
@@ -343,7 +343,7 @@ class OutboundUnitTest extends TestCase
         Outbound::create(['order_date' => date('Y-m-d'), 'customer_id' => $custId], self::$pdo);
         Outbound::create(['order_date' => date('Y-m-d'), 'customer_id' => $custId, 'status' => 'Shipped'], self::$pdo);
 
-        $this->assertSame(2, Outbound::countAll(null, null, self::$pdo));
+        $this->assertSame(2, Outbound::countAll(null, null, null, self::$pdo));
     }
 
     /** countAll: status filter. */
@@ -356,9 +356,9 @@ class OutboundUnitTest extends TestCase
         Outbound::create(['order_date' => date('Y-m-d'), 'customer_id' => $custId, 'status' => 'Open'], self::$pdo);
         Outbound::create(['order_date' => date('Y-m-d'), 'customer_id' => $custId, 'status' => 'Shipped'], self::$pdo);
 
-        $this->assertSame(1, Outbound::countAll('Open', null, self::$pdo));
-        $this->assertSame(1, Outbound::countAll('Shipped', null, self::$pdo));
-        $this->assertSame(0, Outbound::countAll('Completed', null, self::$pdo));
+        $this->assertSame(1, Outbound::countAll('Open', null, null, self::$pdo));
+        $this->assertSame(1, Outbound::countAll('Shipped', null, null, self::$pdo));
+        $this->assertSame(0, Outbound::countAll('Completed', null, null, self::$pdo));
     }
 
     /** getTotalAvailableQty: returns 0 when no stock. */
@@ -484,8 +484,8 @@ class OutboundUnitTest extends TestCase
             ], self::$pdo);
         }
 
-        $page1 = Outbound::getAll(null, 2, 0, null, self::$pdo);
-        $page2 = Outbound::getAll(null, 2, 2, null, self::$pdo);
+        $page1 = Outbound::getAll(null, 2, 0, null, null, self::$pdo);
+        $page2 = Outbound::getAll(null, 2, 2, null, null, self::$pdo);
         $this->assertCount(2, $page1);
         $this->assertCount(2, $page2);
         $this->assertNotSame($page1[0]['id'], $page2[0]['id']);

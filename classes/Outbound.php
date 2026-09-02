@@ -82,13 +82,19 @@ public static function generateNumber($db = null): string {
 
     
 
-    public static function getAll($status = null, $limit = null, $offset = 0, $odNo = null, $db = null) {
+    public static function getAll($status = null, $limit = null, $offset = 0, $odNo = null, $search = null, $db = null) {
         $db = $db ?? db();
         $db->exec("SET SESSION group_concat_max_len = 65536");
         $conditions = [];
         $params = [];
         if ($status) { $conditions[] = "o.status = ?"; $params[] = $status; }
         if ($odNo)   { $conditions[] = "oi.od_number LIKE ?"; $params[] = "%$odNo%"; }
+        if ($search) {
+            $conditions[] = "(o.order_number LIKE ? OR c.customer_name LIKE ? OR c.customer_code LIKE ?)";
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+        }
         $where = $conditions ? "WHERE " . implode(" AND ", $conditions) : "";
         $sql = "SELECT o.*,
                 c.customer_name, c.customer_code, c.city,
@@ -116,15 +122,22 @@ public static function generateNumber($db = null): string {
         return $stmt->fetchAll();
     }
 
-    public static function countAll($status = null, $odNo = null, $db = null) {
+    public static function countAll($status = null, $odNo = null, $search = null, $db = null) {
         $db = $db ?? db();
         $conditions = [];
         $params = [];
         if ($status) { $conditions[] = "o.status = ?"; $params[] = $status; }
         if ($odNo)   { $conditions[] = "oi.od_number LIKE ?"; $params[] = "%$odNo%"; }
+        if ($search) {
+            $conditions[] = "(o.order_number LIKE ? OR c.customer_name LIKE ? OR c.customer_code LIKE ?)";
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+            $params[] = "%$search%";
+        }
         $where = $conditions ? "WHERE " . implode(" AND ", $conditions) : "";
         $sql = "SELECT COUNT(DISTINCT o.id) FROM outbound_orders o
                 LEFT JOIN outbound_items oi ON o.id = oi.outbound_order_id
+                LEFT JOIN customers c ON o.customer_id = c.id
                 $where";
         $stmt = $db->prepare($sql);
         $stmt->execute($params);

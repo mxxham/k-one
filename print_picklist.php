@@ -44,117 +44,106 @@ $allDo = array_unique(array_filter($picklist['do_number'] ? [$picklist['do_numbe
 <head>
 <meta charset="UTF-8">
 <title>Pick List — <?= htmlspecialchars($picklistNo) ?></title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',Arial,sans-serif;font-size:10pt;color:#1a1a1a;background:#fff}
-@page{size:A4;margin:0}
-@media print{.no-print{display:none!important}body{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#fff}.page-break{page-break-before:always}tr{page-break-inside:avoid}}
+body{font-family:'Inter',system-ui,sans-serif;font-size:10pt;color:#0f172a;background:#f1f5f9;line-height:1.5}
+@page{size:A4 portrait;margin:0}
+@media print{body{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}.document{box-shadow:none;margin:0;padding:12mm 14mm;border-radius:0}tr{page-break-inside:avoid}}
 
-.print-bar{background:linear-gradient(135deg,#013d3c,#026766);color:#fff;padding:10px 22px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:99}
+.print-bar{background:#0f2e2d;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:99}
 .print-bar-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px}
 .btns{display:flex;gap:8px}
-.btn-print{background:#fff;color:#026766;border:none;padding:7px 16px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:5px}
-.btn-back{background:rgba(255,255,255,.15);color:#fff;border:1.5px solid rgba(255,255,255,.5);padding:7px 14px;border-radius:6px;font-weight:600;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px}
+.btn-print{background:#fff;color:#026766;border:none;padding:8px 18px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px}
+.btn-back{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.3);padding:8px 14px;border-radius:6px;font-weight:600;font-size:12px;text-decoration:none}
 
-.document{max-width:794px;margin:18px auto;background:#fff;padding:24px 28px;box-shadow:0 2px 20px rgba(0,0,0,.1);border-radius:4px}
+.document{max-width:794px;margin:20px auto;background:#fff;padding:28px 32px;box-shadow:0 1px 12px rgba(0,0,0,.06);border-radius:6px}
 @media print{.document{box-shadow:none;margin:0;padding:14mm 14mm 16mm;max-width:100%;border-radius:0}}
 
 /* Header */
-.doc-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #026766;padding-bottom:12px;margin-bottom:14px}
-.logo-area{display:flex;align-items:center;gap:10px}
-.logo-mark{width:46px;height:46px;background:#026766;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;font-weight:900;letter-spacing:-1px;flex-shrink:0}
-.company-name .nk{font-size:16pt;font-weight:900;color:#013d3c}
-.company-name .none{font-size:12pt;font-weight:400;color:#013d3c;opacity:.65}
+.doc-header{display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;margin-bottom:16px;border-bottom:2px solid #e2e8f0}
+.logo-area{display:flex;align-items:center;gap:12px}
+.logo-mark{width:44px;height:44px;background:linear-gradient(135deg,#026766,#013d3c);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;font-weight:800;flex-shrink:0}
+.company-name{font-size:18px;font-weight:800;color:#0f172a;letter-spacing:-.5px}
+.company-name span{color:#64748b;font-weight:400}
 .doc-title-block{text-align:right}
-.doc-title{font-size:16pt;font-weight:800;color:#013d3c;letter-spacing:-.3px}
-.doc-subtitle{font-size:8pt;color:#607d8b;margin-top:1px}
-.doc-orderno{font-size:10pt;font-weight:700;color:#1a1a1a;margin-top:5px;font-family:monospace}
-.status-badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
-.sb-draft{background:#f5f5f5;color:#616161;border:1px solid #e0e0e0}
-.sb-confirmed{background:#e3f2fd;color:#014f4e;border:1px solid #90caf9}
-.sb-picked{background:#fff8e1;color:#e65100;border:1px solid #ffe082}
-.sb-completed{background:#e8f5e9;color:#013d3c;border:1px solid #a5d6a7}
+.doc-title{font-size:20px;font-weight:800;color:#0f172a;letter-spacing:-.3px}
+.doc-subtitle{font-size:11px;color:#64748b;margin-top:1px}
+.doc-orderno{font-size:12px;font-weight:700;color:#334155;margin-top:4px;font-family:'SF Mono',Consolas,monospace}
 
 /* Info grid */
-.info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid #b2dfdb;border-radius:7px;overflow:hidden;margin-bottom:14px}
-.info-cell{padding:8px 12px;border-right:1px solid #b2dfdb;border-bottom:1px solid #b2dfdb;background:#fff}
+.info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:16px}
+.info-cell{padding:10px 14px;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;background:#fff}
 .info-cell:nth-child(3n){border-right:none}
 .info-cell:nth-last-child(-n+3){border-bottom:none}
 .info-cell.span2{grid-column:span 2}
-.info-cell .lbl{font-size:6.5pt;color:#026766;text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:2px}
-.info-cell .val{font-size:9.5pt;font-weight:600;color:#1a1a1a;line-height:1.5}
-.info-cell .val .sub{font-size:8pt;font-weight:400;color:#78909c}
+.info-cell .lbl{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:2px}
+.info-cell .val{font-size:12px;font-weight:600;color:#0f172a;line-height:1.6}
+.info-cell .val .sub{font-size:10px;font-weight:400;color:#94a3b8}
 
 /* Summary */
-.summary-bar{display:flex;gap:10px;margin-bottom:14px}
-.sum-card{flex:1;border-radius:7px;padding:9px 12px;text-align:center;border:1px solid transparent}
-.sum-card .num{font-size:18pt;font-weight:800;line-height:1}
-.sum-card .lbl{font-size:6.5pt;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;font-weight:600}
-.sc-teal{background:#e0f2f1;color:#013d3c;border-color:#80cbc4}
-.sc-green{background:#e8f5e9;color:#013d3c;border-color:#a5d6a7}
-.sc-amber{background:#fff8e1;color:#e65100;border-color:#ffcc80}
-.sc-blue{background:#e3f2fd;color:#0d47a1;border-color:#90caf9}
-.sc-gray{background:#f5f5f5;color:#424242;border-color:#e0e0e0}
+.summary-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
+.sum-card{border-radius:8px;padding:12px 14px;text-align:center}
+.sum-card .num{font-size:22px;font-weight:800;line-height:1}
+.sum-card .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.6px;margin-top:4px;font-weight:600;opacity:.85}
+.sc-teal{background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4}
+.sc-blue{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+.sc-gray{background:#f8fafc;color:#475569;border:1px solid #e2e8f0}
 
-.section-title{font-size:8.5pt;font-weight:700;color:#013d3c;border-left:4px solid #026766;padding-left:8px;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.section-title{font-size:11px;font-weight:700;color:#334155;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.section-title::before{content:'';display:block;width:3px;height:14px;background:#026766;border-radius:2px}
 
 /* Table */
-table{width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:12px}
-thead th{background:#026766;color:#fff;padding:7px 8px;text-align:left;font-weight:600;font-size:7.5pt;letter-spacing:.3px;text-transform:uppercase}
+table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:14px}
+thead th{background:#0f2e2d;color:#fff;padding:8px 10px;text-align:left;font-weight:600;font-size:9px;letter-spacing:.4px;text-transform:uppercase}
+thead th:first-child{border-radius:6px 0 0 0}
+thead th:last-child{border-radius:0 6px 0 0}
 thead th.c{text-align:center}
 thead th.r{text-align:right}
-tbody tr:nth-child(even){background:#f0fdf9}
-tbody td{padding:6px 8px;border-bottom:1px solid #e0f2f1;vertical-align:middle;line-height:1.4}
+tbody tr{border-bottom:1px solid #f1f5f9}
+tbody tr:nth-child(even){background:#f8fafc}
+tbody td{padding:8px 10px;vertical-align:middle;line-height:1.5}
 tbody td.c{text-align:center}
 tbody td.r{text-align:right;font-weight:600}
-tfoot td{padding:7px 8px;font-weight:700;font-size:9pt;border-top:2.5px solid #026766;background:#e0f2f1;color:#013d3c}
+tfoot td{padding:10px;font-weight:700;font-size:11px;border-top:2px solid #0f2e2d;background:#f0fdfa;color:#0f172a}
 tfoot td.r{text-align:right}
 
-.chip{display:inline-block;border-radius:4px;padding:1px 6px;font-family:monospace;font-size:7pt;font-weight:700}
-.chip-batch{background:#f3f4f6;color:#374151;border:1px solid #d1d5db}
-.chip-od{background:#e0f7f7;color:#026766;border:1px solid #80d2d2}
-.chip-so{background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd}
-.chip-loc{background:#d1fae5;color:#065f46;border:1px solid #6ee7b7}
-.st-pending{background:#fff3e0;color:#e65100;padding:1px 7px;border-radius:4px;font-size:7.5pt;font-weight:700}
-.st-picked{background:#e8f5e9;color:#026766;padding:1px 7px;border-radius:4px;font-size:7.5pt;font-weight:700}
-.st-verified{background:#e3f2fd;color:#014f4e;padding:1px 7px;border-radius:4px;font-size:7.5pt;font-weight:700}
-.check-box{width:14px;height:14px;border:1.5px solid #607d8b;border-radius:2px;display:inline-block}
+.chip{display:inline-block;border-radius:4px;padding:2px 8px;font-family:'SF Mono',Consolas,monospace;font-size:9px;font-weight:600}
+.chip-batch{background:#f1f5f9;color:#334155;border:1px solid #e2e8f0}
+.chip-od{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}
+.chip-so{background:#f5f3ff;color:#5b21b6;border:1px solid #ddd6fe}
+.chip-loc{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}
+.check-box{width:15px;height:15px;border:1.5px solid #94a3b8;border-radius:3px;display:inline-block;background:#fff}
 
 /* Notes */
-.remarks-box{border:1px solid #b2dfdb;border-radius:7px;padding:10px 14px;margin-bottom:14px;min-height:38px;background:#f9fdfd}
-.remarks-lbl{font-size:7pt;color:#026766;text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px}
+.remarks-box{border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:16px;min-height:40px;background:#f8fafc}
+.remarks-lbl{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:4px}
 
 /* Signature */
-.sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px}
-.sig-box{border-top:1.5px solid #b2dfdb;padding-top:8px}
-.sig-role{font-size:7pt;color:#026766;text-transform:uppercase;letter-spacing:.4px;font-weight:700}
-.sig-space{height:40px}
-.sig-line{border-bottom:1px dashed #90a4ae;margin:4px 0}
-.sig-name{font-size:8pt;color:#546e7a}
+.sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0}
+.sig-box{padding-top:0}
+.sig-role{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:4px}
+.sig-space{height:48px}
+.sig-line{border-bottom:1px solid #cbd5e1;margin:0 0 6px}
+.sig-name{font-size:10px;color:#94a3b8;font-style:italic}
 
-.doc-footer{margin-top:18px;padding-top:8px;border-top:1px solid #e0e0e0;display:flex;justify-content:space-between;font-size:6.5pt;color:#90a4ae}
+.doc-footer{margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8}
 </style>
 </head>
 <body>
 
-<div id="back-to-app" style="position:fixed;top:10px;right:10px;z-index:9999;">
-  <a href="javascript:window.close()" style="background:#0d1f1f;color:white;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,0.2);">
-    Close &amp; Back to K-one
+<div id="back-to-app" style="position:fixed;top:12px;right:12px;z-index:9999">
+  <a href="javascript:window.close()" style="background:#0f172a;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600;font-family:Inter,sans-serif;border:1px solid rgba(255,255,255,.15)">
+    Close &amp; Back
   </a>
 </div>
-<style>
-  @media print {
-    #back-to-app { display: none !important; }
-  }
-</style>
+<style>@media print{#back-to-app{display:none!important}}</style>
 
 <div class="print-bar no-print">
-  <div class="print-bar-title"><i class="fas fa-clipboard-check"></i> Pick List — <?= htmlspecialchars($picklistNo) ?></div>
+  <div class="print-bar-title">Pick List — <?= htmlspecialchars($picklistNo) ?></div>
   <div class="btns">
-    <a class="btn-back" href="javascript:window.close()">✕ Tutup</a>
-    <button class="btn-print" onclick="window.print()">🖨️ Print / PDF</button>
+    <a class="btn-back" href="javascript:window.close()">Close</a>
+    <button class="btn-print" onclick="window.print()">Print / PDF</button>
   </div>
 </div>
 
@@ -164,9 +153,7 @@ tfoot td.r{text-align:right}
   <div class="doc-header">
     <div class="logo-area">
       <div class="logo-mark">K</div>
-      <div>
-        <div class="company-name"><span class="nk">K</span><span class="none">-one</span></div>
-      </div>
+      <div class="company-name">K<span>-one</span></div>
     </div>
     <div class="doc-title-block">
       <div class="doc-title">PICK LIST</div>
@@ -179,7 +166,7 @@ tfoot td.r{text-align:right}
   <div class="info-grid">
     <div class="info-cell">
       <div class="lbl">Pick List No.</div>
-      <div class="val" style="font-family:monospace"><?= htmlspecialchars($picklistNo) ?></div>
+      <div class="val" style="font-family:'SF Mono',Consolas,monospace"><?= htmlspecialchars($picklistNo) ?></div>
     </div>
     <div class="info-cell">
       <div class="lbl">Tanggal</div>
@@ -187,7 +174,7 @@ tfoot td.r{text-align:right}
     </div>
     <div class="info-cell">
       <div class="lbl">Outbound No.</div>
-      <div class="val" style="font-family:monospace"><?= htmlspecialchars($outboundNo) ?></div>
+      <div class="val" style="font-family:'SF Mono',Consolas,monospace"><?= htmlspecialchars($outboundNo) ?></div>
     </div>
     <div class="info-cell span2">
       <div class="lbl">Customer</div>
@@ -217,7 +204,7 @@ tfoot td.r{text-align:right}
   </div>
 
   <!-- Items Table -->
-  <div class="section-title">📦 Items to Pick</div>
+  <div class="section-title">Items to Pick</div>
   <table>
     <thead>
       <tr>
@@ -230,12 +217,12 @@ tfoot td.r{text-align:right}
         <th class="r" style="width:38px">Qty Order</th>
         <th class="r" style="width:32px">Plt</th>
         <th class="r" style="width:54px">Actual Qty</th>
-        <th class="c" style="width:28px">Pick ✓</th>
+        <th class="c" style="width:28px">Pick</th>
       </tr>
     </thead>
     <tbody>
     <?php if (empty($items)): ?>
-    <tr><td colspan="10" style="text-align:center;color:#90a4ae;padding:20px">Tidak ada item</td></tr>
+    <tr><td colspan="10" style="text-align:center;color:#94a3b8;padding:24px">No items</td></tr>
     <?php endif; ?>
     <?php foreach ($items as $idx => $item):
       $pltDisp = (string)(int)ceil(floatval($item['pallet'] ?? 0));
@@ -244,15 +231,15 @@ tfoot td.r{text-align:right}
       $iOd   = $item['item_od_number'] ?? null;
     ?>
     <tr>
-      <td class="c" style="color:#90a4ae;font-size:7.5pt"><?= $idx + 1 ?></td>
+      <td class="c" style="color:#94a3b8;font-size:10px"><?= $idx + 1 ?></td>
       <td>
-        <div style="font-weight:700;font-size:8.5pt;color:#013d3c"><?= htmlspecialchars($item['product_name'] ?? '—') ?></div>
-        <div style="font-family:monospace;font-size:7.5pt;color:#607d8b"><?= htmlspecialchars($item['product_code'] ?? '') ?></div>
+        <div style="font-weight:700;font-size:10px;color:#0f172a"><?= htmlspecialchars($item['product_name'] ?? '—') ?></div>
+        <div style="font-family:'SF Mono',Consolas,monospace;font-size:9px;color:#64748b"><?= htmlspecialchars($item['product_code'] ?? '') ?></div>
       </td>
-      <td style="font-size:8pt">
-        <?= $iCust ? htmlspecialchars($iCust) : '<span style="color:#ccc">—</span>' ?>
+      <td style="font-size:10px">
+        <?= $iCust ? htmlspecialchars($iCust) : '<span style="color:#cbd5e1">—</span>' ?>
         <?php if ($item['item_ship_to'] ?? null): ?>
-        <div style="font-size:7pt;color:#90a4ae"><?= htmlspecialchars($item['item_ship_to']) ?></div>
+        <div style="font-size:9px;color:#94a3b8"><?= htmlspecialchars($item['item_ship_to']) ?></div>
         <?php endif; ?>
       </td>
       <td>
@@ -261,24 +248,24 @@ tfoot td.r{text-align:right}
           <?php if ($iSo): ?><br><?php endif; ?>
           <span class="chip chip-od">OD: <?= htmlspecialchars($iOd) ?></span>
         <?php endif; ?>
-        <?php if (!$iSo && !$iOd): ?><span style="color:#ccc;font-size:7pt">—</span><?php endif; ?>
+        <?php if (!$iSo && !$iOd): ?><span style="color:#cbd5e1;font-size:9px">—</span><?php endif; ?>
       </td>
       <td>
         <?php $bn = $item['batch_no'] ?? $item['batch_number'] ?? null; ?>
         <?php if ($bn): ?>
         <span class="chip chip-batch"><?= htmlspecialchars($bn) ?></span>
-        <?php else: ?><span style="color:#ccc;font-size:7pt">—</span><?php endif; ?>
+        <?php else: ?><span style="color:#cbd5e1;font-size:9px">—</span><?php endif; ?>
       </td>
       <td>
         <?php if ($item['location'] ?? null): ?>
         <span class="chip chip-loc"><?= htmlspecialchars($item['location']) ?></span>
         <?php else: ?>
-        <span style="display:inline-block;min-width:70px;border-bottom:1.5px dashed #90a4ae;height:16px"></span>
+        <span style="display:inline-block;min-width:70px;border-bottom:1.5px dashed #cbd5e1;height:18px"></span>
         <?php endif; ?>
       </td>
       <td class="r" style="font-weight:700"><?= number_format((float)($item['quantity'] ?? 0), 0) ?></td>
-      <td class="r" style="color:#546e7a"><?= $pltDisp ?></td>
-      <td class="r"><span style="display:inline-block;min-width:46px;border-bottom:1.5px solid #b2dfdb;height:16px"></span></td>
+      <td class="r" style="color:#475569"><?= $pltDisp ?></td>
+      <td class="r"><span style="display:inline-block;min-width:48px;border-bottom:1.5px solid #cbd5e1;height:18px"></span></td>
       <td class="c"><span class="check-box"></span></td>
     </tr>
     <?php endforeach; ?>

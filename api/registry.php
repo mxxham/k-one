@@ -116,6 +116,7 @@ set_permission('outbound', 'delete', 'write');
 set_permission('outbound', 'pick_items', 'write');
 set_permission('outbound', 'ship', 'write');
 set_module_departments('outbound', ['outbound', 'ops']);
+set_action_departments('outbound', 'search_products', ['all']);
 
 // picklist (picklist.actions.ts): create_from_outbound/confirm/complete/delete/update_item write; ['outbound','ops']
 set_permission('picklist', 'create_from_outbound', 'write');
