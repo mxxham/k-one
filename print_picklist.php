@@ -81,15 +81,6 @@ body{font-family:'Inter',system-ui,sans-serif;font-size:10pt;color:#0f172a;backg
 .info-cell .val{font-size:12px;font-weight:600;color:#0f172a;line-height:1.6}
 .info-cell .val .sub{font-size:10px;font-weight:400;color:#94a3b8}
 
-/* Summary */
-.summary-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
-.sum-card{border-radius:8px;padding:12px 14px;text-align:center}
-.sum-card .num{font-size:22px;font-weight:800;line-height:1}
-.sum-card .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.6px;margin-top:4px;font-weight:600;opacity:.85}
-.sc-teal{background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4}
-.sc-blue{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
-.sc-gray{background:#f8fafc;color:#475569;border:1px solid #e2e8f0}
-
 .section-title{font-size:11px;font-weight:700;color:#334155;margin-bottom:10px;display:flex;align-items:center;gap:6px}
 .section-title::before{content:'';display:block;width:3px;height:14px;background:#026766;border-radius:2px}
 
@@ -184,22 +175,6 @@ tfoot td.r{text-align:right}
         <br><span class="sub"><?= htmlspecialchars($picklist['city']) ?></span>
         <?php endif; ?>
       </div>
-    </div>
-  </div>
-
-  <!-- Summary -->
-  <div class="summary-bar">
-    <div class="sum-card sc-teal">
-      <div class="num"><?= $totalLines ?></div>
-      <div class="lbl">Total Lines</div>
-    </div>
-    <div class="sum-card sc-blue">
-      <div class="num"><?= number_format($totalQty, 0) ?></div>
-      <div class="lbl">Total Qty</div>
-    </div>
-    <div class="sum-card sc-gray">
-      <div class="num"><?= number_format($totalPlt, 0) ?></div>
-      <div class="lbl">Total Pallet</div>
     </div>
   </div>
 
