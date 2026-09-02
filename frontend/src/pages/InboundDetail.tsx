@@ -386,11 +386,16 @@ export default function InboundDetail() {
       const res = await api('inbound', 'detail', { params: { id } });
       setData(res as unknown as DetailData);
     } catch (e: any) {
+      if (e.status === 404) {
+        toast('error', 'Inbound tidak ditemukan');
+        navigate('/inbound');
+        return;
+      }
       toast('error', e.message || 'Gagal memuat detail inbound');
     } finally {
       setLoading(false);
     }
-  }, [id, toast]);
+  }, [id, toast, navigate]);
 
   useEffect(() => {
     fetchDetail();

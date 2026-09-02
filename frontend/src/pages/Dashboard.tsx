@@ -188,14 +188,14 @@ export default function Dashboard() {
           </div>
           {/* Quick Actions */}
           <Link
-            to="/inbound/new"
+            to="/inbound"
             className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-semibold transition backdrop-blur-sm border border-white/20"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">New Inbound</span>
           </Link>
           <Link
-            to="/outbound/new"
+            to="/outbound"
             className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-semibold transition backdrop-blur-sm border border-white/20"
           >
             <Plus className="w-4 h-4" />
