@@ -374,6 +374,11 @@ export default function OutboundDetail() {
       }
     } catch (err: any) {
       if (err.name === 'AbortError') return;
+      if (err.status === 404) {
+        toast('error', 'Outbound tidak ditemukan');
+        navigate('/outbound');
+        return;
+      }
       toast('error', err.message || 'Gagal memuat data');
     } finally {
       if (!ctrl.signal.aborted) setLoading(false);
