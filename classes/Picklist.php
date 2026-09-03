@@ -152,8 +152,8 @@ class Picklist {
                     $insItem = $db->prepare("INSERT INTO picklist_items
                             (picklist_id, outbound_item_id, product_id, batch_no, batch_number,
                              location, quantity, uom, pallet, pallet_seq,
-                             stock_location_id, status)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')");
+                             stock_location_id, status, replen_task_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?)");
                     $insItem->execute([
                         $picklistId,
                         $item['id'],
@@ -164,7 +164,8 @@ class Picklist {
                         $item['uom_type'],
                         $plt,
                         $palletSeq++,
-                        $lr['stock_location_id']
+                        $lr['stock_location_id'],
+                        $item['blocked_on_replen_task_id'] ?? null
                     ]);
                 }
             } else {
@@ -211,8 +212,8 @@ class Picklist {
                     $insItem = $db->prepare("INSERT INTO picklist_items
                             (picklist_id, outbound_item_id, product_id, batch_no, batch_number,
                              location, quantity, uom, pallet, pallet_seq,
-                             stock_location_id, status)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')");
+                             stock_location_id, status, replen_task_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?)");
                     $insItem->execute([
                         $picklistId,
                         $item['id'],
@@ -223,7 +224,8 @@ class Picklist {
                         $item['uom_type'],
                         $plt2,
                         $palletSeq++,
-                        $slId
+                        $slId,
+                        $item['blocked_on_replen_task_id'] ?? null
                     ]);
                 }
             }
@@ -271,6 +273,7 @@ class Picklist {
                 lm.zone, lm.aisle,
                 oi.so_number  AS item_so_number,
                 oi.od_number  AS item_od_number,
+                oi.blocked_on_replen_task_id,
                 COALESCE(ci.customer_name, co.customer_name) AS item_customer_name,
                 COALESCE(NULLIF(od.ship_to_name,''), NULLIF(o.ship_to_name,'')) AS item_ship_to,
                 COALESCE(NULLIF(od.kota,''), NULLIF(o.kota,''))                 AS item_kota
@@ -425,7 +428,7 @@ class Picklist {
                 $picklistId = (int)$db->lastInsertId();
             }
 
-            $obItemR = $db->prepare("SELECT oi.id, p.uom_per_pallet
+            $obItemR = $db->prepare("SELECT oi.id, oi.blocked_on_replen_task_id, p.uom_per_pallet
                     FROM outbound_items oi JOIN products p ON p.id = oi.product_id
                     WHERE oi.outbound_order_id = ? AND oi.product_id = ?
                     ORDER BY oi.id LIMIT 1");
@@ -438,11 +441,12 @@ class Picklist {
             $plt = max(1, (int)ceil($quantity / $uomPerPallet));
             $stmt = $db->prepare("INSERT INTO picklist_items
                     (picklist_id, outbound_item_id, product_id, batch_no, batch_number,
-                     location, quantity, uom, pallet, pallet_seq, stock_location_id, status)
-                    VALUES (?,?,?,?,?,'STAGING',?,?,?,1,?,'Pending')");
+                     location, quantity, uom, pallet, pallet_seq, stock_location_id, status, replen_task_id)
+                    VALUES (?,?,?,?,?,'STAGING',?,?,?,1,?,'Pending',?)");
             $stmt->execute([
                 $picklistId, $obItemId, $productId, $batch, $batch,
                 $quantity, $uom, $plt, $stockLocationId,
+                $obItem['blocked_on_replen_task_id'] ?? null
             ]);
             $itemId = (int)$db->lastInsertId();
 

@@ -121,6 +121,30 @@ function handle_replenishment($action) {
             json_out($result);
             break;
 
+        case 'task_status':
+            api_require_auth();
+            $taskId = (int)(query('task_id') ?? body()['task_id'] ?? 0);
+            if ($taskId <= 0) json_err('Task ID wajib diisi.', 400);
+            $db = db();
+            $stmt = $db->prepare(
+                "SELECT t.*,
+                        p.product_code, p.product_name,
+                        lm_src.location_code AS source_location,
+                        lm_dst.location_code AS dest_location,
+                        oo.order_number
+                 FROM replen_task t
+                 JOIN products p ON p.id = t.sku_id
+                 JOIN location_master lm_src ON lm_src.id = t.source_bin_id
+                 JOIN location_master lm_dst ON lm_dst.id = t.destination_bin_id
+                 LEFT JOIN outbound_orders oo ON oo.id = t.triggering_order_id
+                 WHERE t.id = ?"
+            );
+            $stmt->execute([$taskId]);
+            $task = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$task) json_err('Replenishment task tidak ditemukan.', 404);
+            json_out(['task' => $task]);
+            break;
+
         case 'auto_status':
             api_require_auth();
             $result = AutoReplenishment::getStatus();

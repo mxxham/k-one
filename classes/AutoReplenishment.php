@@ -205,31 +205,31 @@ class AutoReplenishment {
         $pendingStmt->execute();
         $pendingTransfers = (int)$pendingStmt->fetchColumn();
 
-        // Recent activity (last 24h)
+        // Recent activity (last 24h) — individual rows
         $recentStmt = $db->prepare("
             SELECT
-                COUNT(*) AS total,
-                SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END) AS generated_count,
-                SUM(CASE WHEN status = 'executed' THEN 1 ELSE 0 END) AS executed_count,
-                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
-                SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped_count
-            FROM replenishment_log
-            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+                rl.id,
+                rl.product_id,
+                rl.location_code,
+                rl.trigger_type,
+                rl.shortage_qty,
+                rl.transfer_id,
+                rl.status,
+                rl.skip_reason,
+                rl.created_at
+            FROM replenishment_log rl
+            WHERE rl.created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+            ORDER BY rl.created_at DESC
+            LIMIT 50
         ");
         $recentStmt->execute();
-        $recent = $recentStmt->fetch() ?: [];
+        $recentActivity = $recentStmt->fetchAll();
 
         return [
             'enabled'            => $enabled,
             'total_shortages'    => $totalShortages,
             'pending_transfers'  => $pendingTransfers,
-            'recent_activity'    => [
-                'total'       => (int)($recent['total'] ?? 0),
-                'generated'   => (int)($recent['generated_count'] ?? 0),
-                'executed'    => (int)($recent['executed_count'] ?? 0),
-                'failed'      => (int)($recent['failed_count'] ?? 0),
-                'skipped'     => (int)($recent['skipped_count'] ?? 0),
-            ],
+            'recent_activity'    => $recentActivity,
         ];
     }
 

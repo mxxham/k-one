@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>K-one Rack 3D Visualization</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0f172a; overflow: hidden; font-family: system-ui, -apple-system, sans-serif; }
+  canvas { display: block; }
+  #tooltip {
+    position: fixed; pointer-events: none; background: rgba(15,23,42,0.92);
+    border: 1px solid #334155; border-radius: 8px; padding: 10px 14px;
+    color: #e2e8f0; font-size: 13px; line-height: 1.5; display: none; z-index: 10;
+    max-width: 280px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  #tooltip .loc { font-weight: 700; font-size: 15px; color: #f8fafc; }
+  #tooltip .zone { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  #legend {
+    position: fixed; bottom: 16px; left: 16px; background: rgba(15,23,42,0.9);
+    border: 1px solid #334155; border-radius: 8px; padding: 12px 16px;
+    color: #e2e8f0; font-size: 12px; z-index: 10;
+  }
+  #legend h4 { margin-bottom: 6px; font-size: 13px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 3px; }
+  #info {
+    position: fixed; top: 16px; left: 16px; background: rgba(15,23,42,0.9);
+    border: 1px solid #334155; border-radius: 8px; padding: 12px 16px;
+    color: #e2e8f0; font-size: 13px; z-index: 10;
+  }
+  #info h3 { font-size: 15px; margin-bottom: 4px; }
+  #info .count { color: #94a3b8; }
+</style>
+</head>
+<body>
+
+<div id="tooltip">
+  <div class="loc"></div>
+  <div class="zone"></div>
+  <div class="detail"></div>
+</div>
+
+<div id="info">
+  <h3>K-one Warehouse 3D</h3>
+  <div class="count" id="binCount"></div>
+</div>
+
+<div id="legend">
+  <h4>Legend</h4>
+  <div class="legend-item"><div class="legend-swatch" style="background:#10b981"></div> Pick Face</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#f59e0b"></div> Reserve</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#3b82f6"></div> Bulk</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#a855f7"></div> Quarantine</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#ec4899"></div> Staging</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#475569"></div> Empty</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── Constants (mirrors Rack3D.tsx exactly) ──────────────────
+const AISLES = ['CA', 'CB', 'CC', 'CD', 'CE', 'CF', 'CG', 'STG'];
+const LEVEL_Y = { A: 0.95, B: 3.15, C: 5.35, D: 7.55, E: 9.75 };
+const AISLE_GAP = 9;
+const BAY_GAP = 2.6;
+const BIN_W = 1.1, BIN_H = 1.9, BIN_D = 2.2;
+
+const ZONE_COLORS = {
+  PICK_FAST: '#10b981', RESERVE: '#f59e0b', BULK: '#3b82f6',
+  QUARANTINE: '#a855f7', STAGING: '#ec4899', UNALLOCATED: '#64748b',
+};
+const FUNCTION_COLORS = { PICK_FACE: '#10b981', RESERVE: '#3b82f6', MIXED: '#7c3aed' };
+
+function zoneColor(zone, occupied) {
+  if (!occupied) return '#475569';
+  return ZONE_COLORS[String(zone ?? '').toUpperCase()] || '#94a3b8';
+}
+function functionColor(fn) {
+  return FUNCTION_COLORS[String(fn ?? '').toUpperCase()] || '';
+}
+
+// ── Generate sample warehouse data ──────────────────────────
+function generateSampleBins() {
+  const bins = [];
+  const levels = ['A', 'B', 'C', 'D', 'E'];
+  const aisles = ['CA', 'CB', 'CC', 'CD', 'CE', 'CF', 'CG'];
+  const maxRacks = { CA: 12, CB: 40, CC: 34, CD: 40, CE: 40, CF: 10, CG: 8 };
+  const zones = ['PICK_FAST', 'RESERVE', 'BULK'];
+  const fns = ['PICK_FACE', 'RESERVE', null];
+
+  for (const aisle of aisles) {
+    const rackMax = maxRacks[aisle] || 15;
+    for (let rack = 1; rack <= rackMax; rack++) {
+      const rackStr = aisle + String(rack).padStart(2, '0');
+      for (const level of levels) {
+        for (const pos of ['01', '02']) {
+          const code = `${rackStr}${level}${pos}`;
+          const occupied = Math.random() > 0.4 ? 1 : 0;
+          const zone = zones[Math.floor(Math.random() * zones.length)];
+          const fn = occupied ? fns[Math.floor(Math.random() * fns.length)] : null;
+          bins.push({
+            location_code: code,
+            aisle, rack: rackStr, level, position: pos,
+            zone_code: zone, is_pick_face: fn === 'PICK_FACE' ? 1 : 0,
+            equipment_accessible: Math.random() > 0.5 ? 1 : 0,
+            occupied, quantity: occupied ? Math.round(Math.random() * 50) : 0,
+            pallet_function: fn, product_code: occupied ? `PRD-${Math.floor(Math.random()*999)}` : null,
+            product_name: occupied ? `Product ${Math.floor(Math.random()*50)}` : null,
+            batch_number: occupied ? `B${Math.floor(Math.random()*99)}` : null,
+            blocked: 0, block_reason: null,
+          });
+        }
+      }
+    }
+  }
+  // Add STG bins
+  for (let i = 1; i <= 6; i++) {
+    for (const level of levels) {
+      const code = `STG${String(i).padStart(2,'0')}${level}01`;
+      bins.push({
+        location_code: code, aisle: 'STG', rack: `STG${String(i).padStart(2,'0')}`,
+        level, position: '01', zone_code: 'STAGING', is_pick_face: 0,
+        equipment_accessible: 1, occupied: Math.random() > 0.3 ? 1 : 0,
+        quantity: Math.round(Math.random() * 20), pallet_function: null,
+        product_code: null, product_name: null, batch_number: null,
+        blocked: 0, block_reason: null,
+      });
+    }
+  }
+  return bins;
+}
+
+// ── computeLayout (mirrors Rack3D.tsx exactly) ─────────────
+function bayNumber(rack) {
+  const m = /(\d+)$/.exec(rack || '');
+  const n = m ? parseInt(m[1], 10) : NaN;
+  return Number.isFinite(n) ? n : 1;
+}
+
+function computeLayout(bins) {
+  const byCode = {};
+  const maxBayPerAisle = {};
+  for (const b of bins) {
+    const ai = AISLES.indexOf(b.aisle);
+    if (ai < 0) continue;
+    const bay = bayNumber(b.rack);
+    maxBayPerAisle[b.aisle] = Math.max(maxBayPerAisle[b.aisle] || 0, bay);
+  }
+  for (const b of bins) {
+    const ai = AISLES.indexOf(b.aisle);
+    if (ai < 0) continue;
+    const bay = bayNumber(b.rack);
+    const maxBay = maxBayPerAisle[b.aisle] || 1;
+    const x = (ai - (AISLES.length - 1) / 2) * AISLE_GAP + (b.position === '01' ? -0.6 : 0.6);
+    const z = ((maxBay + 1) / 2 - bay) * BAY_GAP;
+    const y = LEVEL_Y[b.level] ?? 0.95;
+    byCode[b.location_code] = [x, y, z];
+  }
+  return { byCode };
+}
+
+// ── Three.js Scene Setup ────────────────────────────────────
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0f172a');
+
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 500);
+camera.position.set(0, 22, 52);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.15);
+dirLight1.position.set(30, 70, 25);
+scene.add(dirLight1);
+const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.35);
+dirLight2.position.set(-30, 30, -25);
+scene.add(dirLight2);
+
+// Grid
+const grid = new THREE.GridHelper(130, 44, '#334155', '#1e293b');
+grid.position.y = -0.02;
+scene.add(grid);
+
+// OrbitControls
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 4.5, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.1;
+controls.minDistance = 6;
+controls.maxDistance = 140;
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.update();
+
+// ── Generate data + layout ──────────────────────────────────
+const bins = generateSampleBins();
+const layout = computeLayout(bins);
+const renderedBins = bins.filter(b => layout.byCode[b.location_code]);
+
+document.getElementById('binCount').textContent =
+  `${renderedBins.length} bins across ${AISLES.length} aisles`;
+
+// ── Build bin meshes ────────────────────────────────────────
+const binGeometry = new THREE.BoxGeometry(BIN_W, BIN_H, BIN_D);
+const tooltip = document.getElementById('tooltip');
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let hoveredMesh = null;
+
+const binMeshes = [];
+const binGroup = new THREE.Group();
+scene.add(binGroup);
+
+for (const bin of renderedBins) {
+  const pos = layout.byCode[bin.location_code];
+  const occupied = bin.occupied === 1;
+  const blocked = bin.blocked === 1;
+  const baseColor = blocked ? '#dc2626' : (occupied ? functionColor(bin.pallet_function) : '') || zoneColor(bin.zone_code, occupied);
+
+  const material = new THREE.MeshStandardMaterial({
+    color: baseColor,
+    transparent: !occupied && !blocked,
+    opacity: occupied || blocked ? 1 : 0.12,
+    depthWrite: occupied || blocked,
+    roughness: 0.6,
+    metalness: 0.05,
+  });
+
+  const mesh = new THREE.Mesh(binGeometry, material);
+  mesh.position.set(...pos);
+  mesh.userData = bin;
+  binGroup.add(mesh);
+  binMeshes.push(mesh);
+}
+
+// ── Interaction ─────────────────────────────────────────────
+function onMouseMove(e) {
+  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(pointer, camera);
+  const intersects = raycaster.intersectObjects(binMeshes);
+
+  if (hoveredMesh) {
+    hoveredMesh.material.emissive.setHex(0x000000);
+    hoveredMesh.material.emissiveIntensity = 0;
+    hoveredMesh = null;
+  }
+
+  if (intersects.length > 0) {
+    const mesh = intersects[0].object;
+    hoveredMesh = mesh;
+    mesh.material.emissive.set(mesh.material.color);
+    mesh.material.emissiveIntensity = 0.35;
+
+    const b = mesh.userData;
+    tooltip.style.display = 'block';
+    tooltip.style.left = e.clientX + 14 + 'px';
+    tooltip.style.top = e.clientY - 10 + 'px';
+    tooltip.querySelector('.loc').textContent = b.location_code;
+    tooltip.querySelector('.zone').textContent = [
+      b.zone_code, b.pallet_function, b.occupied ? `${b.quantity} units` : 'Empty'
+    ].filter(Boolean).join(' · ');
+    tooltip.querySelector('.detail').textContent = b.product_name || '';
+  } else {
+    tooltip.style.display = 'none';
+  }
+}
+
+renderer.domElement.addEventListener('mousemove', onMouseMove);
+
+// ── Resize ──────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ── Render loop ─────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

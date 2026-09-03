@@ -1,5 +1,6 @@
 import { db, dbExec, dbExecFirst, dbScalar, withTransaction } from '../db';
 import { ctx, todayYmd } from '../helpers';
+import { getPickfaceConfig, splitOrderLine, checkReplenishment, createReplenTask } from './PickfaceSplitter';
 
 function phpNumberFormat(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -418,7 +419,38 @@ export class Outbound {
         item.customer_id ?? null,
       ],
     );
-    return Number((ins as any).insertId);
+    const outboundItemId = Number((ins as any).insertId);
+
+    // --- PickfaceSplitter hook: split qty into bulk + pickface, check replenishment ---
+    try {
+      const splitConfig = await getPickfaceConfig(Number(item.product_id));
+      if (splitConfig) {
+        const split = splitOrderLine(quantity, splitConfig.pickface_max);
+
+        if (split.pickface_qty > 0) {
+          const replenResult = await checkReplenishment(
+            Number(item.product_id),
+            split.pickface_qty,
+          );
+
+          if (replenResult.needs_replenishment) {
+            const taskId = await createReplenTask(
+              Number(item.product_id),
+              split.pickface_qty,
+              outboundId,
+            );
+            await dbExec(
+              'UPDATE outbound_items SET blocked_on_replen_task_id = ? WHERE id = ?',
+              [taskId, outboundItemId],
+            );
+          }
+        }
+      }
+    } catch {
+      // PickfaceSplitter failures should not block outbound item creation
+    }
+
+    return outboundItemId;
   }
 
   static async create(data: any): Promise<number> {

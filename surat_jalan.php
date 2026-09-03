@@ -74,198 +74,92 @@ $primaryDestAddr = $outbound['ship_to_street'] ?? '';
 <meta charset="UTF-8">
 <title>Surat Jalan - <?= htmlspecialchars($orderNo) ?></title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Inter',Arial,sans-serif; font-size:10pt; color:#1a1a1a; background:#fff; }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',system-ui,sans-serif;font-size:10pt;color:#0f172a;background:#f1f5f9;line-height:1.5}
+  @page{size:A4 portrait;margin:0}
+  @media print{body{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}.document{box-shadow:none;margin:0;padding:12mm 14mm;border-radius:0}tr{page-break-inside:avoid}}
 
-  @page { size:A4; margin:0; }
-  @media print {
-    .no-print { display:none !important; }
-    body { -webkit-print-color-adjust:exact; print-color-adjust:exact; background:#fff; }
-    .page-break { page-break-before:always; }
-  }
+  .print-bar{background:#0f2e2d;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:99}
+  .print-bar-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px}
+  .btns{display:flex;gap:8px}
+  .btn-print{background:#fff;color:#026766;border:none;padding:8px 18px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px}
+  .btn-back{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.3);padding:8px 14px;border-radius:6px;font-weight:600;font-size:12px;text-decoration:none}
 
-  .print-bar {
-    background:#013d3c; color:#fff; padding:10px 20px;
-    display:flex; align-items:center; justify-content:space-between;
-    position:sticky; top:0; z-index:99;
-  }
-  .print-bar span { font-weight:600; font-size:13px; }
-  .print-bar .btns { display:flex; gap:8px; }
-  .btn-print {
-    background:#fff; color:#013d3c; border:none; padding:7px 18px;
-    border-radius:6px; font-weight:700; cursor:pointer; font-size:13px;
-  }
-  .btn-back {
-    background:transparent; color:#fff; border:1.5px solid rgba(255,255,255,.6);
-    padding:7px 18px; border-radius:6px; font-weight:600; font-size:13px;
-    text-decoration:none;
-  }
+  .document{max-width:794px;margin:20px auto;background:#fff;padding:28px 32px;box-shadow:0 1px 12px rgba(0,0,0,.06);border-radius:6px}
+  @media print{.document{box-shadow:none;margin:0;padding:14mm 14mm 16mm;max-width:100%;border-radius:0}}
 
-  .document {
-    max-width:794px; margin:20px auto; background:#fff;
-    padding:26px 30px; box-shadow:0 2px 20px rgba(0,0,0,.1); border-radius:4px;
-  }
-  @media print {
-    .document { box-shadow:none; margin:0; padding:14mm 14mm 16mm; max-width:100%; border-radius:0; }
-  }
+  .doc-header{display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;margin-bottom:16px;border-bottom:2px solid #e2e8f0}
+  .doc-logo-area{display:flex;align-items:center;gap:12px}
+  .logo-box{width:44px;height:44px;background:linear-gradient(135deg,#026766,#013d3c);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;font-weight:800;flex-shrink:0}
+  .company-name{font-size:18px;font-weight:800;color:#0f172a;letter-spacing:-.5px}
+  .company-name span{color:#64748b;font-weight:400}
+  .company-sub{font-size:11px;color:#64748b;margin-top:1px}
+  .doc-title-block{text-align:right}
+  .doc-title{font-size:20px;font-weight:800;color:#0f172a;letter-spacing:-.3px}
+  .doc-subtitle{font-size:11px;color:#64748b;margin-top:1px}
+  .doc-number{font-size:12px;font-weight:700;color:#334155;margin-top:4px;font-family:'SF Mono',Consolas,monospace}
 
-  
-  .doc-header {
-    display:flex; justify-content:space-between; align-items:flex-start;
-    border-bottom:3px solid #013d3c; padding-bottom:12px; margin-bottom:16px;
-  }
-  .doc-logo-area { display:flex; align-items:center; gap:10px; }
-  .logo-box {
-    width:44px; height:44px; background:linear-gradient(135deg,#013d3c,#43a047);
-    border-radius:8px; display:flex; align-items:center; justify-content:center;
-    color:#fff; font-size:20px; font-weight:700;
-  }
-  .company-name { font-size:13pt; font-weight:700; color:#013d3c; }
-  .company-sub  { font-size:8pt; color:#607d8b; margin-top:1px; }
-  .doc-title    { font-size:16pt; font-weight:700; color:#013d3c; text-align:right; }
-  .doc-number   { font-size:9.5pt; font-weight:700; font-family:monospace; text-align:right; margin-top:3px; }
+  .ref-box{border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:14px;display:grid;grid-template-columns:auto 1fr 1fr;gap:16px;align-items:center;background:#f8fafc}
+  .ref-num{font-family:'SF Mono',Consolas,monospace;font-size:14pt;font-weight:700;color:#0f172a;border-right:2px solid #e2e8f0;padding-right:16px}
+  .ref-lbl{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:2px}
+  .ref-val{font-size:10pt;font-weight:600;color:#0f172a}
 
-  
-  .ref-box {
-    background:linear-gradient(135deg,#e8f5e9,#f1f8e9);
-    border:1.5px solid #a5d6a7; border-radius:8px;
-    padding:10px 16px; margin-bottom:14px;
-    display:grid; grid-template-columns:auto 1fr 1fr; gap:16px; align-items:center;
-  }
-  .ref-num {
-    font-family:monospace; font-size:14pt; font-weight:700; color:#013d3c;
-    border-right:2px solid #a5d6a7; padding-right:16px;
-  }
-  .ref-lbl { font-size:7pt; color:#026766; text-transform:uppercase; letter-spacing:.4px; }
-  .ref-val { font-size:10pt; font-weight:600; color:#1a1a1a; }
+  .info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:16px}
+  .info-cell{padding:10px 14px;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;background:#fff}
+  .info-cell:nth-child(3n){border-right:none}
+  .info-cell:nth-last-child(-n+3){border-bottom:none}
+  .info-cell.span2{grid-column:span 2}
+  .info-cell .lbl{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:2px}
+  .info-cell .val{font-size:12px;font-weight:600;color:#0f172a;line-height:1.6}
 
-  
-  .info-grid {
-    display:grid; grid-template-columns:1fr 1fr 1fr;
-    border:1px solid #dde3ea; border-radius:6px; overflow:hidden; margin-bottom:14px;
-  }
-  .ic { padding:7px 11px; border-right:1px solid #dde3ea; border-bottom:1px solid #dde3ea; }
-  .ic:nth-child(3n) { border-right:none; }
-  .ic:nth-last-child(-n+3) { border-bottom:none; }
-  .ic .lbl { font-size:7pt; color:#90a4ae; text-transform:uppercase; letter-spacing:.4px; margin-bottom:1px; }
-  .ic .val { font-size:9.5pt; font-weight:600; color:#1a1a1a; }
-  .ic.span2 { grid-column:span 2; }
-  .ic.span3 { grid-column:span 3; }
+  .section-title{font-size:11px;font-weight:700;color:#334155;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+  .section-title::before{content:'';display:block;width:3px;height:14px;background:#026766;border-radius:2px}
 
-  
-  .dest-block {
-    border:1.5px solid #c8e6c9; border-radius:8px;
-    background:#f1f8e9; padding:10px 14px; margin-bottom:14px;
-  }
-  .dest-block .dt { font-size:7.5pt; color:#026766; font-weight:700; text-transform:uppercase;
-                    letter-spacing:.4px; margin-bottom:5px; }
-  .dest-item { font-size:9.5pt; margin-bottom:2px; }
-  .dest-addr { font-size:8.5pt; color:#546e7a; margin-top:1px; }
+  table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:14px}
+  thead th{background:#0f2e2d;color:#fff;padding:8px 10px;text-align:left;font-weight:600;font-size:9px;letter-spacing:.4px;text-transform:uppercase}
+  thead th:first-child{border-radius:6px 0 0 0}
+  thead th:last-child{border-radius:0 6px 0 0}
+  thead th.c{text-align:center}
+  thead th.r{text-align:right}
+  tbody tr{border-bottom:1px solid #f1f5f9}
+  tbody tr:nth-child(even){background:#f8fafc}
+  tbody td{padding:8px 10px;vertical-align:middle;line-height:1.5}
+  tbody td.c{text-align:center}
+  tbody td.r{text-align:right;font-weight:600}
+  tfoot td{padding:10px;font-weight:700;font-size:11px;border-top:2px solid #0f2e2d;background:#f0fdfa;color:#0f172a}
+  tfoot td.r{text-align:right}
 
-  
-  .summary-bar { display:flex; gap:10px; margin-bottom:14px; }
-  .sc { flex:1; border-radius:6px; padding:8px 12px; text-align:center; }
-  .sc .num { font-size:16pt; font-weight:700; }
-  .sc .lbl { font-size:7pt; text-transform:uppercase; letter-spacing:.4px; }
-  .sc-green  { background:#e8f5e9; color:#013d3c; }
-  .sc-blue   { background:#e3f0ff; color:#026766; }
-  .sc-amber  { background:#fff8e1; color:#f57f17; }
-  .sc-teal   { background:#e0f2f1; color:#013d3c; }
+  .batch-tag{display:inline-block;background:#f1f5f9;color:#334155;border:1px solid #e2e8f0;border-radius:4px;padding:2px 8px;font-family:'SF Mono',Consolas,monospace;font-size:9px;font-weight:600}
+  .od-tag{display:inline-block;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;border-radius:4px;padding:2px 8px;font-family:'SF Mono',Consolas,monospace;font-size:9px;font-weight:700}
+  .so-tag{display:inline-block;background:#f5f3ff;color:#5b21b6;border:1px solid #ddd6fe;border-radius:4px;padding:2px 8px;font-family:'SF Mono',Consolas,monospace;font-size:9px;font-weight:700}
+  .loc-tag{display:inline-block;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;border-radius:4px;padding:2px 8px;font-family:'SF Mono',Consolas,monospace;font-size:9px;font-weight:600}
 
-  
-  .sec-title {
-    font-size:9pt; font-weight:700; color:#013d3c;
-    border-left:4px solid #013d3c; padding-left:8px;
-    margin-bottom:8px; margin-top:14px;
-    text-transform:uppercase; letter-spacing:.5px;
-  }
+  .dest-section{border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:12px}
+  .dest-header{background:#f8fafc;padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #e2e8f0}
+  .dest-header .num-badge{background:#013d3c;color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0}
+  .dest-header .dest-name{font-weight:700;font-size:10px;color:#0f172a}
+  .dest-header .dest-addr{font-size:9px;color:#64748b;margin-left:auto}
 
-  
-  table { width:100%; border-collapse:collapse; font-size:8.5pt; }
-  thead th {
-    background:#013d3c; color:#fff; padding:6px 8px;
-    text-align:left; font-size:7.5pt; font-weight:600; letter-spacing:.3px;
-  }
-  thead th.c { text-align:center; }
-  thead th.r { text-align:right; }
-  tbody tr:nth-child(even) { background:#f1f8e9; }
-  tbody td { padding:6px 8px; border-bottom:1px solid #dde9ee; vertical-align:top; line-height:1.4; }
-  tbody td.c { text-align:center; }
-  tbody td.r { text-align:right; font-weight:600; }
-  tfoot td {
-    padding:7px 8px; font-weight:700; font-size:9pt;
-    border-top:2px solid #013d3c; background:#e8f5e9;
-  }
-  tfoot td.r { text-align:right; }
+  .sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0}
+  .sig-box{padding-top:0}
+  .sig-role{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:4px}
+  .sig-space{height:48px}
+  .sig-line{border-bottom:1px solid #cbd5e1;margin:0 0 6px}
+  .sig-name{font-size:10px;color:#94a3b8;font-style:italic}
 
-  .sku { font-family:monospace; font-size:7.5pt; color:#546e7a; }
-  .batch-tag {
-    display:inline-block; background:#f3f4f6; color:#374151;
-    border-radius:3px; padding:1px 5px; font-family:monospace; font-size:7.5pt;
-  }
-  .od-tag {
-    display:inline-block; background:#e0f7f7; color:#026766;
-    border-radius:3px; padding:1px 5px; font-family:monospace; font-size:7pt; font-weight:700;
-  }
-  .so-tag {
-    display:inline-block; background:#e0f7f7; color:#026766;
-    border-radius:3px; padding:1px 5px; font-family:monospace; font-size:7pt; font-weight:700;
-  }
-  .loc-tag {
-    display:inline-block; background:#e8f5e9; color:#013d3c;
-    border-radius:3px; padding:1px 5px; font-family:monospace; font-size:7pt; font-weight:600;
-  }
-
-  
-  .dest-section {
-    border:1px solid #dde3ea; border-radius:6px; overflow:hidden; margin-bottom:12px;
-  }
-  .dest-header {
-    background:#e8f5e9; padding:8px 12px;
-    display:flex; align-items:center; gap:8px;
-    border-bottom:1px solid #c8e6c9;
-  }
-  .dest-header .num-badge {
-    background:#013d3c; color:#fff; border-radius:50%;
-    width:20px; height:20px; display:flex; align-items:center; justify-content:center;
-    font-size:8pt; font-weight:700; flex-shrink:0;
-  }
-  .dest-header .dest-name { font-weight:700; font-size:9.5pt; color:#013d3c; }
-  .dest-header .dest-addr { font-size:8pt; color:#546e7a; margin-left:auto; }
-
-  
-  .sig-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; margin-top:24px; }
-  .sig-box { border-top:1.5px solid #bdbdbd; padding-top:8px; }
-  .sig-role  { font-size:7.5pt; color:#78909c; text-transform:uppercase; letter-spacing:.4px; }
-  .sig-space { height:40px; }
-  .sig-line  { border-bottom:1px dashed #bdbdbd; margin:4px 0 4px; }
-  .sig-name  { font-size:8pt; color:#546e7a; }
-
-  .doc-footer {
-    margin-top:20px; padding-top:8px; border-top:1px solid #e0e0e0;
-    display:flex; justify-content:space-between; font-size:7pt; color:#90a4ae;
-  }
+  .doc-footer{margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8}
 </style>
 </head>
 <body>
 
-<div id="back-to-app" style="position:fixed;top:10px;right:10px;z-index:9999;">
-  <a href="javascript:window.close()" style="background:#0d1f1f;color:white;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,0.2);">
-    Close &amp; Back to K-one
-  </a>
-</div>
-<style>
-  @media print {
-    #back-to-app { display: none !important; }
-  }
-</style>
+
 
 <div class="print-bar no-print">
-  <span>🚚 Surat Jalan — <?= htmlspecialchars($orderNo) ?></span>
+  <div class="print-bar-title">Surat Jalan — <?= htmlspecialchars($orderNo) ?></div>
   <div class="btns">
-    <a class="btn-back" href="http://localhost:5173/">← Kembali</a>
-    <button class="btn-print" onclick="window.print()">🖨️ Print / Save PDF</button>
+    <a class="btn-back" href="javascript:history.back()">Back</a>
+    <button class="btn-print" onclick="window.print()">Print / Save PDF</button>
   </div>
 </div>
 
@@ -274,13 +168,13 @@ $primaryDestAddr = $outbound['ship_to_street'] ?? '';
   
   <div class="doc-header">
     <div class="doc-logo-area">
-      <div class="logo-box">W</div>
+      <div class="logo-box">K</div>
       <div>
-        <div class="company-name">K-one</div>
-        <div class="company-sub"><?= htmlspecialchars($warehouseName) ?> — K-one</div>
+        <div class="company-name">K<span>-one</span></div>
+        <div class="company-sub"><?= htmlspecialchars($warehouseName) ?></div>
       </div>
     </div>
-    <div>
+    <div class="doc-title-block">
       <div class="doc-title">SURAT JALAN</div>
       <div class="doc-number"><?= htmlspecialchars($orderNo) ?></div>
       <div style="text-align:right;margin-top:4px">
@@ -305,7 +199,7 @@ $primaryDestAddr = $outbound['ship_to_street'] ?? '';
       <div class="ref-lbl">Ship-To Party</div>
       <div class="ref-val"><?= htmlspecialchars($shipToName) ?></div>
       <?php if (!empty($destinations)): ?>
-      <div style="font-size:8pt;color:#546e7a">📍 Multi Tujuan (<?= count($destinations) ?>)</div>
+      <div style="font-size:9px;color:#64748b;margin-top:2px">Multi Tujuan (<?= count($destinations) ?>)</div>
       <?php endif; ?>
     </div>
     <div>
@@ -314,7 +208,7 @@ $primaryDestAddr = $outbound['ship_to_street'] ?? '';
           ($shipToStreet ?: ($shipToAddr !== '—' ? $shipToAddr : '—'))
       ) ?></div>
       <?php if ($shipToStreet && $shipToAddr !== '—'): ?>
-      <div style="font-size:8pt;color:#546e7a"><?= htmlspecialchars($shipToAddr) ?></div>
+      <div style="font-size:9px;color:#64748b;margin-top:2px"><?= htmlspecialchars($shipToAddr) ?></div>
       <?php endif; ?>
     </div>
   </div>
@@ -322,69 +216,49 @@ $primaryDestAddr = $outbound['ship_to_street'] ?? '';
 
   
   <div class="info-grid">
-    <div class="ic">
+    <div class="info-cell">
       <div class="lbl">Pengirim (Shipper)</div>
       <div class="val"><?= htmlspecialchars($customerLabel) ?></div>
     </div>
-    <div class="ic">
+    <div class="info-cell">
       <div class="lbl">Tanggal Kirim</div>
       <div class="val"><?= date('d F Y', strtotime($dispatchDate)) ?></div>
     </div>
-    <div class="ic">
+    <div class="info-cell">
       <div class="lbl">Client DO No.</div>
-      <div class="val" style="font-family:monospace"><?= htmlspecialchars($outbound['do_number'] ?? '—') ?></div>
+      <div class="val" style="font-family:'SF Mono',Consolas,monospace"><?= htmlspecialchars($outbound['do_number'] ?? '—') ?></div>
     </div>
-    <div class="ic">
+    <div class="info-cell">
       <div class="lbl">SO Number</div>
-      <div class="val" style="font-family:monospace"><?= htmlspecialchars($outbound['so_number'] ?? '—') ?></div>
+      <div class="val" style="font-family:'SF Mono',Consolas,monospace"><?= htmlspecialchars($outbound['so_number'] ?? '—') ?></div>
     </div>
-    <div class="ic">
+    <div class="info-cell">
       <div class="lbl">Nomor Kendaraan</div>
       <div class="val"><?= htmlspecialchars($outbound['armada_no'] ?? '—') ?></div>
     </div>
-    <div class="ic">
+    <div class="info-cell">
       <div class="lbl">Jenis Kendaraan</div>
       <div class="val"><?= htmlspecialchars($outbound['jenis_armada'] ?? '—') ?></div>
     </div>
-    <div class="ic">
+    <div class="info-cell">
       <div class="lbl">Container No.</div>
-      <div class="val" style="font-family:monospace"><?= htmlspecialchars($outbound['container_no'] ?? '—') ?></div>
+      <div class="val" style="font-family:'SF Mono',Consolas,monospace"><?= htmlspecialchars($outbound['container_no'] ?? '—') ?></div>
     </div>
-    <div class="ic span2">
+    <div class="info-cell span2">
       <div class="lbl">Tujuan Pengiriman</div>
       <div class="val"><?= htmlspecialchars($shipToName . ($shipToCity && $shipToCity !== '—' ? ' — ' . $shipToCity : '')) ?></div>
       <?php if ($shipToAddr && $shipToAddr !== '—'): ?>
-      <div class="dest-addr"><?= htmlspecialchars($shipToAddr) ?></div>
+      <div style="font-size:10px;color:#64748b;margin-top:2px"><?= htmlspecialchars($shipToAddr) ?></div>
       <?php endif; ?>
     </div>
   </div>
 
   
-  <div class="summary-bar">
-    <div class="sc sc-green">
-      <div class="num"><?= count($items) ?></div>
-      <div class="lbl">Total Lines</div>
-    </div>
-    <div class="sc sc-blue">
-      <div class="num"><?= number_format($totalQty, 0) ?></div>
-      <div class="lbl">Total Qty</div>
-    </div>
-    <div class="sc sc-amber">
-      <div class="num"><?= number_format($totalPallet, 0) ?></div>
-      <div class="lbl">Total Pallets</div>
-    </div>
-    <div class="sc sc-teal">
-      <div class="num"><?= $destCount ?></div>
-      <div class="lbl">Tujuan</div>
-    </div>
-  </div>
-
-  
-  <div class="sec-title">📦 Detail Barang</div>
+  <div class="section-title">Detail Barang</div>
   <table>
     <thead>
       <tr>
-        <th style="width:24px" class="c">S.No</th>
+        <th style="width:24px" class="c">No.</th>
         <th>Item Code</th>
         <th>Item Description</th>
         <th>Batch No.</th>
@@ -405,15 +279,15 @@ $primaryDestAddr = $outbound['ship_to_street'] ?? '';
       $uniqLocs   = array_unique(array_column($pickLocs, 'location_code'));
     ?>
     <tr>
-      <td class="c" style="color:#90a4ae;font-size:7.5pt"><?= $i+1 ?></td>
+      <td class="c" style="color:#94a3b8;font-size:10px"><?= $i+1 ?></td>
       <td>
-        <div style="font-family:monospace;font-weight:700;font-size:8pt"><?= htmlspecialchars($item['product_code'] ?? '') ?></div>
+        <div style="font-family:'SF Mono',Consolas,monospace;font-weight:700;font-size:9px;color:#0f172a"><?= htmlspecialchars($item['product_code'] ?? '') ?></div>
       </td>
       <td>
-        <div style="font-weight:600"><?= htmlspecialchars($item['product_name'] ?? '—') ?></div>
+        <div style="font-weight:600;font-size:10px"><?= htmlspecialchars($item['product_name'] ?? '—') ?></div>
       </td>
       <td><span class="batch-tag"><?= htmlspecialchars($dispBatch) ?></span></td>
-      <td><?= htmlspecialchars($item['order_customer_name'] ?? $item['customer_name'] ?? '—') ?></td>
+      <td style="font-size:10px"><?= htmlspecialchars($item['order_customer_name'] ?? $item['customer_name'] ?? '—') ?></td>
       <td class="c"><?= htmlspecialchars($item['uom'] ?? '—') ?></td>
       <td class="r"><?= number_format($dispQty, 0) ?></td>
       <td class="r"><?= $dispPlt ?></td>
@@ -425,7 +299,7 @@ $primaryDestAddr = $outbound['ship_to_street'] ?? '';
         <?php elseif ($item['location'] ?? ''): ?>
           <span class="loc-tag"><?= htmlspecialchars($item['location']) ?></span>
         <?php else: ?>
-          <span style="color:#cfd8dc;font-size:7.5pt">—</span>
+          <span style="color:#cbd5e1;font-size:9px">—</span>
         <?php endif; ?>
       </td>
       <td>
@@ -436,7 +310,7 @@ $primaryDestAddr = $outbound['ship_to_street'] ?? '';
         <br><span class="so-tag">SO: <?= htmlspecialchars($item['so_number']) ?></span>
         <?php endif; ?>
         <?php if (empty($item['od_number']) && empty($item['so_number'])): ?>
-        <span style="color:#cfd8dc;font-size:7.5pt">—</span>
+        <span style="color:#cbd5e1;font-size:9px">—</span>
         <?php endif; ?>
       </td>
     </tr>
@@ -444,17 +318,17 @@ $primaryDestAddr = $outbound['ship_to_street'] ?? '';
     </tbody>
     <tfoot>
       <tr>
-        <td colspan="6"><strong>Grand Total</strong></td>
+        <td colspan="6"><strong>TOTAL</strong></td>
         <td class="r"><?= number_format($totalQty, 0) ?></td>
         <td class="r"><?= number_format($totalPallet, 0) ?></td>
-        <td colspan="2"><span style="font-size:7.5pt;font-weight:400">Total packages: <?= count($items) ?></span></td>
+        <td colspan="2"><span style="font-size:9px;font-weight:400;color:#64748b">Total packages: <?= count($items) ?></span></td>
       </tr>
     </tfoot>
   </table>
 
   
   <?php if ($destCount > 0): ?>
-  <div class="sec-title">📍 Tujuan Pengiriman</div>
+  <div class="section-title">Tujuan Pengiriman</div>
 
   <?php if ($hasPrimaryDest): ?>
   <div class="dest-section">
@@ -502,16 +376,16 @@ $primaryDestAddr = $outbound['ship_to_street'] ?? '';
   <?php endif; ?>
 
   
-  <div style="margin-top:14px;border:1px solid #dde3ea;border-radius:6px;padding:10px 14px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+  <div style="margin-top:14px;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
     <div>
-      <div style="font-size:7.5pt;color:#90a4ae;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Received in good condition by</div>
-      <div style="border-bottom:1px dashed #bdbdbd;min-height:28px;margin-top:6px"></div>
-      <div style="font-size:8pt;color:#546e7a;margin-top:3px">Tanda Tangan &amp; Tanggal Penerimaan</div>
+      <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:4px">Received in good condition by</div>
+      <div style="border-bottom:1px solid #cbd5e1;min-height:28px;margin-top:8px"></div>
+      <div style="font-size:10px;color:#94a3b8;margin-top:4px">Tanda Tangan &amp; Tanggal Penerimaan</div>
     </div>
     <div style="text-align:right">
-      <div style="font-size:7.5pt;color:#90a4ae;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">For <?= htmlspecialchars($warehouseName) ?></div>
-      <div style="border-bottom:1px dashed #bdbdbd;min-height:28px;margin-top:6px"></div>
-      <div style="font-size:8pt;color:#546e7a;margin-top:3px"><?= htmlspecialchars($outbound['created_by_name'] ?? 'Warehouse Staff') ?></div>
+      <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:4px">For <?= htmlspecialchars($warehouseName) ?></div>
+      <div style="border-bottom:1px solid #cbd5e1;min-height:28px;margin-top:8px"></div>
+      <div style="font-size:10px;color:#94a3b8;margin-top:4px"><?= htmlspecialchars($outbound['created_by_name'] ?? 'Warehouse Staff') ?></div>
     </div>
   </div>
 
@@ -539,7 +413,7 @@ $primaryDestAddr = $outbound['ship_to_street'] ?? '';
 
   
   <div class="doc-footer">
-    <span>K-one — K-one secondary administration</span>
+    <span>K-one</span>
     <span>Dicetak: <?= date('d F Y H:i') ?> WIB</span>
     <span><?= htmlspecialchars($orderNo) ?></span>
   </div>

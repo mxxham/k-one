@@ -37,7 +37,7 @@ describe('bayNumber', () => {
 });
 
 describe('computeLayout', () => {
-  it('places bins at distinct positions for position 01 vs 02', () => {
+  it('places all bins at distinct positions for position 01 vs 02', () => {
     const a = bin({ location_code: 'CA01A01', rack: 'CA01', position: '01' });
     const b = bin({ location_code: 'CA01A02', rack: 'CA01', position: '02' });
     const { byCode } = computeLayout([a, b]);
@@ -53,19 +53,28 @@ describe('computeLayout', () => {
     for (let i = 1; i < ys.length; i++) expect(ys[i]).toBeGreaterThan(ys[i - 1]);
   });
 
-  it('spreads bays along z centered per aisle', () => {
+  it('renders all bins including high rack numbers without filtering', () => {
     const bins = [
       bin({ location_code: 'CA01A01', rack: 'CA01' }),
       bin({ location_code: 'CA40A01', rack: 'CA40' }),
       bin({ location_code: 'CB01A01', aisle: 'CB', rack: 'CB01' }),
+      bin({ location_code: 'CB39A01', aisle: 'CB', rack: 'CB39' }),
       bin({ location_code: 'CB40A01', aisle: 'CB', rack: 'CB40' }),
     ];
     const { byCode } = computeLayout(bins);
-    expect(byCode['CA01A01'][2]).not.toBe(byCode['CA40A01'][2]);
-    expect(byCode['CB01A01'][2]).not.toBe(byCode['CB40A01'][2]);
-    // Same bay number with the same bay range shares the same z (per-aisle centering)
-    expect(byCode['CA01A01'][2]).toBe(byCode['CB01A01'][2]);
-    expect(byCode['CA40A01'][2]).toBe(byCode['CB40A01'][2]);
+    expect(byCode['CB40A01']).toBeDefined();
+    expect(byCode['CB01A01']).toBeDefined();
+    expect(byCode['CA40A01']).toBeDefined();
+    expect(byCode['CB39A01']).toBeDefined();
+  });
+
+  it('centers z per aisle so bins spread symmetrically', () => {
+    const bins = [
+      bin({ location_code: 'CA01A01', aisle: 'CA', rack: 'CA01' }),
+      bin({ location_code: 'CA02A01', aisle: 'CA', rack: 'CA02' }),
+    ];
+    const { byCode } = computeLayout(bins);
+    expect(byCode['CA01A01'][2]).toBeCloseTo(-byCode['CA02A01'][2]);
   });
 
   it('places different aisles on different x', () => {

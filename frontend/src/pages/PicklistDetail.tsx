@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCheck, PackageCheck, RefreshCw, Save, Printer, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, CheckCheck, PackageCheck, RefreshCw, Save, Printer, AlertTriangle, Clock } from 'lucide-react';
 import { api, apiHref, webBase, getToken } from '@/lib/api';
 import { WebBtn } from '@/components/WebBtn';
 import { fmtDate, fmtDateTime, fmtNum } from '@/lib/format';
@@ -9,6 +9,8 @@ import { useAuth } from '@/context/AuthContext';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, EmptyState } from '@/components/Card';
 import StatusBadge from '@/components/StatusBadge';
+import { type ReplenishmentTaskData } from '@/components/ReplenishmentSheet';
+import { printReplenishmentSheets } from '@/lib/replenishPrint';
 
 import Spinner from '@/components/Spinner';
 import ConfirmButton from '@/components/ConfirmButton';
@@ -30,6 +32,7 @@ interface PicklistItem {
   picked_at?: string;
   picker_id?: string;
   notes?: string;
+  replen_task_id?: number | null;
 }
 
 interface PicklistDetail {
@@ -65,6 +68,7 @@ export default function PicklistDetail() {
   const [scanErr, setScanErr] = useState<string | null>(null);
   const [scanCode, setScanCode] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
+  const [replenTasks, setReplenTasks] = useState<ReplenishmentTaskData[]>([]);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -104,6 +108,42 @@ export default function PicklistDetail() {
     load();
     return () => abortRef.current?.abort();
   }, [load]);
+
+  // Fetch replenishment task details for any items with replen_task_id
+  useEffect(() => {
+    if (items.length === 0) return;
+    const blockedTaskIds = [...new Set(
+      items
+        .map((it) => it.replen_task_id)
+        .filter((id): id is number => id != null && id > 0)
+    )];
+    if (blockedTaskIds.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const tasks: ReplenishmentTaskData[] = [];
+      for (const taskId of blockedTaskIds) {
+        try {
+          const taskRes = await api('replenishment', 'task_status', { params: { task_id: taskId } });
+          if (taskRes.task) {
+            tasks.push({
+              id: taskRes.task.id,
+              product_code: taskRes.task.product_code || '',
+              product_name: taskRes.task.product_name || '',
+              source_location: taskRes.task.source_location || '',
+              dest_location: taskRes.task.dest_location || '',
+              qty: taskRes.task.qty || 0,
+              order_number: taskRes.task.order_number || null,
+            });
+          }
+        } catch {}
+      }
+      if (!cancelled && tasks.length > 0) {
+        setReplenTasks(tasks);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [items]);
 
   const run = async (action: string, body: Record<string, any>, successMsg: string) => {
     setBusy(true);
@@ -276,6 +316,14 @@ export default function PicklistDetail() {
         label="Print"
         icon={<Printer className="w-4 h-4" />}
       />
+      {replenTasks.length > 0 && (
+        <button
+          onClick={() => printReplenishmentSheets(replenTasks)}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold border border-amber-700"
+        >
+          <Printer className="w-4 h-4" /> Print Replenishment Sheet
+        </button>
+      )}
       <button
         onClick={load}
         className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-semibold border border-white/20"
@@ -440,6 +488,12 @@ export default function PicklistDetail() {
                           </Select>
                         ) : (
                           <StatusBadge status={item.status} />
+                        )}
+                        {item.replen_task_id && (
+                          <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            <Clock className="w-3 h-3" />
+                            Awaiting Replenishment
+                          </span>
                         )}
                       </td>
                       <td className="px-4 py-3 border-t border-gray-100 text-sm text-gray-700">{fmtDateTime(item.picked_at)}</td>

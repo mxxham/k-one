@@ -47,7 +47,7 @@ foreach ($items as $item) {
   body {
     font-family: 'Inter', Arial, sans-serif;
     font-size: 10.5pt;
-    color: #1a1a1a;
+    color: #0f172a;
     background: #fff;
   }
 
@@ -64,7 +64,7 @@ foreach ($items as $item) {
 
   
   .print-bar {
-    background: #026766;
+    background: #0f2e2d;
     color: #fff;
     padding: 10px 20px;
     display: flex;
@@ -85,9 +85,6 @@ foreach ($items as $item) {
     font-weight: 700;
     cursor: pointer;
     font-size: 13px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
   }
   .btn-back {
     background: transparent;
@@ -99,9 +96,6 @@ foreach ($items as $item) {
     cursor: pointer;
     font-size: 13px;
     text-decoration: none;
-    display: flex;
-    align-items: center;
-    gap: 6px;
   }
 
   
@@ -123,7 +117,7 @@ foreach ($items as $item) {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    border-bottom: 3px solid #026766;
+    border-bottom: 2px solid #e2e8f0;
     padding-bottom: 14px;
     margin-bottom: 18px;
   }
@@ -134,7 +128,7 @@ foreach ($items as $item) {
   }
   .hdr-logo {
     width: 52px; height: 52px;
-    background: #026766;
+    background: linear-gradient(135deg, #026766 0%, #013d3c 100%);
     border-radius: 10px;
     display: flex; align-items: center; justify-content: center;
     font-size: 28px; font-weight: 900; color: #fff;
@@ -144,8 +138,8 @@ foreach ($items as $item) {
   .doc-company .name .nk   { font-size: 24pt; font-weight: 900; color: #026766; }
   .doc-company .name .none { font-size: 18pt; font-weight: 400; color: #026766; opacity: .7; }
   .doc-title-block { text-align: right; }
-  .doc-title-block .title  { font-size: 16pt; font-weight: 700; color: #026766; letter-spacing: -.3px; }
-  .doc-title-block .sub    { font-size: 8.5pt; color: #78909c; margin-top: 2px; }
+  .doc-title-block .title  { font-size: 16pt; font-weight: 700; color: #0f172a; letter-spacing: -.3px; }
+  .doc-title-block .sub    { font-size: 8.5pt; color: #64748b; margin-top: 2px; }
   .doc-title-block .number { font-size: 10.5pt; font-weight: 700; color: #1a1a1a; margin-top: 5px; font-family: monospace; }
 
   
@@ -169,55 +163,48 @@ foreach ($items as $item) {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 0;
-    border: 1px solid #dde3ea;
-    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
     overflow: hidden;
     margin-bottom: 18px;
   }
   .info-cell {
     padding: 8px 12px;
-    border-right: 1px solid #dde3ea;
-    border-bottom: 1px solid #dde3ea;
+    border-right: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
   }
   .info-cell:nth-child(3n) { border-right: none; }
   .info-cell:nth-last-child(-n+3) { border-bottom: none; }
-  .info-cell .lbl { font-size: 7.5pt; color: #90a4ae; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2px; }
+  .info-cell .lbl { font-size: 7.5pt; color: #64748b; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2px; }
   .info-cell .val { font-size: 10pt; font-weight: 600; color: #1a1a1a; }
   .info-cell.span2 { grid-column: span 2; }
   .info-cell.span3 { grid-column: span 3; }
 
   
-  .summary-bar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 16px;
-  }
-  .sum-card {
-    flex: 1 1 100px;
-    min-width: 88px;
-    border-radius: 6px;
-    padding: 10px 12px;
-    text-align: center;
-  }
-  .sum-card .num { font-size: 18pt; font-weight: 700; }
-  .sum-card .lbl { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .4px; margin-top: 2px; }
-  .sc-blue  { background: #e3f2fd; color: #013d3c; }
-  .sc-green { background: #e8f5e9; color: #013d3c; }
-  .sc-amber { background: #fff8e1; color: #f57f17; }
-  .sc-red   { background: #fce4ec; color: #880e4f; }
+
 
   
   .section-title {
     font-size: 10pt;
     font-weight: 700;
     color: #026766;
-    border-left: 4px solid #026766;
-    padding-left: 8px;
+    padding-left: 12px;
     margin-bottom: 8px;
     margin-top: 16px;
     text-transform: uppercase;
     letter-spacing: .5px;
+    position: relative;
+  }
+  .section-title::before {
+    content: '';
+    display: block;
+    width: 3px;
+    height: 14px;
+    background: #026766;
+    border-radius: 2px;
+    position: absolute;
+    left: 0;
+    top: 2px;
   }
 
   
@@ -229,7 +216,7 @@ foreach ($items as $item) {
     margin-bottom: 10px;
   }
   table.items-table thead th {
-    background: #026766;
+    background: #0f2e2d;
     color: #fff;
     padding: 6px 5px;
     text-align: left;
@@ -240,15 +227,15 @@ foreach ($items as $item) {
   }
   thead th.num { text-align: center; }
   thead th.right { text-align: right; }
-  tbody tr:nth-child(even) { background: #f8fafd; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
   tbody tr:hover { background: #e3f0ff; }
   @media print {
     tbody tr:hover { background: transparent !important; }
-    tbody tr:nth-child(even) { background: #f8fafd; }
+  tbody tr:nth-child(even) { background: #f8fafc; }
   }
   table.items-table tbody td {
     padding: 5px 5px;
-    border-bottom: 1px solid #e8ecf0;
+    border-bottom: 1px solid #e2e8f0;
     vertical-align: top;
     line-height: 1.35;
     word-wrap: break-word;
@@ -260,12 +247,12 @@ foreach ($items as $item) {
     padding: 7px 8px;
     font-weight: 700;
     font-size: 9.5pt;
-    border-top: 2px solid #026766;
-    background: #e8f0fb;
+    border-top: 2px solid #0f2e2d;
+    background: #f1f5f9;
   }
   tfoot td.right { text-align: right; }
 
-  .sku { font-family: monospace; font-size: 8pt; color: #546e7a; }
+  .sku { font-family: monospace; font-size: 8pt; color: #64748b; }
   .loc-badge {
     display: inline-block;
     background: #e3f2fd;
@@ -287,11 +274,11 @@ foreach ($items as $item) {
   .loc-row {
     margin: 0 0 3px;
     padding: 2px 0 2px 6px;
-    border-left: 2px solid #90caf9;
+    border-left: 2px solid #e2e8f0;
     word-break: break-word;
   }
   .loc-row:last-child { margin-bottom: 0; }
-  .loc-meta { font-size: 6.5pt; color: #546e7a; }
+  .loc-meta { font-size: 6.5pt; color: #64748b; }
 
   
   .sig-grid {
@@ -301,43 +288,32 @@ foreach ($items as $item) {
     margin-top: 28px;
   }
   .sig-box {
-    border-top: 1.5px solid #bdbdbd;
+    border-top: 1.5px solid #e2e8f0;
     padding-top: 8px;
   }
-  .sig-box .role { font-size: 8pt; color: #78909c; text-transform: uppercase; letter-spacing: .4px; }
+  .sig-box .role { font-size: 8pt; color: #64748b; text-transform: uppercase; letter-spacing: .4px; }
   .sig-box .space { height: 40px; }
-  .sig-box .name-line { border-bottom: 1px dashed #bdbdbd; margin: 4px 0 4px; }
+  .sig-box .name-line { border-bottom: 1px dashed #e2e8f0; margin: 4px 0 4px; }
 
   
   .doc-footer {
     margin-top: 24px;
     padding-top: 10px;
-    border-top: 1px solid #e0e0e0;
+    border-top: 1px solid #e2e8f0;
     display: flex;
     justify-content: space-between;
     font-size: 7.5pt;
-    color: #90a4ae;
+    color: #64748b;
   }
 </style>
 </head>
 <body>
 
-<div id="back-to-app" style="position:fixed;top:10px;right:10px;z-index:9999;">
-  <a href="javascript:window.close()" style="background:#0d1f1f;color:white;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,0.2);">
-    Close &amp; Back to K-one
-  </a>
-</div>
-<style>
-  @media print {
-    #back-to-app { display: none !important; }
-  }
-</style>
-
 <div class="print-bar no-print">
-  <span>🖨️ Inbound Report Preview</span>
+  <span>Inbound Report Preview</span>
   <div class="btns">
-    <a class="btn-back" href="http://localhost:5173/">← Kembali</a>
-    <button class="btn-print" onclick="window.print()">🖨️ Print / Save PDF</button>
+    <a class="btn-back" href="javascript:history.back()">Back</a>
+    <button class="btn-print" onclick="window.print()">Print / Save PDF</button>
   </div>
 </div>
 
@@ -370,7 +346,7 @@ foreach ($items as $item) {
   </div>
 
   
-  <div class="section-title">📋 Detail Order</div>
+  <div class="section-title">Detail Order</div>
   <div class="info-grid">
     <div class="info-cell">
       <div class="lbl">Carrier</div>
@@ -413,31 +389,10 @@ foreach ($items as $item) {
   </div>
 
   
-  <div class="summary-bar">
-    <div class="sum-card sc-blue">
-      <div class="num"><?= count($items) ?></div>
-      <div class="lbl">Total Lines</div>
-    </div>
-    <div class="sum-card sc-green">
-      <div class="num"><?= number_format($totalQty, 0) ?></div>
-      <div class="lbl">Total Qty</div>
-    </div>
-    <div class="sum-card sc-amber">
-      <div class="num"><?= number_format($totalPallet, 0) ?></div>
-      <div class="lbl">Total Pallets</div>
-    </div>
-    <div class="sum-card sc-green">
-      <div class="num"><?= count($accepted) ?></div>
-      <div class="lbl">Accepted</div>
-    </div>
-    <div class="sum-card sc-red">
-      <div class="num"><?= count($rejected) ?></div>
-      <div class="lbl">Rejected</div>
-    </div>
-  </div>
+
 
   
-  <div class="section-title">📦 Detail Barang</div>
+  <div class="section-title">Detail Barang</div>
   <table class="items-table">
     <thead>
       <tr>
@@ -457,7 +412,7 @@ foreach ($items as $item) {
     <tbody>
       <?php foreach ($items as $i => $item): ?>
       <tr>
-        <td class="num" style="color:#90a4ae"><?= $i + 1 ?></td>
+        <td class="num" style="color:#64748b"><?= $i + 1 ?></td>
         <td>
           <div class="ref-stack">
             <div class="ref-od">OD: <?= htmlspecialchars($item['od_number'] ?? '—') ?></div>
@@ -505,15 +460,15 @@ foreach ($items as $item) {
         </td>
         <td class="num">
           <?php if ($item['stock_status'] === 'Accepted'): ?>
-          <span class="status-acc">✓</span>
+          <span class="status-acc">OK</span>
           <?php else: ?>
-          <span class="status-rej">✗</span>
+          <span class="status-rej">REJ</span>
           <?php endif; ?>
         </td>
       </tr>
       <?php endforeach; ?>
       <?php if (empty($items)): ?>
-      <tr><td colspan="11" style="text-align:center;color:#90a4ae;padding:20px">Tidak ada item</td></tr>
+      <tr><td colspan="11" style="text-align:center;color:#64748b;padding:20px">Tidak ada item</td></tr>
       <?php endif; ?>
     </tbody>
     <tfoot>
@@ -533,19 +488,19 @@ foreach ($items as $item) {
       <div class="role">Dibuat Oleh</div>
       <div class="space"></div>
       <div class="name-line"></div>
-      <div style="font-size:8pt;color:#546e7a"><?= htmlspecialchars($inbound['created_by_name'] ?? 'Warehouse Staff') ?></div>
+      <div style="font-size:8pt;color:#64748b"><?= htmlspecialchars($inbound['created_by_name'] ?? 'Warehouse Staff') ?></div>
     </div>
     <div class="sig-box">
       <div class="role">Diperiksa Oleh</div>
       <div class="space"></div>
       <div class="name-line"></div>
-      <div style="font-size:8pt;color:#546e7a">Warehouse Supervisor</div>
+      <div style="font-size:8pt;color:#64748b">Warehouse Supervisor</div>
     </div>
     <div class="sig-box">
       <div class="role">Disetujui Oleh</div>
       <div class="space"></div>
       <div class="name-line"></div>
-      <div style="font-size:8pt;color:#546e7a">Warehouse Manager</div>
+      <div style="font-size:8pt;color:#64748b">Warehouse Manager</div>
     </div>
   </div>
 

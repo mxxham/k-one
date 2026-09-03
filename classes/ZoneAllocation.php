@@ -215,29 +215,44 @@ class ZoneAllocation
     }
 
     /**
-     * Get zone statistics for a product.
+     * Get zone statistics, optionally filtered by product.
      *
-     * @param  int    $productId  Product ID
+     * @param  ?int   $productId  Product ID (null = all products)
      * @return array  Zone stats with zone, location_count, total_qty, occupied_count
      */
-    public static function getZoneStats(int $productId): array
+    public static function getZoneStats(?int $productId = null): array
     {
         $db = db();
 
-        $stmt = $db->prepare("
-            SELECT
-                lm.row_name as zone,
-                COUNT(*) as location_count,
-                SUM(s.quantity) as total_qty,
-                COUNT(CASE WHEN s.quantity > 0 THEN 1 END) as occupied_count
-            FROM stock s
-            JOIN location_master lm ON lm.location_code = s.location
-            WHERE s.product_id = ?
-              AND lm.is_active = 1
-            GROUP BY lm.row_name
-            ORDER BY FIELD(lm.row_name, 'A', 'B', 'C', 'D')
-        ");
-        $stmt->execute([$productId]);
+        if ($productId) {
+            $stmt = $db->prepare("
+                SELECT
+                    lm.row_name as zone,
+                    COUNT(*) as location_count,
+                    SUM(s.quantity) as total_qty,
+                    COUNT(CASE WHEN s.quantity > 0 THEN 1 END) as occupied_count
+                FROM stock s
+                JOIN location_master lm ON lm.location_code = s.location
+                WHERE s.product_id = ?
+                  AND lm.is_active = 1
+                GROUP BY lm.row_name
+                ORDER BY FIELD(lm.row_name, 'A', 'B', 'C', 'D')
+            ");
+            $stmt->execute([$productId]);
+        } else {
+            $stmt = $db->query("
+                SELECT
+                    lm.row_name as zone,
+                    COUNT(*) as location_count,
+                    SUM(s.quantity) as total_qty,
+                    COUNT(CASE WHEN s.quantity > 0 THEN 1 END) as occupied_count
+                FROM stock s
+                JOIN location_master lm ON lm.location_code = s.location
+                WHERE lm.is_active = 1
+                GROUP BY lm.row_name
+                ORDER BY FIELD(lm.row_name, 'A', 'B', 'C', 'D')
+            ");
+        }
         return $stmt->fetchAll();
     }
 }

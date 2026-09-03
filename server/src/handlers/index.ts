@@ -7,6 +7,7 @@ import { handleLedger } from './ledger';
 import { handleProducts, handleCustomers, handleLocations, handleUsers } from './master';
 import { handleOutbound } from './outbound';
 import { handlePicklist } from './picklist';
+import { handleReplenishment } from './replenishment';
 import { handleReport, handleActivityLog } from './reports';
 import { handleStock } from './stock';
 import { handleStockTake } from './stocktake';
@@ -27,6 +28,7 @@ export const handlers: Record<string, ActionHandler> = {
   users: handleUsers,
   outbound: handleOutbound,
   picklist: handlePicklist,
+  replenishment: handleReplenishment,
   report: handleReport,
   activitylog: handleActivityLog,
   stock: handleStock,

@@ -463,18 +463,30 @@ public static function generateNumber($db = null): string {
                 'allocation'      => $allAllocations,
             ];
         } else {
+            // Check if SKU has pickface config — if so, prioritize pickface allocation
+            require_once __DIR__ . '/FefoAllocator.php';
+            $pfConfig = PickfaceSplitter::getPickfaceConfig((int)$item['product_id'], $db);
             
-            $fefo = self::getFEFOAllocation($item['product_id'], $quantity, $manualLoc ?: null);
-            if (!$fefo['sufficient']) {
-                $scoped = ($manualLoc !== null && $manualLoc !== '')
-                    || ($manualLocs && count($manualLocs) > 0);
+            if ($pfConfig) {
+                // Use pickface-priority allocation
+                $fefo = FefoAllocator::allocate(
+                    (string)($item['product_code'] ?? $item['product_id']),
+                    $quantity,
+                    null,
+                    true  // pickfacePriority
+                );
+                // Store replen_task_id for blocking later
+                $item['_replen_task_id'] = $fefo['replen_task_id'] ?? null;
+            } else {
+                // No pickface config — standard FEFO across all bins
+                $fefo = self::getFEFOAllocation($item['product_id'], $quantity, $manualLoc ?: null);
+            }
+            
+            // Only throw if insufficient AND no replenishment task was created
+            // When pickface priority is enabled, shortage triggers replenishment + blocking
+            if (!$fefo['sufficient'] && empty($item['_replen_task_id'])) {
                 $msg = "Stok tidak mencukupi untuk alokasi FEFO. Qty diminta: " . number_format($quantity, 0) . ".";
-                if ($scoped) {
-                    $msg .= " Stok di lokasi/bin terpilih: " . number_format($fefo['total_available'], 0)
-                        . " (total pickable gudang: " . number_format($totalAvailable, 0) . ").";
-                } else {
-                    $msg .= " Tersedia (FEFO): " . number_format($fefo['total_available'], 0) . ".";
-                }
+                $msg .= " Tersedia (FEFO): " . number_format($fefo['total_available'], 0) . ".";
                 throw new Exception($msg);
             }
         }
@@ -487,7 +499,8 @@ public static function generateNumber($db = null): string {
         if ($manualLocs && count($manualLocs) > 1) {
             $locSummary = implode(', ', array_column($manualLocs, 'location'));
         } else {
-            $locSummary = $firstBatch['location'] ?? $manualLoc;
+            // Use pickface bin location if available (from FefoAllocator), otherwise standard location
+            $locSummary = $firstBatch['bin_location'] ?? $firstBatch['location'] ?? $manualLoc;
         }
 
         $stmt = $db->prepare("INSERT INTO outbound_items
@@ -512,7 +525,18 @@ public static function generateNumber($db = null): string {
             $item['customer_id'] ?? null,
         ]);
 
-        return $db->lastInsertId();
+        $outboundItemId = $db->lastInsertId();
+
+        // --- Block outbound item if replenishment task was created ---
+        $replenTaskId = $item['_replen_task_id'] ?? null;
+        if ($replenTaskId) {
+            $stmtBlock = $db->prepare(
+                "UPDATE outbound_items SET blocked_on_replen_task_id = ? WHERE id = ?"
+            );
+            $stmtBlock->execute([$replenTaskId, $outboundItemId]);
+        }
+
+        return $outboundItemId;
     }
 
     

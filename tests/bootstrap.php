@@ -21,7 +21,9 @@ const TEST_SERVER_HOST = '127.0.0.1';
 const TEST_SERVER_PORT = 8790;
 const TEST_SERVER_BASE = 'http://127.0.0.1:8790';
 
+require_once dirname(__DIR__) . '/vendor/autoload.php';
 require_once __DIR__ . '/ApiTestHelpers.php';
+require_once __DIR__ . '/TestDataFactory.php';
 
 $dsn = sprintf('mysql:host=%s;port=%d;charset=utf8mb4', TEST_DB_HOST, TEST_DB_PORT);
 

@@ -8,16 +8,17 @@ import {
   XCircle,
   ChevronDown,
   ArrowRight,
-  MapPin,
   Clock,
   SkipForward,
   Play,
-  Settings,
-  Bell,
   History,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { fmtDateTime } from '@/lib/format';
+import { useToast } from '@/components/Toast';
+import { PageHeader } from '@/components/PageHeader';
+import { Card, EmptyState } from '@/components/Card';
+import Spinner from '@/components/Spinner';
 
 interface Shortage {
   product_id: string;
@@ -81,13 +82,12 @@ interface ReplenishmentStatus {
 type TabType = 'shortages' | 'suggestions' | 'auto-replenish' | 'history';
 
 const ReplenishmentPage: React.FC = () => {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<TabType>('shortages');
   const [shortages, setShortages] = useState<Shortage[]>([]);
   const [suggestions, setSuggestions] = useState<SuggestedTransfer[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [expandedShortageId, setExpandedShortageId] = useState<string | null>(null);
   const [expandedSuggestionId, setExpandedSuggestionId] = useState<string | null>(null);
 
@@ -114,18 +114,16 @@ const ReplenishmentPage: React.FC = () => {
 
   const detectShortages = async () => {
     setLoading(true);
-    setError(null);
-    setSuccessMessage(null);
 
     try {
       const data = await api('replenishment', 'detect');
       const rows = data.shortages || [];
       setShortages(rows);
-      setSuccessMessage(`Detected ${rows.length} shortage(s) across the warehouse`);
+      toast('success', `Detected ${rows.length} shortage(s) across the warehouse`);
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(`Error detecting shortages: ${errorMsg}`);
+      toast('error', `Error detecting shortages: ${errorMsg}`);
       setShortages([]);
     } finally {
       setLoading(false);
@@ -134,19 +132,17 @@ const ReplenishmentPage: React.FC = () => {
 
   const suggestTransfers = async () => {
     setLoading(true);
-    setError(null);
-    setSuccessMessage(null);
 
     try {
       const data = await api('replenishment', 'suggest');
       const rows = data.suggestions || [];
       setSuggestions(rows);
       setActiveTab('suggestions');
-      setSuccessMessage(`Generated ${rows.length} transfer suggestion(s)`);
+      toast('success', `Generated ${rows.length} transfer suggestion(s)`);
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(`Error suggesting transfers: ${errorMsg}`);
+      toast('error', `Error suggesting transfers: ${errorMsg}`);
       setSuggestions([]);
     } finally {
       setLoading(false);
@@ -155,13 +151,11 @@ const ReplenishmentPage: React.FC = () => {
 
   const generateTransfers = async () => {
     if (suggestions.length === 0) {
-      setError('No suggestions available. Please suggest transfers first.');
+      toast('error', 'No suggestions available. Please suggest transfers first.');
       return;
     }
 
     setGenerating(true);
-    setError(null);
-    setSuccessMessage(null);
 
     try {
       const data = await api('replenishment', 'generate', {
@@ -183,7 +177,8 @@ const ReplenishmentPage: React.FC = () => {
       if (generated.length) parts.push(`${generated.length} generated`);
       if (insufficient.length) parts.push(`${insufficient.length} insufficient stock`);
       if (skipped.length) parts.push(`${skipped.length} skipped`);
-      setSuccessMessage(
+      toast(
+        'success',
         parts.length ? `Replenishment complete: ${parts.join(', ')}` : 'No transfers generated'
       );
       setSuggestions([]);
@@ -191,7 +186,7 @@ const ReplenishmentPage: React.FC = () => {
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(`Error generating transfers: ${errorMsg}`);
+      toast('error', `Error generating transfers: ${errorMsg}`);
     } finally {
       setGenerating(false);
     }
@@ -235,7 +230,6 @@ const ReplenishmentPage: React.FC = () => {
   const saveAutoConfig = async () => {
     setAutoConfigLoading(true);
     setAutoSaveSuccess(false);
-    setError(null);
     try {
       await api('replenishment', 'update_auto_config', {
         method: 'POST',
@@ -245,7 +239,7 @@ const ReplenishmentPage: React.FC = () => {
       setTimeout(() => setAutoSaveSuccess(false), 3000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      setError(`Failed to save config: ${msg}`);
+      toast('error', `Failed to save config: ${msg}`);
     } finally {
       setAutoConfigLoading(false);
     }
@@ -263,24 +257,23 @@ const ReplenishmentPage: React.FC = () => {
     } catch (err) {
       setAutoConfig((prev) => ({ ...prev, enabled: newEnabled === '1' ? '0' : '1' }));
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      setError(`Failed to toggle: ${msg}`);
+      toast('error', `Failed to toggle: ${msg}`);
     }
   };
 
   const runAutoNow = async () => {
     setAutoRunning(true);
-    setError(null);
     try {
       const data = await api('replenishment', 'run_cycle', {
         method: 'POST',
         body: { trigger: 'manual' },
       });
       const count = data.transfers_created ?? 0;
-      setSuccessMessage(`Auto-replenish cycle complete: ${count} transfer(s) created`);
+      toast('success', `Auto-replenish cycle complete: ${count} transfer(s) created`);
       loadAutoStatus();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      setError(`Auto-replenish failed: ${msg}`);
+      toast('error', `Auto-replenish failed: ${msg}`);
     } finally {
       setAutoRunning(false);
     }
@@ -293,704 +286,598 @@ const ReplenishmentPage: React.FC = () => {
     }
   }, [activeTab, loadAutoStatus, loadAutoConfig]);
 
+  const TABS = [
+    { key: 'shortages' as const, label: 'Shortages', icon: AlertCircle },
+    { key: 'suggestions' as const, label: 'Suggestions', icon: TrendingUp },
+    { key: 'auto-replenish' as const, label: 'Auto-Replenish', icon: Zap },
+    { key: 'history' as const, label: 'History', icon: RefreshCw },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold text-slate-900 flex items-center gap-3">
-                <TrendingUp className="w-10 h-10 text-blue-600" />
-                Replenishment Management
-              </h1>
-              <p className="text-slate-600 mt-2">
-                Detect shortages, suggest transfers, and manage warehouse stock levels
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Alert Messages */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-            <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="font-semibold text-red-900">Error</h3>
-              <p className="text-red-800 text-sm mt-1">{error}</p>
-            </div>
+    <div>
+      <PageHeader
+        title="Replenishment"
+        subtitle="Detect shortages, suggest transfers, and manage warehouse stock levels"
+        actions={
+          <>
             <button
-              onClick={() => setError(null)}
-              className="text-red-600 hover:text-red-900 font-medium text-sm"
+              onClick={detectShortages}
+              disabled={loading || generating}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-sm font-semibold border border-white/20 disabled:opacity-50"
             >
-              Dismiss
+              {loading ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <AlertCircle className="w-4 h-4" />
+              )}
+              Detect Shortages
             </button>
-          </div>
-        )}
-
-        {successMessage && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="font-semibold text-green-900">Success</h3>
-              <p className="text-green-800 text-sm mt-1">{successMessage}</p>
-            </div>
             <button
-              onClick={() => setSuccessMessage(null)}
-              className="text-green-600 hover:text-green-900 font-medium text-sm"
+              onClick={suggestTransfers}
+              disabled={loading || generating}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-sm font-semibold border border-white/20 disabled:opacity-50"
             >
-              Dismiss
+              {loading ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <TrendingUp className="w-4 h-4" />
+              )}
+              Suggest Transfers
             </button>
-          </div>
-        )}
+            <button
+              onClick={generateTransfers}
+              disabled={loading || generating || suggestions.length === 0}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-sm font-semibold border border-white/20 disabled:opacity-50"
+            >
+              {generating ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Zap className="w-4 h-4" />
+              )}
+              Generate Transfers
+            </button>
+          </>
+        }
+      />
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="flex gap-2 mb-5 flex-wrap">
+        {TABS.map((t) => (
           <button
-            onClick={detectShortages}
-            disabled={loading || generating}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors shadow-lg"
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition ${
+              activeTab === t.key
+                ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-brand-50'
+            }`}
           >
-            {loading ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                Detecting...
-              </>
-            ) : (
-              <>
-                <AlertCircle className="w-5 h-5" />
-                Detect Shortages
-              </>
+            <t.icon className="w-4 h-4" />
+            {t.label}
+            {t.key === 'shortages' && shortages.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded-full text-xs font-semibold">
+                {shortages.length}
+              </span>
+            )}
+            {t.key === 'suggestions' && suggestions.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-semibold">
+                {suggestions.length}
+              </span>
+            )}
+            {t.key === 'auto-replenish' && autoStatus && (
+              <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                autoStatus.enabled
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                  : 'bg-gray-100 text-gray-500 border border-gray-200'
+              }`}>
+                {autoStatus.enabled ? 'ON' : 'OFF'}
+              </span>
             )}
           </button>
+        ))}
+      </div>
 
-          <button
-            onClick={suggestTransfers}
-            disabled={loading || generating}
-            className="px-6 py-3 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors shadow-lg"
-          >
-            {loading ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                Suggesting...
-              </>
-            ) : (
-              <>
-                <TrendingUp className="w-5 h-5" />
-                Suggest Transfers
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={generateTransfers}
-            disabled={loading || generating || suggestions.length === 0}
-            className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors shadow-lg"
-          >
-            {generating ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Zap className="w-5 h-5" />
-                Generate Transfers
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          <div className="border-b border-slate-200">
-            <div className="flex">
-              {[
-                { id: 'shortages' as const, label: 'Shortages', icon: AlertCircle },
-                { id: 'suggestions' as const, label: 'Suggestions', icon: TrendingUp },
-                { id: 'auto-replenish' as const, label: 'Auto-Replenish', icon: Zap },
-                { id: 'history' as const, label: 'History', icon: RefreshCw },
-              ].map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  onClick={() => setActiveTab(id)}
-                  className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors border-b-2 ${
-                    activeTab === id
-                      ? 'border-blue-600 text-blue-600 bg-blue-50'
-                      : 'border-transparent text-slate-600 hover:text-slate-900'
-                  }`}
+      {/* Shortages Tab */}
+      {activeTab === 'shortages' && (
+        <div>
+          {loading ? (
+            <Spinner label="Loading shortages..." />
+          ) : shortages.length === 0 ? (
+            <Card>
+              <EmptyState message="No shortages detected" />
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {shortages.map((shortage) => (
+                <div
+                  key={`${shortage.product_id}-${shortage.pick_face_location}`}
+                  className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
                 >
-                  <Icon className="w-5 h-5" />
-                  {label}
-                  {id === 'shortages' && shortages.length > 0 && (
-                    <span className="ml-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
-                      {shortages.length}
-                    </span>
+                  <button
+                    onClick={() =>
+                      setExpandedShortageId(
+                        expandedShortageId ===
+                          `${shortage.product_id}-${shortage.pick_face_location}`
+                          ? null
+                          : `${shortage.product_id}-${shortage.pick_face_location}`
+                      )
+                    }
+                    className="w-full p-4 flex items-center justify-between hover:bg-brand-50/50 transition-colors"
+                  >
+                    <div className="flex-1 text-left">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900">
+                            {shortage.product_name}
+                          </h4>
+                          <p className="text-sm text-gray-600">
+                            Product: {shortage.product_code} | Location: {shortage.pick_face_location}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-red-600">
+                            {shortage.shortage} units
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            Current: {shortage.available_qty} / Min: {shortage.min_qty}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronDown
+                      className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ml-2 ${
+                        expandedShortageId ===
+                        `${shortage.product_id}-${shortage.pick_face_location}`
+                          ? 'rotate-180'
+                          : ''
+                      }`}
+                    />
+                  </button>
+
+                  {expandedShortageId ===
+                    `${shortage.product_id}-${shortage.pick_face_location}` && (
+                    <div className="border-t border-gray-100 bg-gray-50 p-4">
+                      <dl className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <dt className="font-semibold text-gray-600">
+                            Current Quantity
+                          </dt>
+                          <dd className="text-gray-900">
+                            {shortage.available_qty} units
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-gray-600">
+                            Minimum Quantity
+                          </dt>
+                          <dd className="text-gray-900">
+                            {shortage.min_qty} units
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-gray-600">
+                            Replenishment Target
+                          </dt>
+                          <dd className="text-brand-600 font-semibold">
+                            {shortage.uom_per_pallet} units (uom_per_pallet)
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-gray-600">
+                            Shortage Amount
+                          </dt>
+                          <dd className="text-red-600 font-semibold">
+                            {shortage.shortage} units
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
                   )}
-                  {id === 'suggestions' && suggestions.length > 0 && (
-                    <span className="ml-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-semibold">
-                      {suggestions.length}
-                    </span>
-                  )}
-                  {id === 'auto-replenish' && autoStatus && (
-                    <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
-                      autoStatus.enabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      {autoStatus.enabled ? 'ON' : 'OFF'}
-                    </span>
-                  )}
-                </button>
+                </div>
               ))}
             </div>
-          </div>
-
-          <div className="p-6">
-            {/* Shortages Tab */}
-            {activeTab === 'shortages' && (
-              <div>
-                {shortages.length === 0 ? (
-                  <div className="text-center py-12">
-                    <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                    <p className="text-slate-600 text-lg">
-                      {loading ? 'Loading shortages...' : 'No shortages detected'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {shortages.map((shortage) => (
-                      <div
-                        key={`${shortage.product_id}-${shortage.pick_face_location}`}
-                        className="border border-slate-200 rounded-lg hover:shadow-md transition-shadow"
-                      >
-                        <button
-                          onClick={() =>
-                            setExpandedShortageId(
-                              expandedShortageId ===
-                                `${shortage.product_id}-${shortage.pick_face_location}`
-                                ? null
-                                : `${shortage.product_id}-${shortage.pick_face_location}`
-                            )
-                          }
-                          className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
-                        >
-                          <div className="flex-1 text-left">
-                            <div className="flex items-center gap-3">
-                              <div className="flex-1">
-                                <h4 className="font-semibold text-slate-900">
-                                  {shortage.product_name}
-                                </h4>
-                                <p className="text-sm text-slate-600">
-                                  Product: {shortage.product_code} | Location: {shortage.pick_face_location}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-lg font-bold text-red-600">
-                                  {shortage.shortage} units
-                                </div>
-                                <p className="text-xs text-slate-500">
-                                  Current: {shortage.available_qty} / Min: {shortage.min_qty}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                          <ChevronDown
-                            className={`w-5 h-5 text-slate-400 transition-transform flex-shrink-0 ml-2 ${
-                              expandedShortageId ===
-                              `${shortage.product_id}-${shortage.pick_face_location}`
-                                ? 'rotate-180'
-                                : ''
-                            }`}
-                          />
-                        </button>
-
-                        {expandedShortageId ===
-                          `${shortage.product_id}-${shortage.pick_face_location}` && (
-                          <div className="border-t border-slate-200 bg-slate-50 p-4">
-                            <dl className="grid grid-cols-2 gap-4 text-sm">
-                              <div>
-                                <dt className="font-semibold text-slate-700">
-                                  Current Quantity
-                                </dt>
-                                <dd className="text-slate-900">
-                                  {shortage.available_qty} units
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="font-semibold text-slate-700">
-                                  Minimum Quantity
-                                </dt>
-                                <dd className="text-slate-900">
-                                  {shortage.min_qty} units
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="font-semibold text-slate-700">
-                                  Replenishment Target
-                                </dt>
-                                <dd className="text-blue-600 font-semibold">
-                                  {shortage.uom_per_pallet} units (uom_per_pallet)
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="font-semibold text-slate-700">
-                                  Shortage Amount
-                                </dt>
-                                <dd className="text-red-600 font-semibold">
-                                  {shortage.shortage} units
-                                </dd>
-                              </div>
-                            </dl>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Suggestions Tab */}
-            {activeTab === 'suggestions' && (
-              <div>
-                {suggestions.length === 0 ? (
-                  <div className="text-center py-12">
-                    <TrendingUp className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                    <p className="text-slate-600 text-lg">
-                      {loading ? 'Loading suggestions...' : 'No transfer suggestions'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {suggestions.map((suggestion) => (
-                      <div
-                        key={suggestion.id}
-                        className="border border-slate-200 rounded-lg hover:shadow-md transition-shadow bg-gradient-to-r from-amber-50 to-transparent"
-                      >
-                        <button
-                          onClick={() =>
-                            setExpandedSuggestionId(
-                              expandedSuggestionId === suggestion.id
-                                ? null
-                                : suggestion.id
-                            )
-                          }
-                          className="w-full p-4 flex items-center justify-between hover:bg-amber-50 transition-colors"
-                        >
-                          <div className="flex-1 text-left">
-                            <div className="flex items-center gap-3">
-                              <div className="flex-1">
-                                <h4 className="font-semibold text-slate-900">
-                                  {suggestion.product_name}
-                                </h4>
-                                <p className="text-sm text-slate-600">
-                                  From: <span className="font-medium">{suggestion.from_location_code}</span> →
-                                  To: <span className="font-medium">{suggestion.to_location_code}</span>
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-lg font-bold text-amber-600">
-                                  {suggestion.transfer_qty} units
-                                </div>
-                                <p className="text-xs text-slate-500 capitalize">
-                                  {suggestion.priority} Priority
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                          <ChevronDown
-                            className={`w-5 h-5 text-slate-400 transition-transform flex-shrink-0 ml-2 ${
-                              expandedSuggestionId === suggestion.id
-                                ? 'rotate-180'
-                                : ''
-                            }`}
-                          />
-                        </button>
-
-                        {expandedSuggestionId === suggestion.id && (
-                          <div className="border-t border-amber-200 bg-amber-50 p-4">
-                            <dl className="grid grid-cols-2 gap-4 text-sm">
-                              <div>
-                                <dt className="font-semibold text-slate-700">
-                                  From Location
-                                </dt>
-                                <dd className="text-slate-900">
-                                  {suggestion.from_location_code} - {suggestion.from_location_name}
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="font-semibold text-slate-700">
-                                  To Location
-                                </dt>
-                                <dd className="text-slate-900">
-                                  {suggestion.to_location_code} - {suggestion.to_location_name}
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="font-semibold text-slate-700">
-                                  Product Code
-                                </dt>
-                                <dd className="text-slate-900">
-                                  {suggestion.product_code}
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="font-semibold text-slate-700">
-                                  Transfer Quantity
-                                </dt>
-                                <dd className="text-amber-600 font-semibold">
-                                  {suggestion.transfer_qty} units
-                                </dd>
-                              </div>
-                              <div className="col-span-2">
-                                <dt className="font-semibold text-slate-700">
-                                  Reason
-                                </dt>
-                                <dd className="text-slate-900">
-                                  {suggestion.reason}
-                                </dd>
-                              </div>
-                              <div className="col-span-2">
-                                <dt className="font-semibold text-slate-700">
-                                  Suggested At
-                                </dt>
-                                <dd className="text-slate-900">
-                                  {new Date(suggestion.suggested_at).toLocaleString()}
-                                </dd>
-                              </div>
-                            </dl>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Auto-Replenish Tab */}
-            {activeTab === 'auto-replenish' && (
-              <div className="space-y-6">
-                {autoLoading ? (
-                  <div className="text-center py-12">
-                    <RefreshCw className="w-12 h-12 text-slate-300 mx-auto mb-4 animate-spin" />
-                    <p className="text-slate-600 text-lg">Loading auto-replenish status...</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                          <Zap className="w-6 h-6 text-blue-600" />
-                          Auto-Replenishment System
-                        </h3>
-                        <p className="text-slate-600 mt-1">
-                          Automatically detect shortages and generate bin transfers on a schedule
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`text-sm font-medium ${
-                          autoConfig.enabled === '1' ? 'text-green-700' : 'text-slate-500'
-                        }`}>
-                          {autoConfig.enabled === '1' ? 'Enabled' : 'Disabled'}
-                        </span>
-                        <button
-                          onClick={toggleAutoEnabled}
-                          className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
-                            autoConfig.enabled === '1' ? 'bg-green-600' : 'bg-slate-300'
-                          }`}
-                        >
-                          <span
-                            className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-                              autoConfig.enabled === '1' ? 'translate-x-6' : 'translate-x-1'
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Status Cards */}
-                    {autoStatus && (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-white border border-slate-200 rounded-lg p-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-red-50 rounded-lg">
-                              <AlertCircle className="w-5 h-5 text-red-600" />
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-600">Total Shortages</p>
-                              <p className="text-2xl font-bold text-slate-900">{autoStatus.total_shortages}</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="bg-white border border-slate-200 rounded-lg p-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-amber-50 rounded-lg">
-                              <Clock className="w-5 h-5 text-amber-600" />
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-600">Pending Transfers</p>
-                              <p className="text-2xl font-bold text-slate-900">{autoStatus.pending_transfers}</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="bg-white border border-slate-200 rounded-lg p-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${
-                              autoStatus.enabled ? 'bg-green-50' : 'bg-slate-50'
-                            }`}>
-                              <Zap className={`w-5 h-5 ${
-                                autoStatus.enabled ? 'text-green-600' : 'text-slate-400'
-                              }`} />
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-600">System Status</p>
-                              <p className={`text-lg font-bold ${
-                                autoStatus.enabled ? 'text-green-600' : 'text-slate-500'
-                              }`}>
-                                {autoStatus.enabled ? 'Active' : 'Inactive'}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Configuration */}
-                    <div className="bg-white border border-slate-200 rounded-lg p-6">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Settings className="w-5 h-5 text-slate-600" />
-                        <h4 className="font-semibold text-slate-900">Configuration</h4>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Schedule (minutes)
-                          </label>
-                          <select
-                            value={autoConfig.schedule_minutes}
-                            onChange={(e) => setAutoConfig({ ...autoConfig, schedule_minutes: e.target.value })}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="5">Every 5 minutes</option>
-                            <option value="10">Every 10 minutes</option>
-                            <option value="15">Every 15 minutes</option>
-                            <option value="30">Every 30 minutes</option>
-                            <option value="60">Every hour</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Batch Size (transfers per cycle)
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="100"
-                            value={autoConfig.batch_size}
-                            onChange={(e) => setAutoConfig({ ...autoConfig, batch_size: e.target.value })}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Cooldown (minutes between runs)
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="1440"
-                            value={autoConfig.cooldown_minutes}
-                            onChange={(e) => setAutoConfig({ ...autoConfig, cooldown_minutes: e.target.value })}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                        <div className="flex items-center gap-2 pt-6">
-                          <input
-                            type="checkbox"
-                            id="require_approval"
-                            checked={autoConfig.require_approval === '1'}
-                            onChange={(e) => setAutoConfig({
-                              ...autoConfig,
-                              require_approval: e.target.checked ? '1' : '0',
-                            })}
-                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                          />
-                          <label htmlFor="require_approval" className="text-sm font-medium text-slate-700">
-                            Require supervisor approval
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="mt-4">
-                        <p className="text-sm font-medium text-slate-700 mb-2">Notifications</p>
-                        <div className="flex flex-wrap gap-4">
-                          {[
-                            { key: 'notify_on_generate', label: 'On generate' },
-                            { key: 'notify_on_execute', label: 'On execute' },
-                            { key: 'notify_on_failure', label: 'On failure' },
-                          ].map(({ key, label }) => (
-                            <label key={key} className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={autoConfig[key as keyof ReplenishmentConfig] === '1'}
-                                onChange={(e) => setAutoConfig({
-                                  ...autoConfig,
-                                  [key]: e.target.checked ? '1' : '0',
-                                })}
-                                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                              />
-                              <span className="text-sm text-slate-700">{label}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="mt-6 flex items-center gap-3">
-                        <button
-                          onClick={saveAutoConfig}
-                          disabled={autoConfigLoading}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
-                        >
-                          {autoConfigLoading ? 'Saving...' : 'Save Configuration'}
-                        </button>
-                        {autoSaveSuccess && (
-                          <span className="text-green-600 text-sm font-medium flex items-center gap-1">
-                            <CheckCircle2 className="w-4 h-4" />
-                            Saved
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Quick Actions */}
-                    <div className="bg-white border border-slate-200 rounded-lg p-6">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Bell className="w-5 h-5 text-slate-600" />
-                        <h4 className="font-semibold text-slate-900">Quick Actions</h4>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={runAutoNow}
-                          disabled={autoRunning}
-                          className="px-6 py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-semibold rounded-lg flex items-center gap-2 transition-colors shadow-lg"
-                        >
-                          {autoRunning ? (
-                            <>
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                              Running...
-                            </>
-                          ) : (
-                            <>
-                              <Play className="w-4 h-4" />
-                              Run Now
-                            </>
-                          )}
-                        </button>
-                        <button
-                          onClick={loadAutoStatus}
-                          disabled={autoLoading}
-                          className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg flex items-center gap-2 transition-colors"
-                        >
-                          <History className="w-4 h-4" />
-                          Refresh Activity
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Recent Activity */}
-                    <div className="bg-white border border-slate-200 rounded-lg p-6">
-                      <div className="flex items-center gap-2 mb-4">
-                        <History className="w-5 h-5 text-slate-600" />
-                        <h4 className="font-semibold text-slate-900">Recent Activity (Last 24 Hours)</h4>
-                      </div>
-                      {autoActivity.length === 0 ? (
-                        <div className="text-center py-8">
-                          <Clock className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                          <p className="text-slate-500">No recent auto-replenishment activity</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {autoActivity.map((item) => (
-                            <div
-                              key={item.id}
-                              className={`flex items-center gap-3 p-3 rounded-lg ${
-                                item.status === 'generated' || item.status === 'executed'
-                                  ? 'bg-green-50'
-                                  : item.status === 'skipped'
-                                    ? 'bg-amber-50'
-                                    : item.status === 'failed'
-                                      ? 'bg-red-50'
-                                      : 'bg-slate-50'
-                              }`}
-                            >
-                              <div className="flex-shrink-0">
-                                {item.status === 'generated' || item.status === 'executed' ? (
-                                  <CheckCircle2 className="w-5 h-5 text-green-600" />
-                                ) : item.status === 'skipped' ? (
-                                  <SkipForward className="w-5 h-5 text-amber-600" />
-                                ) : item.status === 'failed' ? (
-                                  <XCircle className="w-5 h-5 text-red-600" />
-                                ) : (
-                                  <Clock className="w-5 h-5 text-slate-400" />
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm text-slate-900">
-                                  {item.status === 'generated' && (
-                                    <>Generated transfer for <span className="font-medium">{item.location_code}</span></>
-                                  )}
-                                  {item.status === 'executed' && (
-                                    <>Executed transfer for <span className="font-medium">{item.location_code}</span></>
-                                  )}
-                                  {item.status === 'skipped' && (
-                                    <>Skipped <span className="font-medium">{item.location_code}</span>
-                                      {item.skip_reason && (
-                                        <span className="text-amber-700"> ({item.skip_reason})</span>
-                                      )}
-                                    </>
-                                  )}
-                                  {item.status === 'failed' && (
-                                    <>Failed <span className="font-medium">{item.location_code}</span>
-                                      {item.skip_reason && (
-                                        <span className="text-red-700"> ({item.skip_reason})</span>
-                                      )}
-                                    </>
-                                  )}
-                                  {item.status === 'pending' && (
-                                    <>Pending transfer for <span className="font-medium">{item.location_code}</span></>
-                                  )}
-                                </p>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                  {item.trigger_type} &middot; {fmtDateTime(item.created_at)}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* History Tab */}
-            {activeTab === 'history' && (
-              <div>
-                <div className="text-center py-12">
-                  <RefreshCw className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-600 text-lg">
-                    Replenishment history will be displayed here
-                  </p>
-                  <p className="text-slate-500 text-sm mt-2">
-                    Shows all executed transfers and their status
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {/* Suggestions Tab */}
+      {activeTab === 'suggestions' && (
+        <div>
+          {loading ? (
+            <Spinner label="Loading suggestions..." />
+          ) : suggestions.length === 0 ? (
+            <Card>
+              <EmptyState message="No transfer suggestions" />
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {suggestions.map((suggestion) => (
+                <div
+                  key={suggestion.id}
+                  className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <button
+                    onClick={() =>
+                      setExpandedSuggestionId(
+                        expandedSuggestionId === suggestion.id
+                          ? null
+                          : suggestion.id
+                      )
+                    }
+                    className="w-full p-4 flex items-center justify-between hover:bg-brand-50/50 transition-colors"
+                  >
+                    <div className="flex-1 text-left">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900">
+                            {suggestion.product_name}
+                          </h4>
+                          <p className="text-sm text-gray-600">
+                            From: <span className="font-medium">{suggestion.from_location_code}</span> <ArrowRight className="w-4 h-4 inline" /> To: <span className="font-medium">{suggestion.to_location_code}</span>
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-amber-600">
+                            {suggestion.transfer_qty} units
+                          </div>
+                          <p className="text-xs text-gray-500 capitalize">
+                            {suggestion.priority} Priority
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronDown
+                      className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ml-2 ${
+                        expandedSuggestionId === suggestion.id
+                          ? 'rotate-180'
+                          : ''
+                      }`}
+                    />
+                  </button>
+
+                  {expandedSuggestionId === suggestion.id && (
+                    <div className="border-t border-gray-100 bg-gray-50 p-4">
+                      <dl className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <dt className="font-semibold text-gray-600">
+                            From Location
+                          </dt>
+                          <dd className="text-gray-900">
+                            {suggestion.from_location_code} - {suggestion.from_location_name}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-gray-600">
+                            To Location
+                          </dt>
+                          <dd className="text-gray-900">
+                            {suggestion.to_location_code} - {suggestion.to_location_name}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-gray-600">
+                            Product Code
+                          </dt>
+                          <dd className="text-gray-900">
+                            {suggestion.product_code}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-gray-600">
+                            Transfer Quantity
+                          </dt>
+                          <dd className="text-amber-600 font-semibold">
+                            {suggestion.transfer_qty} units
+                          </dd>
+                        </div>
+                        <div className="col-span-2">
+                          <dt className="font-semibold text-gray-600">
+                            Reason
+                          </dt>
+                          <dd className="text-gray-900">
+                            {suggestion.reason}
+                          </dd>
+                        </div>
+                        <div className="col-span-2">
+                          <dt className="font-semibold text-gray-600">
+                            Suggested At
+                          </dt>
+                          <dd className="text-gray-900">
+                            {new Date(suggestion.suggested_at).toLocaleString()}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Auto-Replenish Tab */}
+      {activeTab === 'auto-replenish' && (
+        <div className="space-y-5">
+          {autoLoading ? (
+            <Spinner label="Loading auto-replenish status..." />
+          ) : (
+            <>
+              <Card title="Auto-Replenishment System">
+                <div className="flex items-center justify-between mb-5">
+                  <p className="text-sm text-gray-500">
+                    Automatically detect shortages and generate bin transfers on a schedule
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-sm font-medium ${
+                      autoConfig.enabled === '1' ? 'text-emerald-700' : 'text-gray-500'
+                    }`}>
+                      {autoConfig.enabled === '1' ? 'Enabled' : 'Disabled'}
+                    </span>
+                    <button
+                      onClick={toggleAutoEnabled}
+                      className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                        autoConfig.enabled === '1' ? 'bg-emerald-600' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                          autoConfig.enabled === '1' ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status Cards */}
+                {autoStatus && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-3 flex items-center gap-3">
+                      <span className="w-9 h-9 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
+                        <AlertCircle className="w-4 h-4" />
+                      </span>
+                      <div>
+                        <div className="text-lg font-bold text-gray-900">{autoStatus.total_shortages}</div>
+                        <div className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Total Shortages</div>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-3 flex items-center gap-3">
+                      <span className="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                        <Clock className="w-4 h-4" />
+                      </span>
+                      <div>
+                        <div className="text-lg font-bold text-gray-900">{autoStatus.pending_transfers}</div>
+                        <div className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Pending Transfers</div>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-3 flex items-center gap-3">
+                      <span className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                        autoStatus.enabled ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-50 text-gray-400'
+                      }`}>
+                        <Zap className="w-4 h-4" />
+                      </span>
+                      <div>
+                        <div className={`text-lg font-bold ${
+                          autoStatus.enabled ? 'text-emerald-700' : 'text-gray-500'
+                        }`}>
+                          {autoStatus.enabled ? 'Active' : 'Inactive'}
+                        </div>
+                        <div className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">System Status</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </Card>
+
+              {/* Configuration */}
+              <Card title="Configuration">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Schedule (minutes)
+                    </label>
+                    <select
+                      value={autoConfig.schedule_minutes}
+                      onChange={(e) => setAutoConfig({ ...autoConfig, schedule_minutes: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
+                    >
+                      <option value="5">Every 5 minutes</option>
+                      <option value="10">Every 10 minutes</option>
+                      <option value="15">Every 15 minutes</option>
+                      <option value="30">Every 30 minutes</option>
+                      <option value="60">Every hour</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Batch Size (transfers per cycle)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={autoConfig.batch_size}
+                      onChange={(e) => setAutoConfig({ ...autoConfig, batch_size: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Cooldown (minutes between runs)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="1440"
+                      value={autoConfig.cooldown_minutes}
+                      onChange={(e) => setAutoConfig({ ...autoConfig, cooldown_minutes: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 pt-6">
+                    <input
+                      type="checkbox"
+                      id="require_approval"
+                      checked={autoConfig.require_approval === '1'}
+                      onChange={(e) => setAutoConfig({
+                        ...autoConfig,
+                        require_approval: e.target.checked ? '1' : '0',
+                      })}
+                      className="w-4 h-4 text-brand-600 rounded border-gray-300 focus:ring-brand-500"
+                    />
+                    <label htmlFor="require_approval" className="text-sm font-medium text-gray-700">
+                      Require supervisor approval
+                    </label>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Notifications</p>
+                  <div className="flex flex-wrap gap-4">
+                    {[
+                      { key: 'notify_on_generate', label: 'On generate' },
+                      { key: 'notify_on_execute', label: 'On execute' },
+                      { key: 'notify_on_failure', label: 'On failure' },
+                    ].map(({ key, label }) => (
+                      <label key={key} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={autoConfig[key as keyof ReplenishmentConfig] === '1'}
+                          onChange={(e) => setAutoConfig({
+                            ...autoConfig,
+                            [key]: e.target.checked ? '1' : '0',
+                          })}
+                          className="w-4 h-4 text-brand-600 rounded border-gray-300 focus:ring-brand-500"
+                        />
+                        <span className="text-sm text-gray-700">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-5 flex items-center gap-3">
+                  <button
+                    onClick={saveAutoConfig}
+                    disabled={autoConfigLoading}
+                    className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+                  >
+                    {autoConfigLoading ? 'Saving...' : 'Save Configuration'}
+                  </button>
+                  {autoSaveSuccess && (
+                    <span className="text-emerald-600 text-sm font-medium flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Saved
+                    </span>
+                  )}
+                </div>
+              </Card>
+
+              {/* Quick Actions */}
+              <Card title="Quick Actions">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={runAutoNow}
+                    disabled={autoRunning}
+                    className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold flex items-center gap-2 transition-colors"
+                  >
+                    {autoRunning ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Running...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4" />
+                        Run Now
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={loadAutoStatus}
+                    disabled={autoLoading}
+                    className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium flex items-center gap-2 transition-colors"
+                  >
+                    <History className="w-4 h-4" />
+                    Refresh Activity
+                  </button>
+                </div>
+              </Card>
+
+              {/* Recent Activity */}
+              <Card title="Recent Activity (Last 24 Hours)">
+                {autoActivity.length === 0 ? (
+                  <EmptyState message="No recent auto-replenishment activity" />
+                ) : (
+                  <div className="space-y-2">
+                    {autoActivity.map((item) => (
+                      <div
+                        key={item.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg ${
+                          item.status === 'generated' || item.status === 'executed'
+                            ? 'bg-emerald-50'
+                            : item.status === 'skipped'
+                              ? 'bg-amber-50'
+                              : item.status === 'failed'
+                                ? 'bg-red-50'
+                                : 'bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex-shrink-0">
+                          {item.status === 'generated' || item.status === 'executed' ? (
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                          ) : item.status === 'skipped' ? (
+                            <SkipForward className="w-5 h-5 text-amber-600" />
+                          ) : item.status === 'failed' ? (
+                            <XCircle className="w-5 h-5 text-red-600" />
+                          ) : (
+                            <Clock className="w-5 h-5 text-gray-400" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-900">
+                            {item.status === 'generated' && (
+                              <>Generated transfer for <span className="font-medium">{item.location_code}</span></>
+                            )}
+                            {item.status === 'executed' && (
+                              <>Executed transfer for <span className="font-medium">{item.location_code}</span></>
+                            )}
+                            {item.status === 'skipped' && (
+                              <>Skipped <span className="font-medium">{item.location_code}</span>
+                                {item.skip_reason && (
+                                  <span className="text-amber-700"> ({item.skip_reason})</span>
+                                )}
+                              </>
+                            )}
+                            {item.status === 'failed' && (
+                              <>Failed <span className="font-medium">{item.location_code}</span>
+                                {item.skip_reason && (
+                                  <span className="text-red-700"> ({item.skip_reason})</span>
+                                )}
+                              </>
+                            )}
+                            {item.status === 'pending' && (
+                              <>Pending transfer for <span className="font-medium">{item.location_code}</span></>
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {item.trigger_type} &middot; {fmtDateTime(item.created_at)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* History Tab */}
+      {activeTab === 'history' && (
+        <Card>
+          <EmptyState message="Replenishment history will be displayed here" />
+        </Card>
+      )}
     </div>
   );
 };

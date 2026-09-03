@@ -23,8 +23,23 @@ export interface Bin3D {
 }
 
 const AISLES = ['CA', 'CB', 'CC', 'CD', 'CE', 'CF', 'CG', 'STG'];
+
+// Per-aisle max bays for Side A (Side B starts at max+1)
+// CB/CD/CE: 20 bays per side, CC: 17 bays per side
+const AISLE_MAX_BAY: Record<string, number> = {
+  CB: 20,
+  CC: 17,
+  CD: 20,
+  CE: 20,
+  CA: 20,
+  CF: 20,
+  CG: 20,
+  STG: 0,
+};
+
 const LEVEL_Y: Record<string, number> = { A: 0.95, B: 3.15, C: 5.35, D: 7.55, E: 9.75 };
 const AISLE_GAP = 9;
+const SIDE_GAP = 2.4; // Horizontal gap between Side A and Side B of same aisle
 const BAY_GAP = 2.6;
 const BIN_W = 1.1;
 const BIN_H = 1.9;
@@ -36,7 +51,7 @@ export const ZONE_COLORS: Record<string, string> = {
   BULK: '#3b82f6',
   QUARANTINE: '#a855f7',
   STAGING: '#ec4899',
-  UNALLOCATED: '#64748b',
+  UNALLOCATED: '#64741b',
 };
 
 export const FUNCTION_COLORS: Record<string, string> = {
@@ -64,20 +79,56 @@ export function bayNumber(rack: string): number {
   return Number.isFinite(n) ? n : 1;
 }
 
+/**
+ * Returns the side (A or B) and local bay number for a given aisle and bay number.
+ * Side A contains bays 1 to maxBay, Side B contains bays maxBay+1 to 2*maxBay.
+ * 
+ * For example, with CB having maxBay=20:
+ * - CB01-CB20 → { side: 'A', local: 1-20 }
+ * - CB21-CB40 → { side: 'B', local: 1-20 }
+ */
+function getSideAndLocalBay(aisle: string, bay: number): { side: 'A' | 'B'; local: number } {
+  const maxBay = AISLE_MAX_BAY[aisle] || 20;
+  if (bay <= maxBay) {
+    return { side: 'A', local: bay };
+  } else {
+    return { side: 'B', local: bay - maxBay };
+  }
+}
+
 export function computeLayout(bins: Bin3D[]): Layout {
   const byCode: Record<string, [number, number, number]> = {};
-  let globalMaxBay = 1;
-  for (const b of bins) {
-    const n = bayNumber(b.rack);
-    globalMaxBay = Math.max(globalMaxBay, n);
-  }
+  const maxLocalBayPerSide: Record<string, number> = {};
+
+  // First pass: find max local bay for each aisle+side combination
   for (const b of bins) {
     const ai = AISLES.indexOf(b.aisle);
     if (ai < 0) continue;
     const bay = bayNumber(b.rack);
-    const x = (ai - (AISLES.length - 1) / 2) * AISLE_GAP + (b.position === '01' ? -0.6 : 0.6);
-    const z = ((globalMaxBay + 1) / 2 - bay) * BAY_GAP; // global centering so all aisles share same z-grid
+    const { side, local } = getSideAndLocalBay(b.aisle, bay);
+    const key = `${b.aisle}:${side}`;
+    maxLocalBayPerSide[key] = Math.max(maxLocalBayPerSide[key] || 0, local);
+  }
+
+  // Second pass: compute positions
+  for (const b of bins) {
+    const ai = AISLES.indexOf(b.aisle);
+    if (ai < 0) continue;
+    const bay = bayNumber(b.rack);
+    const { side, local } = getSideAndLocalBay(b.aisle, bay);
+    const key = `${b.aisle}:${side}`;
+    const maxBay = maxLocalBayPerSide[key] || 1;
+
+    const aisleBaseX = (ai - (AISLES.length - 1) / 2) * AISLE_GAP;
+    const sideOffset = side === 'A' ? -SIDE_GAP : SIDE_GAP;
+    const posOffset = b.position === '01' ? -0.6 : 0.6;
+    
+    // Both sides run the SAME direction from front to back
+    const z = ((maxBay + 1) / 2 - local) * BAY_GAP;
+    
+    const x = aisleBaseX + sideOffset + posOffset;
     const y = LEVEL_Y[b.level] ?? 0.95;
+    
     byCode[b.location_code] = [x, y, z];
   }
   return { byCode };

@@ -74,6 +74,68 @@ async function dispatch(module: string, action: string): Promise<void> {
   await fn(action);
 }
 
+/* ------------------------------------------------------------------ */
+/* REST routes — replenishment scan-confirm & task status              */
+/* ------------------------------------------------------------------ */
+
+app.post('/api/replenishment/:id/scan-confirm', upload.any(), async (req: Request, res: Response) => {
+  const queryParams: Record<string, any> = { ...(req.query as any), task_id: req.params.id };
+  try {
+    const user = await currentUser(req, queryParams);
+    const store: ReqContext = {
+      user,
+      ip: req.ip ?? req.socket.remoteAddress ?? null,
+      body: { ...req.body, task_id: req.params.id },
+      queryParams,
+      res,
+      files: (req as any).files ?? [],
+    };
+    await reqStore.run(store, async () => {
+      await dispatch('replenishment', 'scan_confirm');
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: 'No response produced' });
+      }
+    });
+  } catch (e: any) {
+    if (e instanceof JsonOutSent) return;
+    if (e instanceof ApiError) {
+      if (!res.headersSent) res.status(e.status).json({ success: false, message: e.message });
+      return;
+    }
+    console.error(e);
+    if (!res.headersSent) res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+});
+
+app.get('/api/replenishment/tasks/:taskId', upload.any(), async (req: Request, res: Response) => {
+  const queryParams: Record<string, any> = { ...(req.query as any), task_id: req.params.taskId };
+  try {
+    const user = await currentUser(req, queryParams);
+    const store: ReqContext = {
+      user,
+      ip: req.ip ?? req.socket.remoteAddress ?? null,
+      body: req.body ?? {},
+      queryParams,
+      res,
+      files: (req as any).files ?? [],
+    };
+    await reqStore.run(store, async () => {
+      await dispatch('replenishment', 'task_status');
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: 'No response produced' });
+      }
+    });
+  } catch (e: any) {
+    if (e instanceof JsonOutSent) return;
+    if (e instanceof ApiError) {
+      if (!res.headersSent) res.status(e.status).json({ success: false, message: e.message });
+      return;
+    }
+    console.error(e);
+    if (!res.headersSent) res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+});
+
 app.all('*', upload.any(), async (req: Request, res: Response) => {
   const module = String(req.query.module ?? (req.body?.module ?? ''));
   const action = String(req.query.action ?? (req.body?.action ?? ''));

@@ -399,8 +399,7 @@ function handle_stock($action) {
 
         case 'zone_stats':
             api_require_auth();
-            $productId = (int)query('product_id');
-            if (!$productId) json_err('product_id is required', 400);
+            $productId = query('product_id') ? (int)query('product_id') : null;
 
             $result = ZoneAllocation::getZoneStats($productId);
             json_out(['zones' => $result]);

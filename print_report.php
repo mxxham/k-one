@@ -40,21 +40,15 @@ $themeColors = [
 <meta charset="UTF-8">
 <title><?= htmlspecialchars($reportTitle) ?> — Shell CKB WMS</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
-
-  :root {
-    --accent:      <?= $accent ?>;
-    --accent-light: <?= $lightBg ?>;
-    --accent-dark: <?= $darkAccent ?>;
-  }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
   * { margin:0; padding:0; box-sizing:border-box; }
 
   body {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Inter', sans-serif;
     font-size: 10pt;
-    color: #1a1a2e;
-    background: #f0f2f5;
+    color: #0f172a;
+    background: #f8fafc;
   }
 
   @page { size: A4; margin: 0; }
@@ -68,7 +62,7 @@ $themeColors = [
 
   
   .print-bar {
-    background: var(--accent);
+    background: #0f2e2d;
     color: #fff;
     padding: 10px 24px;
     display: flex;
@@ -94,7 +88,7 @@ $themeColors = [
   .print-bar .btns  { display: flex; gap: 8px; }
   .btn-print {
     background: #fff;
-    color: var(--accent);
+    color: #0f2e2d;
     border: none;
     padding: 7px 20px;
     border-radius: 7px;
@@ -104,7 +98,7 @@ $themeColors = [
     display: flex;
     align-items: center;
     gap: 6px;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Inter', sans-serif;
   }
   .btn-back {
     background: transparent;
@@ -137,33 +131,33 @@ $themeColors = [
     align-items: flex-start;
     padding-bottom: 16px;
     margin-bottom: 20px;
-    border-bottom: 3px solid var(--accent);
+    border-bottom: 2px solid #e2e8f0;
   }
   .hdr-left { display: flex; align-items: center; gap: 14px; }
   .hdr-logo {
     width: 52px; height: 52px;
-    background: var(--accent);
+    background: linear-gradient(135deg, #026766, #013d3c);
     border-radius: 10px;
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
   }
-  .hdr-logo svg { width: 28px; height: 28px; }
+  .hdr-logo .logo-k { color: #fff; font-size: 26px; font-weight: 900; line-height: 1; }
   .hdr-company .name { line-height: 1.1; }
-  .hdr-company .name .nk  { font-size: 24pt; font-weight: 900; color: var(--accent); }
-  .hdr-company .name .none { font-size: 18pt; font-weight: 400; color: var(--accent); opacity: .7; }
+  .hdr-company .name .nk  { font-size: 24pt; font-weight: 900; color: #026766; }
+  .hdr-company .name .none { font-size: 18pt; font-weight: 400; color: #026766; opacity: .7; }
   .hdr-right { text-align: right; }
   .hdr-right .report-type {
     font-size: 17pt;
     font-weight: 700;
-    color: var(--accent);
+    color: #026766;
     letter-spacing: -.5px;
     line-height: 1.1;
   }
-  .hdr-right .report-sub  { font-size: 8.5pt; color: #78909c; margin-top: 3px; }
+  .hdr-right .report-sub  { font-size: 8.5pt; color: #64748b; margin-top: 3px; }
   .hdr-right .report-date {
     margin-top: 6px;
-    background: var(--accent-light);
-    color: var(--accent-dark);
+    background: #e8f5e9;
+    color: #013d3c;
     display: inline-block;
     padding: 3px 12px;
     border-radius: 20px;
@@ -175,8 +169,8 @@ $themeColors = [
   .sec-title {
     font-size: 9.5pt;
     font-weight: 700;
-    color: var(--accent);
-    border-left: 4px solid var(--accent);
+    color: #026766;
+    border-left: 4px solid #026766;
     padding-left: 8px;
     margin: 16px 0 8px;
     text-transform: uppercase;
@@ -197,9 +191,9 @@ $themeColors = [
   }
   .sum-card .num { font-size: 18pt; font-weight: 700; line-height: 1.1; }
   .sum-card .lbl { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; opacity: .75; }
-  .sc-in  { background: #e8f5e9; color: #013d3c; }
+  .sc-in  { background: #e8f5e9; color: #026766; }
   .sc-out { background: #fce4ec; color: #880e4f; }
-  .sc-trx { background: #e3f2fd; color: #013d3c; }
+  .sc-trx { background: #e3f2fd; color: #026766; }
   .sc-exp { background: #fff3e0; color: #e65100; }
 
   
@@ -211,7 +205,7 @@ $themeColors = [
     page-break-inside: auto;
   }
   thead th {
-    background: var(--accent);
+    background: #0f2e2d;
     color: #fff;
     padding: 7px 8px;
     text-align: left;
@@ -225,10 +219,10 @@ $themeColors = [
   thead th.c { text-align: center; }
 
   tbody tr { page-break-inside: avoid; }
-  tbody tr:nth-child(even) { background: var(--accent-light); }
+  tbody tr:nth-child(even) { background: #f8fafc; }
   tbody td {
     padding: 5.5px 8px;
-    border-bottom: 1px solid #eceff1;
+    border-bottom: 1px solid #e2e8f0;
     vertical-align: top;
     line-height: 1.4;
   }
@@ -239,8 +233,8 @@ $themeColors = [
     padding: 7px 8px;
     font-weight: 700;
     font-size: 9pt;
-    border-top: 2px solid var(--accent);
-    background: var(--accent-light);
+    border-top: 2px solid #0f2e2d;
+    background: #f8fafc;
   }
   tfoot td.r { text-align: right; }
 
@@ -268,7 +262,7 @@ $themeColors = [
   .exp-ok    { color: #026766; }
 
   
-  .mono { font-family: 'DM Mono', monospace; font-size: 8pt; color: #546e7a; }
+  .mono { font-family: 'SF Mono', Consolas, monospace; font-size: 8pt; color: #64748b; }
 
   
   .act-badge {
@@ -278,19 +272,19 @@ $themeColors = [
     font-size: 7.5pt;
     font-weight: 600;
   }
-  .act-completed { background: #e8f5e9; color: #013d3c; }
+  .act-completed { background: #e8f5e9; color: #026766; }
   .act-dues      { background: #fff3e0; color: #e65100; }
-  .act-default   { background: #f5f5f5; color: #616161; }
+  .act-default   { background: #f8fafc; color: #64748b; }
 
   
   .doc-footer {
     margin-top: 28px;
     padding-top: 10px;
-    border-top: 1px solid #e0e0e0;
+    border-top: 1px solid #e2e8f0;
     display: flex;
     justify-content: space-between;
     font-size: 7pt;
-    color: #90a4ae;
+    color: #94a3b8;
   }
   .watermark-row {
     display: flex;
@@ -300,32 +294,21 @@ $themeColors = [
   .watermark-dot {
     width: 8px; height: 8px;
     border-radius: 50%;
-    background: var(--accent);
+    background: #026766;
     opacity: .4;
   }
 </style>
 </head>
 <body>
 
-<div id="back-to-app" style="position:fixed;top:10px;right:10px;z-index:9999;">
-  <a href="javascript:window.close()" style="background:#0d1f1f;color:white;padding:8px 16px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,0.2);">
-    Close &amp; Back to K-one
-  </a>
-</div>
-<style>
-  @media print {
-    #back-to-app { display: none !important; }
-  }
-</style>
-
 <div class="print-bar no-print">
   <div class="left">
-    <span class="title">📊 Report Preview</span>
+    <span class="title">Report Preview</span>
     <span class="badge"><?= strtoupper($reportType) ?></span>
   </div>
   <div class="btns">
-    <a class="btn-back" href="http://localhost:5173/">← Kembali</a>
-    <button class="btn-print" onclick="window.print()">🖨️ Print / Simpan PDF</button>
+    <a class="btn-back" href="javascript:history.back()">Back</a>
+    <button class="btn-print" onclick="window.print()">Print / Save PDF</button>
   </div>
 </div>
 
@@ -335,12 +318,7 @@ $themeColors = [
   <div class="doc-header">
     <div class="hdr-left">
       <div class="hdr-logo">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="3" y="12" width="4" height="9" rx="1" fill="rgba(255,255,255,0.55)"/>
-          <rect x="10" y="7"  width="4" height="14" rx="1" fill="rgba(255,255,255,0.8)"/>
-          <rect x="17" y="3"  width="4" height="18" rx="1" fill="white"/>
-          <line x1="3" y1="22" x2="21" y2="22" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
+        <span class="logo-k">K</span>
       </div>
       <div class="hdr-company">
         <div class="name"><span class="nk">K</span><span class="none">-one</span></div>
@@ -357,7 +335,7 @@ $themeColors = [
         } ?>
       </div>
       <div class="report-sub">K-one Management</div>
-      <div class="report-date">📅 <?= htmlspecialchars($reportTitle) ?></div>
+      <div class="report-date"><?= htmlspecialchars($reportTitle) ?></div>
     </div>
   </div>
 
@@ -385,7 +363,7 @@ $themeColors = [
     </div>
 
     
-    <div class="sec-title">📦 Stock Summary</div>
+    <div class="sec-title">Stock Summary</div>
     <table>
       <thead><tr>
         <th>Product Code</th>
@@ -422,7 +400,7 @@ $themeColors = [
 
     
     <?php if (!empty($report['inbound_activity'])): ?>
-    <div class="sec-title">📥 Inbound Activity</div>
+    <div class="sec-title">Inbound Activity</div>
     <table>
       <thead><tr>
         <th>Inbound #</th>
@@ -448,7 +426,7 @@ $themeColors = [
 
     
     <?php if (!empty($report['outbound_activity'])): ?>
-    <div class="sec-title">📤 Outbound Activity</div>
+    <div class="sec-title">Outbound Activity</div>
     <table>
       <thead><tr>
         <th>Outbound #</th>
@@ -474,7 +452,7 @@ $themeColors = [
 
     
     <?php if (!empty($report['expiring_items'])): ?>
-    <div class="sec-title">⚠️ Expiring Items (Within 90 Days)</div>
+    <div class="sec-title">Expiring Items (Within 90 Days)</div>
     <table>
       <thead><tr>
         <th>Product</th>
@@ -506,7 +484,7 @@ $themeColors = [
   <?php  ?>
   <?php elseif ($reportType === 'stock' && $stock !== null): ?>
 
-    <div class="sec-title">📦 Detail Stock per Batch</div>
+    <div class="sec-title">Detail Stock per Batch</div>
     <table>
       <thead><tr>
         <th>Product</th>
@@ -567,7 +545,7 @@ $themeColors = [
       <div class="sum-card sc-trx"><div class="num"><?= count($expiring) ?></div><div class="lbl">Total Batches</div></div>
     </div>
 
-    <div class="sec-title">⚠️ Daftar Item Mendekati Kadaluarsa</div>
+    <div class="sec-title">Daftar Item Mendekati Kadaluarsa</div>
     <table>
       <thead><tr>
         <th>Product</th>
@@ -611,7 +589,7 @@ $themeColors = [
       <div class="sum-card sc-exp"><div class="num"><?= number_format($qIn - $qOut) ?></div><div class="lbl">Net Movement</div></div>
     </div>
 
-    <div class="sec-title">📋 Log Pergerakan Stok</div>
+    <div class="sec-title">Log Pergerakan Stok</div>
     <table>
       <thead><tr>
         <th>Waktu</th>

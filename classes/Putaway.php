@@ -2023,7 +2023,7 @@ HTML;
 
     public static function listAllBins(): array {
         $db = db();
-        $sql = "SELECT lm.location_code, lm.aisle, lm.rack, lm.row_name AS level, lm.position,
+        $sql = "SELECT lm.location_code, SUBSTRING(lm.location_code, 1, 2) AS aisle, lm.rack, lm.row_name AS level, lm.position,
                        COALESCE(lm.zone_code, lm.zone) AS zone_code, lm.is_pick_face, lm.equipment_accessible,
                        SUM(sl.quantity) AS quantity,
                        MAX(sl.pallet_function) AS pallet_function,
