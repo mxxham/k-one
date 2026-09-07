@@ -271,10 +271,13 @@ class PickfaceSplitter
         // 1. Check for explicit config in sku_pickface_config table (takes priority)
         $stmt = $db->prepare(
             "SELECT c.id, c.sku_id, c.pickface_bin_id, c.pickface_max, c.pickface_min,
+                    c.inbound_pickface_bin_id,
                     lm.location_code AS pickface_location_code,
-                    lm.row_name, lm.aisle, lm.zone
+                    lm.row_name, lm.aisle, lm.zone,
+                    lm_in.location_code AS inbound_pickface_location_code
              FROM sku_pickface_config c
              JOIN location_master lm ON lm.id = c.pickface_bin_id
+             LEFT JOIN location_master lm_in ON lm_in.id = c.inbound_pickface_bin_id
              WHERE c.sku_id = ?
              LIMIT 1"
         );
@@ -283,15 +286,17 @@ class PickfaceSplitter
 
         if ($row) {
             return [
-                'id'                    => (int)$row['id'],
-                'sku_id'                => (int)$row['sku_id'],
-                'pickface_bin_id'       => (int)$row['pickface_bin_id'],
-                'pickface_max'          => (int)$row['pickface_max'],
-                'pickface_min'          => (int)$row['pickface_min'],
-                'pickface_location_code' => $row['pickface_location_code'],
-                'row_name'              => $row['row_name'],
-                'aisle'                 => $row['aisle'],
-                'zone'                  => $row['zone'],
+                'id'                              => (int)$row['id'],
+                'sku_id'                          => (int)$row['sku_id'],
+                'pickface_bin_id'                 => (int)$row['pickface_bin_id'],
+                'pickface_max'                    => (int)$row['pickface_max'],
+                'pickface_min'                    => (int)$row['pickface_min'],
+                'pickface_location_code'          => $row['pickface_location_code'],
+                'row_name'                        => $row['row_name'],
+                'aisle'                           => $row['aisle'],
+                'zone'                            => $row['zone'],
+                'inbound_pickface_bin_id'         => $row['inbound_pickface_bin_id'] ? (int)$row['inbound_pickface_bin_id'] : null,
+                'inbound_pickface_location_code'  => $row['inbound_pickface_location_code'] ?? null,
             ];
         }
 
@@ -349,14 +354,15 @@ class PickfaceSplitter
         $occupiedABins = (int)($occ['occupied_a_bins'] ?? 0);
         $occupancyPct  = $totalABins > 0 ? ($occupiedABins / $totalABins) * 100 : 100.0;
 
-        // Step 2: below 90% occupancy — prioritize claiming an empty bin
+        // Step 2: below 90% occupancy — claim an empty A01 bin for OUTBOUND pickface
         if ($occupancyPct < 90.0) {
             $emptyBinStmt = $db->prepare(
                 "SELECT lm.id AS location_id, lm.location_code, lm.row_name, lm.aisle, lm.zone
                  FROM location_master lm
-                 WHERE lm.location_code REGEXP '[A-Z]{2}[0-9]{2}A[0-9]{2}$'
+                 WHERE lm.location_code REGEXP '[A-Z]{2}[0-9]{2}A01$'
                    AND lm.is_active = 1
                    AND lm.id NOT IN (SELECT pickface_bin_id FROM sku_pickface_config)
+                   AND lm.id NOT IN (SELECT inbound_pickface_bin_id FROM sku_pickface_config WHERE inbound_pickface_bin_id IS NOT NULL)
                    AND NOT EXISTS (
                        SELECT 1 FROM stock s
                        WHERE s.location = lm.location_code AND s.quantity > 0
@@ -374,16 +380,44 @@ class PickfaceSplitter
                          VALUES (?, ?, ?, ?)"
                     );
                     $insertStmt->execute([$skuId, $candidate['location_id'], $uomPerPallet, $pickfaceMin]);
+
+                    // Also claim the A02 in the same row for INBOUND pickface
+                    $rowPrefix = substr($candidate['location_code'], 0, 5); // e.g. 'CA01A'
+                    $inboundBinStmt = $db->prepare(
+                        "SELECT lm.id AS location_id, lm.location_code
+                         FROM location_master lm
+                         WHERE lm.location_code = ?
+                           AND lm.is_active = 1
+                           AND lm.id NOT IN (SELECT pickface_bin_id FROM sku_pickface_config)
+                           AND lm.id NOT IN (SELECT inbound_pickface_bin_id FROM sku_pickface_config WHERE inbound_pickface_bin_id IS NOT NULL)
+                         LIMIT 1"
+                    );
+                    $inboundBinStmt->execute([$rowPrefix . '02']);
+                    $inboundBin = $inboundBinStmt->fetch();
+
+                    $inboundBinId = null;
+                    $inboundLocationCode = null;
+                    if ($inboundBin) {
+                        $updateStmt = $db->prepare(
+                            "UPDATE sku_pickface_config SET inbound_pickface_bin_id = ? WHERE id = ?"
+                        );
+                        $updateStmt->execute([$inboundBin['location_id'], $db->lastInsertId()]);
+                        $inboundBinId = (int)$inboundBin['location_id'];
+                        $inboundLocationCode = $inboundBin['location_code'];
+                    }
+
                     return [
-                        'id'                     => (int)$db->lastInsertId(),
-                        'sku_id'                 => $skuId,
-                        'pickface_bin_id'        => (int)$candidate['location_id'],
-                        'pickface_max'           => $uomPerPallet,
-                        'pickface_min'           => $pickfaceMin,
-                        'pickface_location_code' => $candidate['location_code'],
-                        'row_name'               => $candidate['row_name'],
-                        'aisle'                  => $candidate['aisle'],
-                        'zone'                   => $candidate['zone'],
+                        'id'                              => (int)$db->lastInsertId(),
+                        'sku_id'                          => $skuId,
+                        'pickface_bin_id'                 => (int)$candidate['location_id'],
+                        'pickface_max'                    => $uomPerPallet,
+                        'pickface_min'                    => $pickfaceMin,
+                        'pickface_location_code'          => $candidate['location_code'],
+                        'row_name'                        => $candidate['row_name'],
+                        'aisle'                           => $candidate['aisle'],
+                        'zone'                            => $candidate['zone'],
+                        'inbound_pickface_bin_id'         => $inboundBinId,
+                        'inbound_pickface_location_code'  => $inboundLocationCode,
                     ];
                 } catch (\PDOException $e) {
                     continue;
@@ -402,7 +436,7 @@ class PickfaceSplitter
                AND s.stock_status = 'Available'
                AND (s.hold_status = 'available' OR s.hold_status IS NULL)
                AND s.quantity > 0
-               AND lm.location_code REGEXP '[A-Z]{2}[0-9]{2}A[0-9]{2}$'
+               AND lm.location_code REGEXP '[A-Z]{2}[0-9]{2}A01$'
                AND lm.is_active = 1
              GROUP BY lm.id, lm.location_code, lm.row_name, lm.aisle, lm.zone
              ORDER BY total_qty DESC
@@ -416,15 +450,17 @@ class PickfaceSplitter
         }
 
         return [
-            'id'                     => 0,
-            'sku_id'                 => $skuId,
-            'pickface_bin_id'        => (int)$bin['location_id'],
-            'pickface_max'           => $uomPerPallet,
-            'pickface_min'           => $pickfaceMin,
-            'pickface_location_code' => $bin['location_code'],
-            'row_name'               => $bin['row_name'],
-            'aisle'                  => $bin['aisle'],
-            'zone'                   => $bin['zone'],
+            'id'                              => 0,
+            'sku_id'                          => $skuId,
+            'pickface_bin_id'                 => (int)$bin['location_id'],
+            'pickface_max'                    => $uomPerPallet,
+            'pickface_min'                    => $pickfaceMin,
+            'pickface_location_code'          => $bin['location_code'],
+            'row_name'                        => $bin['row_name'],
+            'aisle'                           => $bin['aisle'],
+            'zone'                            => $bin['zone'],
+            'inbound_pickface_bin_id'         => null,
+            'inbound_pickface_location_code'  => null,
         ];
     }
 

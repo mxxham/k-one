@@ -618,30 +618,37 @@ class Putaway {
             }
         }
 
-        // 2) Remainder / partial pallet -> pick face (Level A), fallback STAGING
+        // 2) Remainder / partial pallet -> dedicated INBOUND pickface bin (A02),
+        //    never the outbound pickface bin (A01).
         if ($remainder > 0) {
-            $targetLevel = $forceLevel ?? self::PICK_LEVEL;
-            $targetZones = ($targetLevel === self::PICK_LEVEL) ? $pickZones : $reserveZones;
-            $s = self::_findPickFaceSlot($targetLevel, $targetZones, $existingRacks, $blocks, $takenLocations, $limits);
-            if ($s) {
+            require_once __DIR__ . '/PickfaceSplitter.php';
+            $pfConfig = PickfaceSplitter::getPickfaceConfig($productId, $db);
+
+            $inboundBinCode = $pfConfig['inbound_pickface_location_code'] ?? null;
+
+            if ($inboundBinCode) {
                 $placements[] = [
                     'pallet_seq' => $seq++, 'quantity' => $remainder, 'is_full' => false,
-                    'location_code' => $s['location_code'], 'zone_code' => $s['zone_code'],
-                    'level' => $s['level'], 'reason' => 'PICK_FACE_REMAINDER',
+                    'location_code' => $inboundBinCode, 'zone_code' => $pfConfig['zone'] ?? null,
+                    'level' => 'A', 'reason' => 'INBOUND_PICKFACE_REMAINDER',
                 ];
             } else {
+                // No inbound pickface bin assigned yet — find ANY open A01 slot,
+                // explicitly EXCLUDING the outbound pickface bin.
+                $excludeOutbound = $pfConfig['pickface_location_code'] ?? null;
                 $slots = self::_findAvailable([
-                    'levels' => [$targetLevel], 'limit' => 1,
-                    'existingRacks' => $existingRacks, 'zones' => $targetZones,
+                    'levels' => [self::PICK_LEVEL], 'limit' => 1,
+                    'existingRacks' => $existingRacks, 'zones' => $pickZones,
                     'heavyOnly' => (int)($limits['requires_equipment'] ?? 0) === 1,
-                    'blocks' => $blocks, 'takenLocations' => $takenLocations,
+                    'blocks' => $blocks,
+                    'takenLocations' => array_merge($takenLocations, array_filter([$excludeOutbound])),
                 ]);
                 if (!empty($slots[0])) {
                     $s = $slots[0];
                     $placements[] = [
                         'pallet_seq' => $seq++, 'quantity' => $remainder, 'is_full' => false,
                         'location_code' => $s['location_code'], 'zone_code' => $s['zone_code'],
-                        'level' => $s['level'], 'reason' => 'PICK_FACE_REMAINDER',
+                        'level' => $s['level'], 'reason' => 'PICK_FACE_REMAINDER_FALLBACK',
                     ];
                 } else {
                     $placements[] = [
