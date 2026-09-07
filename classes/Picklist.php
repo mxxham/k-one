@@ -356,6 +356,8 @@ class Picklist {
         $skuStmt->execute([$picklistId]);
         $skuRows = $skuStmt->fetchAll();
 
+        $taskCreated = [];
+
         foreach ($skuRows as $skuRow) {
             $skuId    = (int)$skuRow['product_id'];
             $totalQty = (float)$skuRow['total_qty'];
@@ -370,96 +372,125 @@ class Picklist {
             $pickfaceQty = (float)$split['pickface_qty'];
             if ($pickfaceQty <= 0) continue;
 
-            // Check if replenishment is needed (projected_on_hand <= pickface_min)
+            // Only replenish when pickface doesn't have enough for the order's share.
+            // Cap at pickfaceQty — never overfill beyond what the order needs.
             $check = PickfaceSplitter::checkReplenishment($skuId, $pickfaceQty, $db);
 
-            if ($check['needs_replenishment']) {
-                $replenishQty = $config['pickface_max'] - $check['projected_on_hand'];
+            if ($check['needs_replenishment'] && $check['projected_on_hand'] < $pickfaceQty) {
+                $replenishQty = $pickfaceQty - $check['projected_on_hand'];
             } else {
                 $replenishQty = 0;
             }
 
-            // Always check picklist item source bins — even if a replen task already exists,
-            // we need to ensure each source bin has its own task (FefoAllocator may have
-            // created one from a different bin)
-            {
-                $triggerStmt = $db->prepare("
-                    SELECT oi.outbound_order_id
-                    FROM picklist_items pki
-                    JOIN outbound_items oi ON oi.id = pki.outbound_item_id
-                    WHERE pki.picklist_id = ? AND pki.product_id = ?
+            $triggerStmt = $db->prepare("
+                SELECT oi.outbound_order_id
+                FROM picklist_items pki
+                JOIN outbound_items oi ON oi.id = pki.outbound_item_id
+                WHERE pki.picklist_id = ? AND pki.product_id = ?
+                LIMIT 1
+            ");
+            $triggerStmt->execute([$picklistId, $skuId]);
+            $triggerOrderId = $triggerStmt->fetchColumn();
+            $triggerOrderId = $triggerOrderId ? (int)$triggerOrderId : null;
+
+            $needQty = max(0, (int)ceil($replenishQty));
+            if ($needQty > 0) {
+                $dedupStmt = $db->prepare("
+                    SELECT id FROM replen_task
+                    WHERE sku_id = ? AND destination_bin_id = ?
+                      AND status IN ('pending', 'printed', 'in_progress')
                     LIMIT 1
                 ");
-                $triggerStmt->execute([$picklistId, $skuId]);
-                $triggerOrderId = $triggerStmt->fetchColumn();
-                $triggerOrderId = $triggerOrderId ? (int)$triggerOrderId : null;
-
-                // Get picklist item source bins (bulk B-E levels only)
-                $binStmt = $db->prepare("
-                    SELECT DISTINCT lm.id AS stock_location_id, SUM(pki.quantity) as bin_qty
-                    FROM picklist_items pki
-                    JOIN stock_locations sl ON sl.id = pki.stock_location_id
-                    JOIN location_master lm ON lm.location_code = sl.location_code
-                    WHERE pki.picklist_id = ? AND pki.product_id = ?
-                      AND lm.row_name IN ('B', 'C', 'D', 'E')
-                    GROUP BY lm.id
-                ");
-                $binStmt->execute([$picklistId, $skuId]);
-                $sourceBins = $binStmt->fetchAll(\PDO::FETCH_ASSOC);
-
-                // Check which source bins already have pending replen tasks
-                $existingSources = [];
-                if (!empty($sourceBins)) {
-                    $binIds = array_column($sourceBins, 'stock_location_id');
-                    $placeholders = implode(',', array_fill(0, count($binIds), '?'));
-                    $existStmt = $db->prepare("
-                        SELECT DISTINCT source_bin_id FROM replen_task
-                        WHERE sku_id = ? AND destination_bin_id = ?
-                          AND status IN ('pending', 'printed', 'in_progress')
-                          AND source_bin_id IN ($placeholders)
-                    ");
-                    $existParams = array_merge([$skuId, $config['pickface_bin_id']], $binIds);
-                    $existStmt->execute($existParams);
-                    $existingSources = array_map('intval', $existStmt->fetchAll(\PDO::FETCH_COLUMN));
-                }
-
-                // Only create replenishment tasks when pickface is running low
-                // The task qty is the DEFICIT (less than full pallet), not a full pallet
-                $needQty = max(0, (int)ceil($replenishQty));
-                if ($needQty > 0 && !empty($sourceBins)) {
-                    foreach ($sourceBins as $bin) {
-                        if ($needQty <= 0) break;
-                        $srcBinId = (int)$bin['stock_location_id'];
-                        if (in_array($srcBinId, $existingSources, true)) continue;
-
-                        $taskQty = min($needQty, $config['pickface_max']);
-                        try {
-                            PickfaceSplitter::createReplenTask(
-                                $skuId,
-                                $taskQty,
-                                $triggerOrderId,
-                                $db,
-                                $srcBinId
-                            );
-                            $needQty -= $taskQty;
-                            error_log("[PickfaceSplitter] Created replenishment task: SKU #{$skuId}, qty {$taskQty}, source #{$srcBinId}, order #{$triggerOrderId}");
-                        } catch (\Throwable $e) {
-                            error_log("[PickfaceSplitter] Failed to create replenishment task for SKU #{$skuId}: " . $e->getMessage());
-                        }
+                $dedupStmt->execute([$skuId, $config['pickface_bin_id']]);
+                if (!$dedupStmt->fetchColumn()) {
+                    try {
+                        PickfaceSplitter::createReplenTask(
+                            $skuId,
+                            $needQty,
+                            $triggerOrderId,
+                            $db
+                        );
+                        $taskCreated[$skuId] = true;
+                        error_log("[PickfaceSplitter] Created replenishment task: SKU #{$skuId}, qty {$needQty}, order #{$triggerOrderId}");
+                    } catch (\Throwable $e) {
+                        error_log("[PickfaceSplitter] Failed to create replenishment task for SKU #{$skuId}: " . $e->getMessage());
                     }
                 }
             }
         }
 
-        // ── Partial Pallet Consolidation ─────────────────────────────────
-        // After replenishment triggers, scan all SKUs for partial pallets
-        // in bulk bins (B-E) and move them down to pickface (A-level).
-        foreach ($skuRows as $skuRow) {
-            $skuId = (int)$skuRow['product_id'];
-            try {
-                PickfaceSplitter::consolidatePartialPallets($skuId, $db);
-            } catch (\Throwable $e) {
-                error_log("[PickfaceSplitter] consolidatePartialPallets failed for SKU #{$skuId}: " . $e->getMessage());
+        self::computeBinToBinTasks($picklistId, $db);
+    }
+
+    public static function computeBinToBinTasks($picklistId, $db) {
+        $dedup = $db->prepare("SELECT id FROM picklist_bin_to_bin WHERE picklist_id = ? LIMIT 1");
+        $dedup->execute([$picklistId]);
+        if ($dedup->fetchColumn()) return;
+
+        require_once __DIR__ . '/PickfaceSplitter.php';
+
+        // Step 1: Get distinct SKU IDs on this picklist (not grouped by location)
+        $skuStmt = $db->prepare("
+            SELECT DISTINCT product_id
+            FROM picklist_items
+            WHERE picklist_id = ?
+        ");
+        $skuStmt->execute([$picklistId]);
+        $skuIds = $skuStmt->fetchAll(\PDO::FETCH_COLUMN);
+
+        foreach ($skuIds as $skuId) {
+            $skuId = (int)$skuId;
+
+            // Step 2: Get pickface config — skip if SKU has no outbound pickface
+            $config = PickfaceSplitter::getPickfaceConfig($skuId, $db);
+            if (!$config) continue;
+
+            $pfLocCode = $config['pickface_location_code'];
+            $pickfaceMax = max(1, intval($config['pickface_max']));
+
+            // Step 3: Get product_code once per SKU
+            $codeStmt = $db->prepare("SELECT product_code FROM products WHERE id = ?");
+            $codeStmt->execute([$skuId]);
+            $productCode = $codeStmt->fetchColumn();
+
+            // Step 4: Query ALL bulk bins (B-E) for this SKU with partial pallets
+            $binStmt = $db->prepare("
+                SELECT lm.id, lm.location_code, SUM(s.quantity) as total_qty
+                FROM stock s
+                JOIN location_master lm ON lm.location_code = s.location AND lm.is_active = 1
+                WHERE s.product_id = ?
+                  AND s.location != ?
+                  AND UPPER(lm.row_name) IN ('B', 'C', 'D', 'E')
+                  AND s.stock_status = 'Available'
+                  AND (s.hold_status = 'available' OR s.hold_status IS NULL)
+                  AND s.quantity > 0
+                GROUP BY lm.id, lm.location_code
+                HAVING total_qty > 0 AND total_qty < ?
+            ");
+            $binStmt->execute([$skuId, $pfLocCode, $pickfaceMax]);
+            $partialBins = $binStmt->fetchAll();
+
+            foreach ($partialBins as $bin) {
+                $binQty = (float)$bin['total_qty'];
+
+                // Step 5: INSERT bin-to-bin task for each partial bin
+                $insStmt = $db->prepare("
+                    INSERT INTO picklist_bin_to_bin
+                    (picklist_id, sku_id, product_code, source_location, source_bin_id,
+                     destination_location, destination_bin_id, quantity, uom, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
+                ");
+                $insStmt->execute([
+                    $picklistId,
+                    $skuId,
+                    $productCode,
+                    $bin['location_code'],
+                    (int)$bin['id'],
+                    $pfLocCode,
+                    (int)$config['pickface_bin_id'],
+                    $binQty,
+                    'EA'
+                ]);
             }
         }
     }

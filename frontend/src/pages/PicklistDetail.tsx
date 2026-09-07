@@ -53,6 +53,16 @@ interface PicklistDetail {
   completed_at?: string;
 }
 
+interface BinToBinTask {
+  id: number;
+  product_code: string;
+  source_location: string;
+  destination_location: string;
+  quantity: number;
+  uom: string;
+  status: string;
+}
+
 const ITEM_STATUSES = ['Pending', 'Picked', 'Verified'];
 
 export default function PicklistDetail() {
@@ -70,6 +80,7 @@ export default function PicklistDetail() {
   const [scanCode, setScanCode] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
   const [replenTasks, setReplenTasks] = useState<ReplenishmentTaskData[]>([]);
+  const [binToBinTasks, setBinToBinTasks] = useState<BinToBinTask[]>([]);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -156,6 +167,22 @@ export default function PicklistDetail() {
     })();
     return () => { cancelled = true; };
   }, [items]);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api('picklist', 'bin_to_bin', { params: { id } });
+        if (!cancelled && res.tasks?.length > 0) {
+          setBinToBinTasks(res.tasks);
+        }
+      } catch {
+        void 0;
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id]);
 
   const run = async (action: string, body: Record<string, any>, successMsg: string) => {
     setBusy(true);
@@ -516,6 +543,39 @@ export default function PicklistDetail() {
           </div>
         )}
       </Card>
+
+      {binToBinTasks.length > 0 && (
+        <Card title="Bin-to-Bin Consolidation">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-brand-50">
+                <tr>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">SKU</th>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">Source Location</th>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">Destination</th>
+                  <th className="px-4 py-2.5 text-right text-[11px] font-bold uppercase tracking-wider text-brand-700">Quantity</th>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">UOM</th>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {binToBinTasks.map((task) => (
+                  <tr key={task.id} className="hover:bg-brand-50 transition-colors">
+                    <td className="px-4 py-3 border-t border-gray-100 text-sm font-semibold text-gray-800">{task.product_code || '—'}</td>
+                    <td className="px-4 py-3 border-t border-gray-100 font-mono text-xs text-gray-700">{task.source_location || '—'}</td>
+                    <td className="px-4 py-3 border-t border-gray-100 font-mono text-xs text-gray-700">{task.destination_location || '—'}</td>
+                    <td className="px-4 py-3 border-t border-gray-100 text-sm text-gray-700 text-right">{fmtNum(task.quantity)}</td>
+                    <td className="px-4 py-3 border-t border-gray-100 text-sm text-gray-700">{task.uom || '—'}</td>
+                    <td className="px-4 py-3 border-t border-gray-100">
+                      <StatusBadge status={task.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </div>
     </PageState>
   );

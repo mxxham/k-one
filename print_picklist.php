@@ -29,6 +29,10 @@ $notes       = $picklist['notes'] ?? '';
 $armada      = $picklist['armada_no'] ?? '';
 $container   = $picklist['container_no'] ?? '';
 
+$binToBinStmt = $pdo->prepare('SELECT * FROM picklist_bin_to_bin WHERE picklist_id = ? ORDER BY id');
+$binToBinStmt->execute([$id]);
+$binToBinRows = $binToBinStmt->fetchAll(PDO::FETCH_ASSOC);
+
 $itemCustomers = array_unique(array_filter(array_column($items, 'item_customer_name')));
 $allCustomers  = array_unique(array_filter(array_merge(
     $itemCustomers ?: ($picklist['customer_name'] ? [$picklist['customer_name']] : [])
@@ -240,6 +244,36 @@ tfoot td.r{text-align:right}
       </tr>
     </tfoot>
   </table>
+
+  <?php if (!empty($binToBinRows)): ?>
+  <div style="margin-top:16px">
+    <div class="section-title">Bin-to-Bin Consolidation</div>
+    <table>
+      <thead>
+        <tr>
+          <th class="c" style="width:24px">No.</th>
+          <th>SKU</th>
+          <th>Source Location</th>
+          <th>Destination</th>
+          <th class="r" style="width:54px">Quantity</th>
+          <th>UOM</th>
+        </tr>
+      </thead>
+      <tbody>
+      <?php foreach ($binToBinRows as $btIdx => $btRow): ?>
+      <tr>
+        <td class="c" style="color:#94a3b8;font-size:10px"><?= $btIdx + 1 ?></td>
+        <td style="font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:600;color:#0f172a"><?= htmlspecialchars($btRow['product_code'] ?? '—') ?></td>
+        <td><span class="chip chip-loc"><?= htmlspecialchars($btRow['source_location'] ?? '—') ?></span></td>
+        <td><span class="chip chip-loc"><?= htmlspecialchars($btRow['destination_location'] ?? '—') ?></span></td>
+        <td class="r" style="font-weight:700"><?= number_format((float)($btRow['quantity'] ?? 0), 2) ?></td>
+        <td style="font-size:10px;color:#64748b"><?= htmlspecialchars($btRow['uom'] ?? 'EA') ?></td>
+      </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+  <?php endif; ?>
 
   <!-- Notes -->
   <div class="remarks-box">

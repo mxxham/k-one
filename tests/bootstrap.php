@@ -39,8 +39,11 @@ $admin = null;
 $pdo = new PDO(sprintf('%s;dbname=%s', $dsn, TEST_DB_NAME), TEST_DB_USER, TEST_DB_PASS, [
     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    PDO::MYSQL_ATTR_MULTI_STATEMENTS => true,
 ]);
 $files = glob(dirname(__DIR__) . '/migrations/0[0-9][0-9]-*.sql');
+$hotfixes = glob(dirname(__DIR__) . '/migrations/hotfix_*.sql');
+$files = array_merge($files, $hotfixes);
 sort($files);
 
 $mysqlCli = 'C:\\xampp\\mysql\\bin\\mysql.exe';
