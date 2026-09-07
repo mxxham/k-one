@@ -26,7 +26,7 @@ const CycleCountPage = lazy(() => import('@/pages/CycleCountPage'));
 const BinTransferPage = lazy(() => import('@/pages/BinTransferPage'));
 const PutawayTasksPage = lazy(() => import('@/pages/PutawayTasksPage'));
 const PutawayScanPage = lazy(() => import('@/pages/PutawayScanPage'));
-const ReplenishmentPage = lazy(() => import('@/pages/ReplenishmentPage'));
+const PendingReplenishmentPage = lazy(() => import('@/pages/PendingReplenishmentPage'));
 const StockReconciliationPage = lazy(() => import('@/pages/StockReconciliationPage'));
 const WavesPage = lazy(() => import('@/pages/WavesPage'));
 const WaveDetail = lazy(() => import('@/pages/WaveDetail'));
@@ -106,7 +106,7 @@ export default function App() {
                   <Route path="/stocktake/:id" element={<StockTakeDetail />} />
                   <Route path="/cycle-count" element={<CycleCountPage />} />
                   <Route path="/bin-transfer" element={<BinTransferPage />} />
-                  <Route path="/replenishment" element={<ReplenishmentPage />} />
+                  <Route path="/replenishment" element={<PendingReplenishmentPage />} />
                   <Route path="/reconciliation" element={<StockReconciliationPage />} />
                   <Route path="/pickface-management" element={<PickfaceManagementPage />} />
                   <Route path="/putaway-tasks" element={<PutawayTasksPage />} />

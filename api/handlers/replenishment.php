@@ -204,6 +204,96 @@ function handle_replenishment($action) {
             json_out(['tasks' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
             break;
 
+        case 'list_pending':
+            api_require_auth();
+            $db = db();
+
+            $replenStmt = $db->query(
+                "SELECT t.id, t.sku_id, p.product_code, p.product_name,
+                        lm_src.location_code AS source_location_code,
+                        lm_dst.location_code AS destination_location_code,
+                        t.qty, t.status, t.triggering_order_id, t.created_at,
+                        TIMESTAMPDIFF(HOUR, t.created_at, NOW()) AS age_hours,
+                        'replenishment' AS task_type
+                 FROM replen_task t
+                 JOIN products p ON p.id = t.sku_id
+                 JOIN location_master lm_src ON lm_src.id = t.source_bin_id
+                 JOIN location_master lm_dst ON lm_dst.id = t.destination_bin_id
+                 WHERE t.status = 'pending'
+                 ORDER BY t.created_at ASC"
+            );
+            $replenTasks = $replenStmt->fetchAll();
+
+            $binToBinStmt = $db->query(
+                "SELECT b.id, b.sku_id, p.product_code, p.product_name,
+                        b.source_location AS source_location_code,
+                        b.destination_location AS destination_location_code,
+                        b.quantity AS qty, b.status,
+                        pl.outbound_order_id AS triggering_order_id, b.created_at,
+                        TIMESTAMPDIFF(HOUR, b.created_at, NOW()) AS age_hours,
+                        'bin_to_bin' AS task_type
+                 FROM picklist_bin_to_bin b
+                 JOIN products p ON p.id = b.sku_id
+                 JOIN picklists pl ON pl.id = b.picklist_id
+                 WHERE b.status = 'Pending'
+                 ORDER BY b.created_at ASC"
+            );
+            $binToBinTasks = $binToBinStmt->fetchAll();
+
+            json_out([
+                'tasks' => array_merge($replenTasks, $binToBinTasks),
+                'total_pending' => count($replenTasks) + count($binToBinTasks),
+            ]);
+            break;
+
+        case 'confirm_task':
+            api_require_auth();
+            $data = body();
+            $taskType = $data['task_type'] ?? null;
+            $taskId = (int)($data['id'] ?? 0);
+            if (!$taskType || !$taskId) json_err('task_type and id required', 400);
+            if (!in_array($taskType, ['replenishment', 'bin_to_bin'], true)) {
+                json_err('Invalid task_type', 400);
+            }
+            $table = $taskType === 'bin_to_bin' ? 'picklist_bin_to_bin' : 'replen_task';
+            $db = db();
+            $stmt = $db->prepare("UPDATE {$table} SET status = 'completed', completed_at = NOW() WHERE id = ?");
+            $stmt->execute([$taskId]);
+            ActivityLogger::log(
+                'CONFIRM_' . strtoupper($taskType),
+                'replenishment',
+                $table,
+                $taskId,
+                null,
+                "Confirmed {$taskType} task #{$taskId}"
+            );
+            json_out(['id' => $taskId]);
+            break;
+
+        case 'cancel_task':
+            api_require_auth();
+            $data = body();
+            $taskType = $data['task_type'] ?? null;
+            $taskId = (int)($data['id'] ?? 0);
+            if (!$taskType || !$taskId) json_err('task_type and id required', 400);
+            if (!in_array($taskType, ['replenishment', 'bin_to_bin'], true)) {
+                json_err('Invalid task_type', 400);
+            }
+            $table = $taskType === 'bin_to_bin' ? 'picklist_bin_to_bin' : 'replen_task';
+            $db = db();
+            $stmt = $db->prepare("UPDATE {$table} SET status = 'cancelled', updated_at = NOW() WHERE id = ?");
+            $stmt->execute([$taskId]);
+            ActivityLogger::log(
+                'CANCEL_' . strtoupper($taskType),
+                'replenishment',
+                $table,
+                $taskId,
+                null,
+                "Cancelled {$taskType} task #{$taskId}"
+            );
+            json_out(['id' => $taskId]);
+            break;
+
         default:
             json_err('Invalid action: ' . $action, 404);
     }

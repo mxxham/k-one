@@ -294,6 +294,12 @@ set_permission('replenishment', 'find_for_picklist', 'any');
 set_action_departments('replenishment', 'find_for_picklist', ['inventory']);
 set_permission('replenishment', 'task_status', 'any');
 set_action_departments('replenishment', 'task_status', ['inventory']);
+set_permission('replenishment', 'list_pending', 'any');
+set_action_departments('replenishment', 'list_pending', ['inventory']);
+set_permission('replenishment', 'confirm_task', 'operator');
+set_action_departments('replenishment', 'confirm_task', ['inventory']);
+set_permission('replenishment', 'cancel_task', 'operator');
+set_action_departments('replenishment', 'cancel_task', ['inventory']);
 
 // quality (quality.php): create/record/approve/reject write; get/list any; ['inventory']
 set_permission('quality', 'create', 'write');

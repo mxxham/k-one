@@ -76,7 +76,7 @@ const NAV: NavSection[] = [
       { to: '/cycle-count', label: 'Cycle Count', icon: CalendarCheck2, depts: ['inventory', 'all'] },
       { to: '/bin-transfer', label: 'Bin Transfer', icon: ArrowLeftRight, depts: ['inventory', 'all'] },
       { to: '/reconciliation', label: 'Reconciliation', icon: RefreshCw, depts: ['inventory', 'all'] },
-      { to: '/replenishment', label: 'Replenishment', icon: PackageSearch, depts: ['inventory', 'all'] },
+      { to: '/replenishment', label: 'Pending Replenishment', icon: PackageSearch, depts: ['inventory', 'all'] },
       { to: '/putaway-tasks', label: 'Putaway Tasks', icon: ListChecks, depts: ['inbound', 'inventory', 'ops', 'all'] },
       { to: '/putaway-scan', label: 'Putaway Saya', icon: Smartphone, depts: ['inbound', 'outbound', 'inventory', 'ops', 'all'] },
       { to: '/pickface-management', label: 'Pickface Mgmt', icon: Warehouse, depts: ['inventory', 'all'] },
