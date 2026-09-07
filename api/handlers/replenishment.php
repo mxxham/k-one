@@ -183,9 +183,16 @@ function handle_replenishment($action) {
                     $productIds[] = $skuId;
                 }
             }
+            $outboundOrderId = (int)($body['outbound_order_id'] ?? 0);
             if (empty($productIds)) json_out(['tasks' => []]);
             $db = db();
             $ph = implode(',', array_fill(0, count($productIds), '?'));
+            $params = $productIds;
+            $orderFilter = '';
+            if ($outboundOrderId > 0) {
+                $orderFilter = ' AND t.triggering_order_id = ?';
+                $params[] = $outboundOrderId;
+            }
             $stmt = $db->prepare(
                 "SELECT t.*,
                         p.product_code, p.product_name,
@@ -197,10 +204,10 @@ function handle_replenishment($action) {
                  JOIN location_master lm_src ON lm_src.id = t.source_bin_id
                  JOIN location_master lm_dst ON lm_dst.id = t.destination_bin_id
                  LEFT JOIN outbound_orders oo ON oo.id = t.triggering_order_id
-                 WHERE t.sku_id IN ($ph) AND t.status = 'pending'
+                 WHERE t.sku_id IN ($ph) AND t.status = 'pending'{$orderFilter}
                  ORDER BY t.created_at ASC"
             );
-            $stmt->execute($productIds);
+            $stmt->execute($params);
             json_out(['tasks' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
             break;
 

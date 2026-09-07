@@ -143,7 +143,7 @@ export default function PicklistDetail() {
       try {
         console.log('[replenishment] calling find_for_picklist...');
         const res = await api('replenishment', 'find_for_picklist', {
-          body: { pairs: uniquePairs },
+          body: { pairs: uniquePairs, outbound_order_id: picklist?.outbound_order_id ?? 0 },
         });
         console.log('[replenishment] API response:', JSON.stringify(res).slice(0, 500));
         if (!cancelled && res.tasks?.length > 0) {
@@ -166,7 +166,7 @@ export default function PicklistDetail() {
       }
     })();
     return () => { cancelled = true; };
-  }, [items]);
+  }, [items, picklist]);
 
   useEffect(() => {
     if (!id) return;
