@@ -29,7 +29,7 @@ $notes       = $picklist['notes'] ?? '';
 $armada      = $picklist['armada_no'] ?? '';
 $container   = $picklist['container_no'] ?? '';
 
-$binToBinStmt = $pdo->prepare('SELECT * FROM picklist_bin_to_bin WHERE picklist_id = ? ORDER BY id');
+$binToBinStmt = db()->prepare('SELECT * FROM picklist_bin_to_bin WHERE picklist_id = ? ORDER BY id');
 $binToBinStmt->execute([$id]);
 $binToBinRows = $binToBinStmt->fetchAll(PDO::FETCH_ASSOC);
 
