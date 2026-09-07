@@ -20,6 +20,8 @@ interface PickfaceConfig {
   uom_per_pallet: number;
   pickface_bin_id: number | null;
   pickface_location_code: string | null;
+  inbound_pickface_bin_id: number | null;
+  inbound_pickface_location_code: string | null;
   pickface_min: number;
   pickface_max: number;
   assigned: boolean;
@@ -105,7 +107,7 @@ export default function PickfaceManagementPage() {
     if (statusFilter === 'unassigned' && c.assigned) return false;
     if (search) {
         const q = search.toLowerCase();
-        const haystack = `${c.product_code} ${c.product_name} ${c.pickface_location_code ?? ''}`.toLowerCase();
+        const haystack = `${c.product_code} ${c.product_name} ${c.pickface_location_code ?? ''} ${c.inbound_pickface_location_code ?? ''}`.toLowerCase();
         if (!haystack.includes(q)) return false;
     }
     return true;
@@ -169,6 +171,7 @@ export default function PickfaceManagementPage() {
                   <th className="px-3 py-3 text-left font-bold">SKU Code</th>
                   <th className="px-3 py-3 text-left font-bold">Product Name</th>
                   <th className="px-3 py-3 text-left font-bold">Pickface Bin</th>
+                  <th className="px-3 py-3 text-left font-bold">Inbound Bin</th>
                   <th className="px-3 py-3 text-center font-bold">Min Qty</th>
                   <th className="px-3 py-3 text-center font-bold">Max Qty</th>
                   <th className="px-3 py-3 text-center font-bold">Status</th>
@@ -181,6 +184,7 @@ export default function PickfaceManagementPage() {
                     <td className="px-3 py-3 font-semibold text-brand-700 font-mono">{c.product_code}</td>
                     <td className="px-3 py-3 text-gray-600">{c.product_name}</td>
                     <td className="px-3 py-3 text-gray-600 font-mono">{c.pickface_location_code || '—'}</td>
+                    <td className="px-3 py-3 text-gray-600 font-mono">{c.inbound_pickface_location_code || '—'}</td>
                     <td className="px-3 py-3 text-center font-semibold">{c.pickface_min}</td>
                     <td className="px-3 py-3 text-center font-semibold">{c.pickface_max || '—'}</td>
                     <td className="px-3 py-3 text-center">

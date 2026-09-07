@@ -21,14 +21,17 @@ function handle_pickface($action) {
                 $searchTerm = '%' . $search . '%';
                 $args = [$searchTerm, $searchTerm, $searchTerm];
             }
-            $sql = "SELECT c.id, c.sku_id, c.pickface_bin_id, c.pickface_min, c.pickface_max,
+            $sql = "SELECT c.id, c.sku_id, c.pickface_bin_id, c.inbound_pickface_bin_id,
+                           c.pickface_min, c.pickface_max,
                            c.created_at, c.updated_at,
                            p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
                            lm.location_code AS pickface_location_code,
+                           lm2.location_code AS inbound_pickface_location_code,
                            lm.row_name, lm.aisle, lm.zone
                     FROM sku_pickface_config c
                     JOIN products p ON p.id = c.sku_id
                     LEFT JOIN location_master lm ON lm.id = c.pickface_bin_id
+                    LEFT JOIN location_master lm2 ON lm2.id = c.inbound_pickface_bin_id
                     $where
                     ORDER BY p.product_code, lm.location_code";
             $stmt = $db->prepare($sql);
@@ -40,6 +43,7 @@ function handle_pickface($action) {
                 $r['pickface_max'] = (int)$r['pickface_max'];
                 $r['sku_id'] = (int)$r['sku_id'];
                 $r['pickface_bin_id'] = $r['pickface_bin_id'] !== null ? (int)$r['pickface_bin_id'] : null;
+                $r['inbound_pickface_bin_id'] = $r['inbound_pickface_bin_id'] !== null ? (int)$r['inbound_pickface_bin_id'] : null;
             }
             unset($r);
             json_out(['configs' => $rows]);

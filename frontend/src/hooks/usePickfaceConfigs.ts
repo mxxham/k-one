@@ -10,6 +10,8 @@ export interface PickfaceConfig {
   uom_per_pallet: number;
   pickface_bin_id: number | null;
   pickface_location_code: string | null;
+  inbound_pickface_bin_id: number | null;
+  inbound_pickface_location_code: string | null;
   pickface_min: number;
   pickface_max: number;
   assigned: boolean;
