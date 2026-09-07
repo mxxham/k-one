@@ -14,6 +14,7 @@ import { api } from '@/lib/api';
 import { fmtDateTime, fmtNum } from '@/lib/format';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/context/AuthContext';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, EmptyState } from '@/components/Card';
 import StatusBadge from '@/components/StatusBadge';
@@ -62,6 +63,7 @@ export default function WaveDetail() {
   const { canWrite } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
 
   const [wave, setWave] = useState<WaveDetailData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,7 +97,7 @@ export default function WaveDetail() {
   }, [load]);
 
   const handleAction = async (action: string, confirmMsg: string, successMsg: string) => {
-    if (!window.confirm(confirmMsg)) return;
+    if (!(await confirm(confirmMsg))) return;
 
     setBusy(true);
     try {
@@ -353,6 +355,7 @@ export default function WaveDetail() {
           </div>
         )}
       </Card>
+      <ConfirmDialog />
     </div>
   );
 }

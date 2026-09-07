@@ -1,4 +1,4 @@
-﻿import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, RefreshCw, Eye, Trash2, FileSpreadsheet } from 'lucide-react';
 import { api, apiHref } from '@/lib/api';
@@ -13,6 +13,8 @@ import Spinner from '@/components/Spinner';
 import { Field, TextInput, Select, TextArea, Grid } from '@/components/Field';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/context/AuthContext';
+import ProductSearchCombobox from '@/components/ProductSearchCombobox';
+import KPICard from '@/components/KPICard';
 
 const PER_PAGE = 50;
 const INBOUND_STATUSES = ['Draft', 'Dues In', 'Receiving', 'Good Received', 'Goods Received', 'Unserviceable', 'Picked', 'ATP', 'Completed', 'Cancelled'];
@@ -37,16 +39,6 @@ interface InboundRow {
   total_qty: number;
   total_pallet: number;
   od_numbers?: string;
-}
-
-interface SearchProduct {
-  id: number;
-  product_code: string;
-  product_name: string;
-  uom: string;
-  uom_per_pallet: number;
-  liters_per_unit?: number;
-  stock_qty: number;
 }
 
 interface ItemDraft {
@@ -79,116 +71,6 @@ interface CreateForm {
   notes: string;
 }
 
-function KpiCard({ label, value, sub }: { label: string; value: ReactNode; sub?: string }) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-      <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500">{label}</div>
-      <div className="text-2xl font-extrabold text-brand-700 mt-1">{value}</div>
-      {sub && <div className="text-[11px] text-gray-400 mt-1">{sub}</div>}
-    </div>
-  );
-}
-
-function ProductSearch({
-  selected,
-  onSelect,
-  onClear,
-  autoFocus,
-}: {
-  selected: { id: number; code: string; name: string } | null;
-  onSelect: (p: SearchProduct) => void;
-  onClear: () => void;
-  autoFocus?: boolean;
-}) {
-  const toast = useToast();
-  const [q, setQ] = useState('');
-  const [results, setResults] = useState<SearchProduct[]>([]);
-  const [open, setOpen] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
-    if (!q.trim()) {
-      setResults([]);
-      setOpen(false);
-      return;
-    }
-    timer.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const res = await api('inbound', 'search_products', { params: { q } });
-        setResults(res.results || []);
-        setOpen(true);
-      } catch (e: any) {
-        toast('error', e.message || 'Gagal mencari produk');
-      } finally {
-        setSearching(false);
-      }
-    }, 300);
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
-
-  if (selected) {
-    return (
-      <div className="flex items-center gap-2">
-        <div className="flex-1 px-3 py-2 rounded-lg bg-brand-50 border border-brand-100 text-sm">
-          <div className="font-semibold text-brand-900">{selected.code}</div>
-          <div className="text-[11px] text-gray-500 truncate">{selected.name}</div>
-        </div>
-        <button type="button" onClick={onClear} className="px-2 py-1 text-xs font-semibold text-gray-500 hover:text-red-600 flex-shrink-0">
-          Clear
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative">
-      <div className="relative">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <TextInput
-          value={q}
-          autoFocus={autoFocus}
-          onChange={(e) => setQ(e.target.value)}
-          onFocus={() => results.length && setOpen(true)}
-          placeholder="Search product..."
-          className="pl-9"
-        />
-        {searching && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-brand-600 font-semibold">Searching...</span>
-        )}
-      </div>
-      {open && (
-        <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-          {results.length === 0 && !searching && <div className="px-3 py-2 text-xs text-gray-400">No products found</div>}
-          {results.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => {
-                onSelect(p);
-                setOpen(false);
-                setQ('');
-                setResults([]);
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-brand-50 flex items-center justify-between gap-2"
-            >
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-gray-800">{p.product_code}</div>
-                <div className="text-[11px] text-gray-500 truncate">{p.product_name}</div>
-              </div>
-              <div className="text-[11px] text-gray-400 flex-shrink-0">Stock: {fmtNum(p.stock_qty, 0)}</div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 export default function InboundList() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -449,10 +331,10 @@ actions={
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        <KpiCard label="This Month" value={fmtNum(stats.this_month, 0)} />
-        <KpiCard label="Dues In" value={fmtNum(stats.dues_in, 0)} />
-        <KpiCard label="Receiving" value={fmtNum(stats.receiving, 0)} />
-        <KpiCard label="Completed" value={fmtNum(stats.completed, 0)} />
+        <KPICard label="This Month" value={fmtNum(stats.this_month, 0)} />
+        <KPICard label="Dues In" value={fmtNum(stats.dues_in, 0)} />
+        <KPICard label="Receiving" value={fmtNum(stats.receiving, 0)} />
+        <KPICard label="Completed" value={fmtNum(stats.completed, 0)} />
       </div>
 
       <Card>
@@ -650,7 +532,8 @@ actions={
                     )}
                   </div>
                   <Field label="Product" required>
-                    <ProductSearch
+                    <ProductSearchCombobox
+                      endpoint="inbound/search_products"
                       selected={item.product_id ? { id: item.product_id, code: item.product_code, name: item.product_name } : null}
                       onSelect={(p) =>
                         updateItem(item.uid, { product_id: p.id, product_code: p.product_code, product_name: p.product_name, uom: p.uom || '' })

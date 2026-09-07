@@ -80,6 +80,39 @@ function handle_dashboard($action) {
             json_out(Report::dashboardInsights());
             break;
 
+        case 'overview':
+            api_require_auth();
+            $user = api_current_user();
+            $isAdmin = ($user['role'] ?? '') === 'admin';
+
+            // Stats (all users)
+            $stats = Report::dashboardStats();
+
+            // Activity log (admin-only)
+            $activityLog = [];
+            if ($isAdmin) {
+                $activityLog = Report::activityLogList('stock', 'SCAN_OVERRIDE', 10);
+            }
+
+            // ABC status (admin-only)
+            $abcStatus = null;
+            if ($isAdmin) {
+                $abcStatus = AbcAnalysis::status();
+                $abcStatus = [
+                    'total' => $abcStatus['total_products'],
+                    'classified' => $abcStatus['classified'],
+                    'unclassified' => $abcStatus['total_products'] - $abcStatus['classified'],
+                    'last_computed_at' => $abcStatus['last_computed_at'],
+                ];
+            }
+
+            json_out([
+                'stats' => $stats,
+                'activityLog' => $activityLog,
+                'abcStatus' => $abcStatus,
+            ]);
+            break;
+
         default:
             json_err('Invalid action: ' . $action, 404);
     }

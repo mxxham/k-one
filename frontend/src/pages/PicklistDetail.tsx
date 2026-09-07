@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CheckCheck, PackageCheck, RefreshCw, Save, Printer, AlertTriangle, Clock } from 'lucide-react';
-import { api, apiHref, webBase, getToken } from '@/lib/api';
+import { api, webBase } from '@/lib/api';
 import { WebBtn } from '@/components/WebBtn';
 import { fmtDate, fmtDateTime, fmtNum } from '@/lib/format';
 import { useToast } from '@/components/Toast';
@@ -12,13 +12,14 @@ import StatusBadge from '@/components/StatusBadge';
 import { type ReplenishmentTaskData } from '@/components/ReplenishmentSheet';
 import { printReplenishmentSheets } from '@/lib/replenishPrint';
 
-import Spinner from '@/components/Spinner';
+import { PageState } from '@/components/PageState';
 import ConfirmButton from '@/components/ConfirmButton';
 import { Select, TextInput } from '@/components/Field';
 import ScanInput from '@/components/ScanInput';
 
 interface PicklistItem {
   id: number;
+  product_id?: number;
   product_code?: string;
   product_name?: string;
   batch_no?: string;
@@ -109,37 +110,48 @@ export default function PicklistDetail() {
     return () => abortRef.current?.abort();
   }, [load]);
 
-  // Fetch replenishment task details for any items with replen_task_id
   useEffect(() => {
+    console.log('[replenishment] useEffect fired, items:', items.length, 'sample:', items.slice(0, 2));
     if (items.length === 0) return;
-    const blockedTaskIds = [...new Set(
-      items
-        .map((it) => it.replen_task_id)
-        .filter((id): id is number => id != null && id > 0)
-    )];
-    if (blockedTaskIds.length === 0) return;
+    const pairs = items
+      .filter((it) => it.product_id && it.batch_number)
+      .map((it) => ({ product_id: it.product_id, batch_number: it.batch_number }));
+    console.log('[replenishment] filtered pairs:', pairs.length);
+    const seen = new Set<string>();
+    const uniquePairs = pairs.filter((p) => {
+      const key = `${p.product_id}:${p.batch_number}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    console.log('[replenishment] uniquePairs:', JSON.stringify(uniquePairs));
+    if (uniquePairs.length === 0) return;
 
     let cancelled = false;
     (async () => {
-      const tasks: ReplenishmentTaskData[] = [];
-      for (const taskId of blockedTaskIds) {
-        try {
-          const taskRes = await api('replenishment', 'task_status', { params: { task_id: taskId } });
-          if (taskRes.task) {
-            tasks.push({
-              id: taskRes.task.id,
-              product_code: taskRes.task.product_code || '',
-              product_name: taskRes.task.product_name || '',
-              source_location: taskRes.task.source_location || '',
-              dest_location: taskRes.task.dest_location || '',
-              qty: taskRes.task.qty || 0,
-              order_number: taskRes.task.order_number || null,
-            });
-          }
-        } catch {}
-      }
-      if (!cancelled && tasks.length > 0) {
-        setReplenTasks(tasks);
+      try {
+        console.log('[replenishment] calling find_for_picklist...');
+        const res = await api('replenishment', 'find_for_picklist', {
+          body: { pairs: uniquePairs },
+        });
+        console.log('[replenishment] API response:', JSON.stringify(res).slice(0, 500));
+        if (!cancelled && res.tasks?.length > 0) {
+          const mapped = res.tasks.map((t: any) => ({
+            id: t.id,
+            product_code: t.product_code || '',
+            product_name: t.product_name || '',
+            source_location: t.source_location || '',
+            dest_location: t.dest_location || '',
+            qty: t.qty || 0,
+            order_number: t.order_number || null,
+          }));
+          console.log('[replenishment] setting replenTasks:', mapped.length, 'tasks');
+          setReplenTasks(mapped);
+        } else {
+          console.log('[replenishment] no tasks returned, res:', res);
+        }
+      } catch (err) {
+        console.error('[replenishment] find_for_picklist failed:', err);
       }
     })();
     return () => { cancelled = true; };
@@ -260,25 +272,11 @@ export default function PicklistDetail() {
     }
   };
 
-  if (loading) {
-    return (
-      <div>
-        <PageHeader title="Picklist" />
-        <Spinner label="Loading detail…" />
-      </div>
-    );
-  }
-
-  if (!picklist) {
-    return (
-      <div>
-        <PageHeader title="Picklist" />
-        <Card>
-          <EmptyState message="Picklist tidak ditemukan" />
-        </Card>
-      </div>
-    );
-  }
+  if (!picklist) return (
+    <PageState loading={loading} onRetry={load} empty={!picklist} emptyMessage="Picklist tidak ditemukan">
+      <div><PageHeader title="Picklist" /></div>
+    </PageState>
+  );
 
   const status = picklist.status || '';
 
@@ -309,10 +307,10 @@ export default function PicklistDetail() {
         </button>
       )}
       {canWrite && (
-        <ConfirmButton label="Hapus" confirmText={`Hapus picklist ${picklist.picklist_number || ''}?`} onConfirm={handleDelete} />
+        <ConfirmButton label="Hapus" confirmText={`Hapus picklist ${picklist?.picklist_number || ''}?`} onConfirm={handleDelete} />
       )}
       <WebBtn
-        href={`${webBase()}/print_picklist.php?id=${picklist.id}&token=${getToken() || ''}`}
+        href={`${webBase()}/print_picklist.php?id=${picklist?.id}`}
         label="Print"
         icon={<Printer className="w-4 h-4" />}
       />
@@ -334,9 +332,10 @@ export default function PicklistDetail() {
   );
 
   return (
+    <PageState loading={loading} onRetry={load} empty={!picklist} emptyMessage="Picklist tidak ditemukan">
     <div>
       <PageHeader
-        title={`${picklist.picklist_number || `Picklist #${picklist.id}`} `}
+        title={`${picklist!.picklist_number || `Picklist #${picklist!.id}`} `}
         subtitle={`Status: ${status}`}
         actions={actions}
       />
@@ -518,5 +517,6 @@ export default function PicklistDetail() {
         )}
       </Card>
     </div>
+    </PageState>
   );
 }

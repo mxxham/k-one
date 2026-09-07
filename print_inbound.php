@@ -39,230 +39,51 @@ foreach ($items as $item) {
 <head>
 <meta charset="UTF-8">
 <title>Inbound Report - <?= htmlspecialchars($inbound['order_number'] ?? $inbound['inbound_number'] ?? '-') ?></title>
+<link rel="stylesheet" href="assets/css/print-shared.css">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  body { background: #fff; font-family: 'Inter', Arial, sans-serif; font-size: 10.5pt; }
+  .document { padding: 30px 32px; box-shadow: 0 2px 20px rgba(0,0,0,.1); border-radius: 4px; }
+  @media print { .document { box-shadow: none; margin: 0; padding: 14mm 14mm 16mm; max-width: 100%; border-radius: 0; } }
+  .print-bar { padding: 10px 20px; }
+  .print-bar span { font-weight: 600; }
+  .btn-print { padding: 7px 18px; font-size: 13px; }
+  .btn-back { background: transparent; border: 1.5px solid rgba(255,255,255,.6); padding: 7px 18px; font-size: 13px; }
+  .doc-header { align-items: flex-start; padding-bottom: 14px; margin-bottom: 18px; }
+  .hdr-logo { width: 52px; height: 52px; font-size: 28px; font-weight: 900; letter-spacing: -1px; }
+  .doc-company .name .nk { color: #026766; }
+  .doc-company .name .none { color: #026766; opacity: .7; }
+  .doc-title-block .title { font-size: 16pt; font-weight: 700; }
+  .doc-title-block .sub { font-size: 8.5pt; }
+  .doc-title-block .number { font-size: 10.5pt; color: #1a1a1a; font-family: monospace; }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  .badge-dues-in { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
+  .badge-atp { background: #e8f5e9; color: #026766; border: 1px solid #a5d6a7; }
+  .badge-completed { background: #e3f2fd; color: #014f4e; border: 1px solid #90caf9; }
+  .badge-received { background: #e0f7f7; color: #026766; border: 1px solid #80d2d2; }
+  .badge-default { background: #f5f5f5; color: #616161; border: 1px solid #e0e0e0; }
 
-  body {
-    font-family: 'Inter', Arial, sans-serif;
-    font-size: 10.5pt;
-    color: #0f172a;
-    background: #fff;
-  }
-
-  @page {
-    size: A4;
-    margin: 0;
-  }
-
-  @media print {
-    .no-print { display: none !important; }
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #fff; }
-    .page-break { page-break-before: always; }
-  }
-
-  
-  .print-bar {
-    background: #0f2e2d;
-    color: #fff;
-    padding: 10px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: sticky;
-    top: 0;
-    z-index: 99;
-  }
-  .print-bar span { font-weight: 600; font-size: 13px; }
-  .print-bar .btns { display: flex; gap: 8px; }
-  .btn-print {
-    background: #fff;
-    color: #026766;
-    border: none;
-    padding: 7px 18px;
-    border-radius: 6px;
-    font-weight: 700;
-    cursor: pointer;
-    font-size: 13px;
-  }
-  .btn-back {
-    background: transparent;
-    color: #fff;
-    border: 1.5px solid rgba(255,255,255,.6);
-    padding: 7px 18px;
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
-    font-size: 13px;
-    text-decoration: none;
-  }
-
-  
-  .document {
-    max-width: 794px;
-    margin: 20px auto;
-    background: #fff;
-    padding: 30px 32px;
-    box-shadow: 0 2px 20px rgba(0,0,0,.1);
-    border-radius: 4px;
-  }
-
-  @media print {
-    .document { box-shadow: none; margin: 0; padding: 14mm 14mm 16mm; max-width: 100%; border-radius: 0; }
-  }
-
-  
-  .doc-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    border-bottom: 2px solid #e2e8f0;
-    padding-bottom: 14px;
-    margin-bottom: 18px;
-  }
-  .doc-logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .hdr-logo {
-    width: 52px; height: 52px;
-    background: linear-gradient(135deg, #026766 0%, #013d3c 100%);
-    border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 28px; font-weight: 900; color: #fff;
-    flex-shrink: 0; letter-spacing: -1px;
-  }
-  .doc-company { line-height: 1.1; }
-  .doc-company .name .nk   { font-size: 24pt; font-weight: 900; color: #026766; }
-  .doc-company .name .none { font-size: 18pt; font-weight: 400; color: #026766; opacity: .7; }
-  .doc-title-block { text-align: right; }
-  .doc-title-block .title  { font-size: 16pt; font-weight: 700; color: #0f172a; letter-spacing: -.3px; }
-  .doc-title-block .sub    { font-size: 8.5pt; color: #64748b; margin-top: 2px; }
-  .doc-title-block .number { font-size: 10.5pt; font-weight: 700; color: #1a1a1a; margin-top: 5px; font-family: monospace; }
-
-  
-  .badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 8pt;
-    font-weight: 700;
-    letter-spacing: .4px;
-    text-transform: uppercase;
-  }
-  .badge-dues-in    { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
-  .badge-atp        { background: #e8f5e9; color: #026766; border: 1px solid #a5d6a7; }
-  .badge-completed  { background: #e3f2fd; color: #014f4e; border: 1px solid #90caf9; }
-  .badge-received   { background: #e0f7f7; color: #026766; border: 1px solid #80d2d2; }
-  .badge-default    { background: #f5f5f5; color: #616161; border: 1px solid #e0e0e0; }
-
-  
-  .info-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 0;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    overflow: hidden;
-    margin-bottom: 18px;
-  }
-  .info-cell {
-    padding: 8px 12px;
-    border-right: 1px solid #e2e8f0;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  .info-cell:nth-child(3n) { border-right: none; }
-  .info-cell:nth-last-child(-n+3) { border-bottom: none; }
-  .info-cell .lbl { font-size: 7.5pt; color: #64748b; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2px; }
-  .info-cell .val { font-size: 10pt; font-weight: 600; color: #1a1a1a; }
-  .info-cell.span2 { grid-column: span 2; }
+  .info-grid { gap: 0; margin-bottom: 18px; }
+  .info-cell { padding: 8px 12px; }
+  .info-cell .lbl { font-size: 7.5pt; letter-spacing: .4px; }
+  .info-cell .val { font-size: 10pt; color: #1a1a1a; }
   .info-cell.span3 { grid-column: span 3; }
 
-  
-
-
-  
   .section-title {
-    font-size: 10pt;
-    font-weight: 700;
-    color: #026766;
-    padding-left: 12px;
-    margin-bottom: 8px;
-    margin-top: 16px;
-    text-transform: uppercase;
-    letter-spacing: .5px;
-    position: relative;
+    font-size: 10pt; color: #026766; padding-left: 12px;
+    margin-bottom: 8px; margin-top: 16px;
+    text-transform: uppercase; letter-spacing: .5px;
+    position: relative; display: block;
   }
-  .section-title::before {
-    content: '';
-    display: block;
-    width: 3px;
-    height: 14px;
-    background: #026766;
-    border-radius: 2px;
-    position: absolute;
-    left: 0;
-    top: 2px;
-  }
+  .section-title::before { position: absolute; left: 0; top: 2px; }
 
-  
-  table.items-table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-    font-size: 8pt;
-    margin-bottom: 10px;
-  }
-  table.items-table thead th {
-    background: #0f2e2d;
-    color: #fff;
-    padding: 6px 5px;
-    text-align: left;
-    font-weight: 600;
-    font-size: 7pt;
-    letter-spacing: .2px;
-    word-wrap: break-word;
-  }
-  thead th.num { text-align: center; }
-  thead th.right { text-align: right; }
-    tbody tr:nth-child(even) { background: #f8fafc; }
+  table.items-table { table-layout: fixed; font-size: 8pt; margin-bottom: 10px; }
+  table.items-table thead th { padding: 6px 5px; font-size: 7pt; letter-spacing: .2px; word-wrap: break-word; }
+  table.items-table tbody td { padding: 5px 5px; border-bottom: 1px solid #e2e8f0; vertical-align: top; line-height: 1.35; word-wrap: break-word; overflow-wrap: break-word; }
   tbody tr:hover { background: #e3f0ff; }
-  @media print {
-    tbody tr:hover { background: transparent !important; }
-  tbody tr:nth-child(even) { background: #f8fafc; }
-  }
-  table.items-table tbody td {
-    padding: 5px 5px;
-    border-bottom: 1px solid #e2e8f0;
-    vertical-align: top;
-    line-height: 1.35;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-  }
-  tbody td.num { text-align: center; }
-  tbody td.right { text-align: right; font-weight: 600; }
-  tfoot td {
-    padding: 7px 8px;
-    font-weight: 700;
-    font-size: 9.5pt;
-    border-top: 2px solid #0f2e2d;
-    background: #f1f5f9;
-  }
-  tfoot td.right { text-align: right; }
+  tfoot td { font-size: 9.5pt; background: #f1f5f9; }
 
   .sku { font-family: monospace; font-size: 8pt; color: #64748b; }
-  .loc-badge {
-    display: inline-block;
-    background: #e3f2fd;
-    color: #014f4e;
-    border-radius: 4px;
-    padding: 1px 6px;
-    font-family: monospace;
-    font-size: 8pt;
-    font-weight: 600;
-  }
+  .loc-badge { background: #e3f2fd; color: #014f4e; border-radius: 4px; padding: 1px 6px; font-family: monospace; font-size: 8pt; font-weight: 600; }
   .loc-badge.qua { background: #fce4ec; color: #880e4f; }
   .status-acc { color: #026766; font-weight: 700; }
   .status-rej { color: #014f4e; font-weight: 700; }
@@ -271,40 +92,16 @@ foreach ($items as $item) {
   .ref-stack .ref-od { color: #013d3c; }
   .ref-stack .ref-so { color: #283593; }
   .loc-stack { font-size: 7pt; line-height: 1.35; }
-  .loc-row {
-    margin: 0 0 3px;
-    padding: 2px 0 2px 6px;
-    border-left: 2px solid #e2e8f0;
-    word-break: break-word;
-  }
+  .loc-row { margin: 0 0 3px; padding: 2px 0 2px 6px; border-left: 2px solid #e2e8f0; word-break: break-word; }
   .loc-row:last-child { margin-bottom: 0; }
   .loc-meta { font-size: 6.5pt; color: #64748b; }
 
-  
-  .sig-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 20px;
-    margin-top: 28px;
-  }
-  .sig-box {
-    border-top: 1.5px solid #e2e8f0;
-    padding-top: 8px;
-  }
-  .sig-box .role { font-size: 8pt; color: #64748b; text-transform: uppercase; letter-spacing: .4px; }
+  .sig-grid { gap: 20px; margin-top: 28px; padding-top: 0; border-top: none; }
+  .sig-box { border-top: 1.5px solid #e2e8f0; }
+  .sig-box .role { font-size: 8pt; letter-spacing: .4px; }
   .sig-box .space { height: 40px; }
   .sig-box .name-line { border-bottom: 1px dashed #e2e8f0; margin: 4px 0 4px; }
-
-  
-  .doc-footer {
-    margin-top: 24px;
-    padding-top: 10px;
-    border-top: 1px solid #e2e8f0;
-    display: flex;
-    justify-content: space-between;
-    font-size: 7.5pt;
-    color: #64748b;
-  }
+  .doc-footer { margin-top: 24px; font-size: 7.5pt; color: #64748b; }
 </style>
 </head>
 <body>

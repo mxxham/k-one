@@ -9,6 +9,7 @@ import { Field, TextInput, Grid } from '@/components/Field';
 import StatusBadge from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/context/AuthContext';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { api } from '@/lib/api';
 import { fmtNum, fmtDateTime } from '@/lib/format';
 
@@ -54,6 +55,7 @@ export default function WavesPage() {
   const toast = useToast();
   const navigate = useNavigate();
   const { canWrite } = useAuth();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
 
   const [waves, setWaves] = useState<WaveRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -165,7 +167,7 @@ export default function WavesPage() {
   };
 
   const cancelWave = async (w: WaveRow) => {
-    if (!window.confirm(`Batalkan wave ${w.wave_number}? Picklist terkait (jika masih Draft) akan dihapus.`)) return;
+    if (!(await confirm(`Batalkan wave ${w.wave_number}? Picklist terkait (jika masih Draft) akan dihapus.`))) return;
     try {
       await api('waves', 'cancel', { method: 'POST', body: { id: w.id } });
       toast('success', 'Wave dibatalkan');
@@ -400,6 +402,7 @@ export default function WavesPage() {
           </div>
         ) : null}
       </Modal>
+      <ConfirmDialog />
     </div>
   );
 }

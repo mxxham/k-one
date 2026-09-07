@@ -8,33 +8,33 @@ function handle_export($action) {
     try {
         switch ($action) {
             case 'inbound':
-                api_require_auth();
+                api_require_write();
                 $status = query('status') ?: null;
                 $orders = Inbound::getAll($status, 5000, 0, null);
                 ExcelExport::exportInbound($orders);
                 exit;
 
             case 'outbound':
-                api_require_auth();
+                api_require_write();
                 $status = query('status') ?: null;
                 $orders = Outbound::getAll($status, 5000, 0, null);
                 ExcelExport::exportOutbound($orders);
                 exit;
 
             case 'customers':
-                api_require_auth();
+                api_require_write();
                 $rows = db()->query("SELECT * FROM customers ORDER BY customer_name")->fetchAll();
                 ExcelExport::exportCustomers($rows);
                 exit;
 
             case 'products':
-                api_require_auth();
+                api_require_write();
                 $rows = db()->query("SELECT * FROM products ORDER BY product_code")->fetchAll();
                 ExcelExport::exportProducts($rows);
                 exit;
 
             case 'ledger':
-                api_require_auth();
+                api_require_write();
                 $start = query('start_date') ?: null;
                 $end = query('end_date') ?: null;
                 $rows = Stock::getMovement(null, $start, $end, 10000);
@@ -42,13 +42,13 @@ function handle_export($action) {
                 exit;
 
             case 'stock':
-                api_require_auth();
+                api_require_write();
                 $rows = Stock::getAll();
                 ExcelExport::exportStock($rows);
                 exit;
 
             case 'stocktake':
-                api_require_auth();
+                api_require_write();
                 $id = (int)(query('id') ?: 0);
                 if (!$id) json_err('id wajib diisi.', 400);
                 $stockTake = StockTake::getById($id);
@@ -59,7 +59,7 @@ function handle_export($action) {
                 exit;
 
             case 'asn':
-                api_require_auth();
+                api_require_write();
                 $status = query('status') ?: null;
                 $sql = "SELECT a.*, u.full_name AS created_by_name,
                                COUNT(ai.id) AS item_count,
@@ -90,7 +90,7 @@ function handle_export($action) {
                 exit;
 
             case 'report':
-                api_require_auth();
+                api_require_write();
                 $type = query('type') ?: 'daily';
                 $date = query('date') ?: null;
                 $dateTo = query('date_to') ?: null;

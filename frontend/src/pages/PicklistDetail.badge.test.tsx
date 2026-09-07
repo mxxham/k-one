@@ -80,6 +80,7 @@ describe('PicklistDetail — Awaiting Replenishment badge', () => {
   it('shows awaiting replenishment badge when blocked_on_replen_task_id is set', async () => {
     const mockApi = vi.mocked(api);
     mockApi.mockResolvedValueOnce({
+      success: true,
       picklist: mockPicklist,
       items: [
         {
@@ -111,10 +112,11 @@ describe('PicklistDetail — Awaiting Replenishment badge', () => {
   it('does not show badge when blocked_on_replen_task_id is null', async () => {
     const mockApi = vi.mocked(api);
     mockApi.mockResolvedValueOnce({
+      success: true,
       picklist: mockPicklist,
       items: [
         {
-          id: 102,
+          id: 201,
           product_code: 'SKU-002',
           product_name: 'Shell Rimula',
           batch_no: 'B002',
@@ -144,6 +146,7 @@ describe('PicklistDetail — Awaiting Replenishment badge', () => {
   it('does not show badge when blocked_on_replen_task_id is undefined', async () => {
     const mockApi = vi.mocked(api);
     mockApi.mockResolvedValueOnce({
+      success: true,
       picklist: mockPicklist,
       items: [
         {

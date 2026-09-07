@@ -14,18 +14,10 @@ import { useAuth } from '@/context/AuthContext';
 import { api, BinTransferRow } from '@/lib/api';
 import { fmtNum, fmtDate, todayISO } from '@/lib/format';
 import ScanInput from '@/components/ScanInput';
+import { SearchProduct } from '@/components/ProductSearch';
 
 const PER_PAGE = 20;
 const STATUS_OPTIONS = ['Pending', 'Completed', 'Cancelled'];
-
-interface SearchProduct {
-  id: number;
-  text: string;
-  product_code: string;
-  product_name: string;
-  uom: string;
-  stock_qty: number;
-}
 
 interface LocWithStock {
   location: string;
@@ -212,10 +204,10 @@ export default function BinTransferPage() {
     if (!productId) {
       const sel: SearchProduct = {
         id: Number(res.product.id),
-        text: `${scannedCode} — ${res.product.product_name || ''}`,
         product_code: scannedCode,
         product_name: res.product.product_name || '',
         uom: res.product.uom_type || '',
+        uom_per_pallet: 0,
         stock_qty: 0,
       };
       selectProduct(sel);

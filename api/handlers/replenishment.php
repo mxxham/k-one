@@ -173,6 +173,37 @@ function handle_replenishment($action) {
             json_out(['success' => $ok]);
             break;
 
+        case 'find_for_picklist':
+            api_require_auth();
+            $body = body();
+            $productIds = [];
+            foreach (($body['pairs'] ?? []) as $pair) {
+                $skuId = (int)($pair['product_id'] ?? 0);
+                if ($skuId > 0 && !in_array($skuId, $productIds, true)) {
+                    $productIds[] = $skuId;
+                }
+            }
+            if (empty($productIds)) json_out(['tasks' => []]);
+            $db = db();
+            $ph = implode(',', array_fill(0, count($productIds), '?'));
+            $stmt = $db->prepare(
+                "SELECT t.*,
+                        p.product_code, p.product_name,
+                        lm_src.location_code AS source_location,
+                        lm_dst.location_code AS dest_location,
+                        oo.order_number
+                 FROM replen_task t
+                 JOIN products p ON p.id = t.sku_id
+                 JOIN location_master lm_src ON lm_src.id = t.source_bin_id
+                 JOIN location_master lm_dst ON lm_dst.id = t.destination_bin_id
+                 LEFT JOIN outbound_orders oo ON oo.id = t.triggering_order_id
+                 WHERE t.sku_id IN ($ph) AND t.status = 'pending'
+                 ORDER BY t.created_at ASC"
+            );
+            $stmt->execute($productIds);
+            json_out(['tasks' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+            break;
+
         default:
             json_err('Invalid action: ' . $action, 404);
     }

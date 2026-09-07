@@ -10,6 +10,7 @@ import Spinner from '@/components/Spinner';
 import Modal from '@/components/Modal';
 import { Field, TextInput, Select, Grid } from '@/components/Field';
 import { ZONE_COLORS } from '@/components/Rack3D';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 
 const LEVELS = ['A', 'B', 'C', 'D', 'E'];
 const AISLES = ['CA', 'CB', 'CC', 'CD', 'CE', 'CF', 'CG'];
@@ -108,6 +109,7 @@ const emptyRule = {
 export default function ZoningPage() {
   const toast = useToast();
   const { canWrite, canAdmin } = useAuth();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
 
   const [tab, setTab] = useState<'uom' | 'product' | 'zone' | 'zoneaisles' | 'blocks' | 'zone-stats'>('uom');
 
@@ -282,7 +284,7 @@ export default function ZoningPage() {
   };
 
   const deactivateBlock = async (b: BlockRow) => {
-    if (!window.confirm(`Nonaktifkan blokir ${b.scope_type === 'aisle' ? `aisle ${b.aisle_prefix}` : `lokasi ${b.location_code}`}?`)) return;
+    if (!(await confirm(`Nonaktifkan blokir ${b.scope_type === 'aisle' ? `aisle ${b.aisle_prefix}` : `lokasi ${b.location_code}`}?`))) return;
     try {
       await api('putaway', 'deactivate_block', { method: 'POST', body: { id: b.id } });
       toast('success', 'Blokir dinonaktifkan');
@@ -329,7 +331,7 @@ export default function ZoningPage() {
   };
 
   const deleteZa = async (z: ZoneAisleRow) => {
-    if (!window.confirm(`Hapus binding ${z.zone_code} · ${z.aisle}?`)) return;
+    if (!(await confirm(`Hapus binding ${z.zone_code} · ${z.aisle}?`))) return;
     try {
       await api('putaway', 'delete_zone_aisle', { method: 'POST', body: { id: z.id } });
       toast('success', 'Binding dihapus');
@@ -433,7 +435,7 @@ export default function ZoningPage() {
   };
 
   const deleteRule = async (r: ProductRuleRow) => {
-    if (!window.confirm('Hapus aturan produk ini?')) return;
+    if (!(await confirm('Hapus aturan produk ini?'))) return;
     try {
       await api('putaway', 'delete_product_rule', { method: 'POST', body: { product_id: r.product_id } });
       toast('success', 'Aturan produk dihapus');
@@ -483,7 +485,7 @@ export default function ZoningPage() {
   };
 
   const deleteZone = async (z: ZoneRow) => {
-    if (!window.confirm('Hapus zone ini?')) return;
+    if (!(await confirm('Hapus zone ini?'))) return;
     try {
       await api('putaway', 'delete_zone', { method: 'POST', body: { id: z.id } });
       toast('success', 'Zone dihapus');
@@ -1319,6 +1321,7 @@ export default function ZoningPage() {
           </div>
         </form>
       </Modal>
+      <ConfirmDialog />
     </div>
   );
 }

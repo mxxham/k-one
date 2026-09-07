@@ -3,8 +3,7 @@ import { Printer } from 'lucide-react';
 
 /**
  * Link that opens a binary API endpoint (print document / Excel export) in a
- * new tab. These endpoints authenticate via the token query param appended by
- * apiHref().
+ * new tab. Authentication is handled via the session cookie.
  */
 export function WebBtn({
   href,

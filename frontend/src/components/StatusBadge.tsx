@@ -1,9 +1,12 @@
+const STATUS_ALIASES: Record<string, string> = {
+  'Good Received': 'Goods Received',
+};
+
 const STATUS_STYLES: Record<string, string> = {
   // Inbound
   Draft: 'bg-gray-100 text-gray-700 border-gray-300',
   'Dues In': 'bg-blue-50 text-blue-700 border-blue-300',
   Receiving: 'bg-orange-50 text-orange-700 border-orange-300',
-  'Good Received': 'bg-green-50 text-green-700 border-green-300',
   'Goods Received': 'bg-green-50 text-green-700 border-green-300',
   Unserviceable: 'bg-red-50 text-red-700 border-red-300',
   Picked: 'bg-indigo-50 text-indigo-700 border-indigo-300',
@@ -50,7 +53,8 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function StatusBadge({ status }: { status?: string | null }) {
   const key = status || '—';
-  const cls = STATUS_STYLES[key] || 'bg-gray-100 text-gray-600 border-gray-300';
+  const normalized = STATUS_ALIASES[key] || key;
+  const cls = STATUS_STYLES[normalized] || 'bg-gray-100 text-gray-600 border-gray-300';
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${cls}`}>
       <span className="w-1.5 h-1.5 rounded-full bg-current" />

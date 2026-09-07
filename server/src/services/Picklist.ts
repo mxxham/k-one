@@ -1,5 +1,6 @@
 import { dbExec, dbExecFirst, dbScalar, withTransaction } from '../db';
 import { ctx } from '../helpers';
+import { getPickfaceConfig, splitOrderLine, checkReplenishment, createReplenTask } from './PickfaceSplitter';
 
 export class Picklist {
   static async generateNumber(): Promise<string> {
@@ -164,6 +165,89 @@ export class Picklist {
                 slId,
               ],
             );
+          }
+        }
+      }
+
+      {
+        const skuRows = await dbExec(
+          `SELECT product_id, SUM(quantity) as total_qty
+           FROM picklist_items
+           WHERE picklist_id = ?
+           GROUP BY product_id`,
+          [picklistId],
+        );
+
+        for (const skuRow of skuRows) {
+          const skuId = Number(skuRow.product_id);
+          const totalQty = Number(skuRow.total_qty);
+
+          const config = await getPickfaceConfig(skuId);
+          if (!config) continue;
+
+          const split = splitOrderLine(totalQty, config.pickface_max);
+          const pickfaceQty = split.pickface_qty;
+          if (pickfaceQty <= 0) continue;
+
+          const check = await checkReplenishment(skuId, pickfaceQty);
+          const replenishQty = check.needs_replenishment
+            ? config.pickface_max - check.projected_on_hand
+            : 0;
+
+          const triggerRow = await dbExecFirst(
+            `SELECT oi.outbound_order_id
+             FROM picklist_items pki
+             JOIN outbound_items oi ON oi.id = pki.outbound_item_id
+             WHERE pki.picklist_id = ? AND pki.product_id = ?
+             LIMIT 1`,
+            [picklistId, skuId],
+          );
+          const triggerOrderId = triggerRow ? Number(triggerRow.outbound_order_id) : null;
+
+          const sourceBins = await dbExec(
+            `SELECT DISTINCT lm.id AS stock_location_id, SUM(pki.quantity) as bin_qty
+             FROM picklist_items pki
+             JOIN stock_locations sl ON sl.id = pki.stock_location_id
+             JOIN location_master lm ON lm.location_code = sl.location_code
+             WHERE pki.picklist_id = ? AND pki.product_id = ?
+               AND lm.row_name IN ('B', 'C', 'D', 'E')
+             GROUP BY lm.id`,
+            [picklistId, skuId],
+          );
+
+          const existingSources: number[] = [];
+          if (sourceBins.length > 0) {
+            const binIds = sourceBins.map((b: any) => Number(b.stock_location_id));
+            const placeholders = binIds.map(() => '?').join(',');
+            const existRows = await dbExec(
+              `SELECT DISTINCT source_bin_id FROM replen_task
+               WHERE sku_id = ? AND destination_bin_id = ?
+                 AND status IN ('pending', 'printed', 'in_progress')
+                 AND source_bin_id IN (${placeholders})`,
+              [skuId, config.pickface_bin_id, ...binIds],
+            );
+            for (const r of existRows) {
+              existingSources.push(Number(r.source_bin_id));
+            }
+          }
+
+          const needQty = Math.max(0, Math.ceil(replenishQty));
+          if (needQty > 0 && sourceBins.length > 0) {
+            let remaining = needQty;
+            for (const bin of sourceBins) {
+              if (remaining <= 0) break;
+              const srcBinId = Number(bin.stock_location_id);
+              if (existingSources.includes(srcBinId)) continue;
+
+              const taskQty = Math.min(remaining, config.pickface_max);
+              try {
+                await createReplenTask(skuId, taskQty, triggerOrderId, srcBinId);
+                remaining -= taskQty;
+                console.log(`[PickfaceSplitter] Created replenishment task: SKU #${skuId}, qty ${taskQty}, source #${srcBinId}, order #${triggerOrderId}`);
+              } catch (e: any) {
+                console.error(`[PickfaceSplitter] Failed to create replenishment task for SKU #${skuId}: ${e.message}`);
+              }
+            }
           }
         }
       }

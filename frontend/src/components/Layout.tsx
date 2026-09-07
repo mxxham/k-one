@@ -79,6 +79,7 @@ const NAV: NavSection[] = [
       { to: '/replenishment', label: 'Replenishment', icon: PackageSearch, depts: ['inventory', 'all'] },
       { to: '/putaway-tasks', label: 'Putaway Tasks', icon: ListChecks, depts: ['inbound', 'inventory', 'ops', 'all'] },
       { to: '/putaway-scan', label: 'Putaway Saya', icon: Smartphone, depts: ['inbound', 'outbound', 'inventory', 'ops', 'all'] },
+      { to: '/pickface-management', label: 'Pickface Mgmt', icon: Warehouse, depts: ['inventory', 'all'] },
     ],
   },
   {
@@ -151,6 +152,7 @@ export default function Layout() {
       reconciliation: 'Reconciliation',
       replenishment: 'Replenishment',
       'putaway-scan': 'Putaway Saya',
+      'pickface-management': 'Pickface Management',
       products: 'Products',
       customers: 'Customers',
       locations: 'Locations',

@@ -144,6 +144,48 @@ class Picklist {
                     $locCode  = $lr['location_code'] ?? '';
                     $locLevel = isset($locCode[4]) ? strtoupper($locCode[4]) : 'B';
                     $qty      = floatval($lr['alloc_qty']);
+
+                    $dupStmt = $db->prepare(
+                        "SELECT pki.id FROM picklist_items pki
+                         JOIN picklists pk ON pk.id = pki.picklist_id
+                         WHERE pki.product_id = ?
+                           AND pki.location = ?
+                           AND pki.status = 'Pending'
+                           AND pk.status IN ('Draft', 'Released', 'Confirmed')
+                         LIMIT 1"
+                    );
+                    $dupStmt->execute([$item['product_id'], $locCode]);
+                    if ($dupStmt->fetchColumn()) {
+                        $nextBinStmt = $db->prepare(
+                            "SELECT sl.id as stock_location_id, sl.location_code, sl.batch_number
+                             FROM stock_locations sl
+                             JOIN stock st ON st.id = sl.stock_id
+                             WHERE st.product_id = ?
+                               AND sl.status IN ('Available', 'Reserved')
+                               AND (st.hold_status = 'available' OR st.hold_status IS NULL)
+                               AND sl.id NOT IN (
+                                   SELECT pki.stock_location_id FROM picklist_items pki
+                                   JOIN picklists pk ON pk.id = pki.picklist_id
+                                   WHERE pki.product_id = ?
+                                     AND pki.status = 'Pending'
+                                     AND pk.status IN ('Draft', 'Released', 'Confirmed')
+                                     AND pki.stock_location_id IS NOT NULL
+                               )
+                             ORDER BY sl.location_code
+                             LIMIT 1"
+                        );
+                        $nextBinStmt->execute([$item['product_id'], $item['product_id']]);
+                        $nextBin = $nextBinStmt->fetch();
+
+                        if ($nextBin) {
+                            $locCode = $nextBin['location_code'];
+                            $locBatch = $nextBin['batch_number'] ?? $batchNumber;
+                            $lr['stock_location_id'] = $nextBin['stock_location_id'];
+                        } else {
+                            error_log("[Picklist] Dedup: SKU #{$item['product_id']} location {$locCode} already claimed, using shared bin as fallback");
+                        }
+                    }
+
                     $plt = $uomPerPallet > 0
                          ? ($locLevel === 'A'
                             ? round($qty / $uomPerPallet, 2)
@@ -169,41 +211,109 @@ class Picklist {
                     ]);
                 }
             } else {
-                // Fallback: no outbound_item_locations — pick from available stock per pallet
-                $distribution = self::calculatePalletDistribution(
-                    $item['actual_qty'] ?: $item['quantity'],
-                    $uomPerPallet
+                // Fallback: no outbound_item_locations — use FefoAllocator bulk-first mode
+                require_once __DIR__ . '/FefoAllocator.php';
+                $orderQty = floatval($item['actual_qty'] ?: $item['quantity']);
+                $result = FefoAllocator::allocate(
+                    $item['product_id'],
+                    $orderQty,
+                    null,
+                    'bulk_first'
                 );
 
-                $availStmt = $db->prepare("SELECT sl.id, sl.location_code, sl.pallet_seq
-                        FROM stock_locations sl
-                        LEFT JOIN stock st ON st.id = sl.stock_id
-                        WHERE sl.batch_number = ?
-                          AND sl.status IN ('Available','Reserved')
-                          AND (st.hold_status = 'available' OR st.hold_status IS NULL)
-                          AND sl.id NOT IN (
-                              SELECT DISTINCT stock_location_id
-                              FROM picklist_items
-                              WHERE batch_number = ? AND stock_location_id IS NOT NULL
-                          )
-                        ORDER BY sl.location_code, sl.pallet_seq");
-                $availStmt->execute([$batchNumber, $batchNumber]);
-                $available = $availStmt->fetchAll();
+                if (!$result['sufficient'] || empty($result['allocation'])) {
+                    $fallbackStmt = $db->prepare("SELECT sl.id, sl.location_code, sl.batch_number
+                            FROM stock_locations sl
+                            LEFT JOIN stock st ON st.id = sl.stock_id
+                            WHERE sl.batch_number = ?
+                              AND sl.status IN ('Available','Reserved')
+                              AND (st.hold_status = 'available' OR st.hold_status IS NULL)
+                              AND sl.id NOT IN (
+                                  SELECT pki.stock_location_id FROM picklist_items pki
+                                  JOIN picklists pk ON pk.id = pki.picklist_id
+                                  WHERE pki.product_id = ?
+                              AND pki.status = 'Pending'
+                                     AND pk.status IN ('Draft', 'Released', 'Confirmed')
+                                     AND pki.stock_location_id IS NOT NULL
+                              )
+                            ORDER BY sl.location_code, sl.pallet_seq
+                            LIMIT 10");
+                    $fallbackStmt->execute([$batchNumber, $item['product_id']]);
+                    $available = $fallbackStmt->fetchAll();
+                } else {
+                    $claimedStmt = $db->prepare(
+                        "SELECT pki.stock_location_id FROM picklist_items pki
+                         JOIN picklists pk ON pk.id = pki.picklist_id
+                         WHERE pki.product_id = ?
+                           AND pki.status = 'Pending'
+                           AND pk.status IN ('Draft', 'Released', 'Confirmed')
+                           AND pki.stock_location_id IS NOT NULL"
+                    );
+                    $claimedStmt->execute([$item['product_id']]);
+                    $claimedIds = $claimedStmt->fetchAll(PDO::FETCH_COLUMN);
 
-                $availIdx = 0;
-                $palletSeq = 1;
-                foreach ($distribution as $pallet) {
-                    $slId = null;
-                    $locCode2 = $item['location'] ?? 'TBD';
-                    if ($availIdx < count($available)) {
-                        $slId    = $available[$availIdx]['id'];
-                        $locCode2 = $available[$availIdx]['location_code'];
-                        $availIdx++;
+                    $available = [];
+                    foreach ($result['allocation'] as $alloc) {
+                        if (in_array($alloc['stock_location_id'], $claimedIds)) continue;
+                        $available[] = [
+                            'id'            => $alloc['stock_location_id'],
+                            'location_code' => $alloc['bin_location'],
+                            'batch_number'  => $alloc['batch_number'],
+                            'alloc_qty'     => $alloc['qty_to_take'],
+                        ];
                     }
+                    if (empty($available)) {
+                        error_log("[Picklist] Fallback: all FefoAllocator bins claimed for SKU #{$item['product_id']}, querying unclaimed stock");
+                        $orderQtyLeft = $orderQty;
+                        $unclaimedStmt = $db->prepare("SELECT sl.id, sl.location_code, sl.batch_number, sl.quantity
+                                FROM stock_locations sl
+                                JOIN stock st ON st.id = sl.stock_id
+                                WHERE st.product_id = ?
+                                  AND sl.status IN ('Available','Reserved')
+                                  AND (st.hold_status = 'available' OR st.hold_status IS NULL)
+                                  AND sl.id NOT IN (
+                                      SELECT pki.stock_location_id FROM picklist_items pki
+                                      JOIN picklists pk ON pk.id = pki.picklist_id
+                                      WHERE pki.product_id = ?
+                                        AND pki.status = 'Pending'
+                                        AND pk.status IN ('Draft', 'Released', 'Confirmed')
+                                        AND pki.stock_location_id IS NOT NULL
+                                  )
+                                ORDER BY sl.location_code
+                                LIMIT 20");
+                        $unclaimedStmt->execute([$item['product_id'], $item['product_id']]);
+                        while ($uc = $unclaimedStmt->fetch()) {
+                            if ($orderQtyLeft <= 0) break;
+                            $take = min($orderQtyLeft, floatval($uc['quantity']));
+                            $available[] = [
+                                'id'            => $uc['id'],
+                                'location_code' => $uc['location_code'],
+                                'batch_number'  => $uc['batch_number'],
+                                'alloc_qty'     => $take,
+                            ];
+                            $orderQtyLeft -= $take;
+                        }
+                        if (empty($available)) {
+                            error_log("[Picklist] Fallback: no unclaimed bins for SKU #{$item['product_id']}, using shared bins");
+                            foreach ($result['allocation'] as $alloc) {
+                                $available[] = [
+                                    'id'            => $alloc['stock_location_id'],
+                                    'location_code' => $alloc['bin_location'],
+                                    'batch_number'  => $alloc['batch_number'],
+                                    'alloc_qty'     => $alloc['qty_to_take'],
+                                ];
+                            }
+                        }
+                    }
+                }
 
+                $palletSeq = 1;
+                foreach ($available as $av) {
+                    $slId    = $av['id'] ?? null;
+                    $locCode2 = $av['location_code'] ?? $item['location'] ?? 'TBD';
+                    $qty2     = floatval($av['alloc_qty'] ?? 0);
                     $locLevel2 = isset($locCode2[4]) ? strtoupper($locCode2[4]) : 'B';
-                    $qty2      = floatval($pallet['quantity']);
-                    $plt2      = $uomPerPallet > 0
+                    $plt2     = $uomPerPallet > 0
                                ? ($locLevel2 === 'A'
                                   ? round($qty2 / $uomPerPallet, 2)
                                   : (int)ceil($qty2 / $uomPerPallet))
@@ -218,7 +328,7 @@ class Picklist {
                         $picklistId,
                         $item['id'],
                         $item['product_id'],
-                        $batchNumber, $batchNumber,
+                        $av['batch_number'] ?? $batchNumber, $av['batch_number'] ?? $batchNumber,
                         $locCode2,
                         $qty2,
                         $item['uom_type'],
@@ -228,6 +338,129 @@ class Picklist {
                         $item['blocked_on_replen_task_id'] ?? null
                     ]);
                 }
+            }
+        }
+
+        // ── Pickface Replenishment Trigger ──────────────────────────────────
+        // After all picklist items are created, check each SKU for pickface
+        // replenishment needs.  This runs for BOTH single-order and wave-mode
+        // picklists (the shared insertion path).
+        require_once __DIR__ . '/PickfaceSplitter.php';
+
+        $skuStmt = $db->prepare("
+            SELECT product_id, SUM(quantity) as total_qty
+            FROM picklist_items
+            WHERE picklist_id = ?
+            GROUP BY product_id
+        ");
+        $skuStmt->execute([$picklistId]);
+        $skuRows = $skuStmt->fetchAll();
+
+        foreach ($skuRows as $skuRow) {
+            $skuId    = (int)$skuRow['product_id'];
+            $totalQty = (float)$skuRow['total_qty'];
+
+            // Get pickface config — skip if SKU has no outbound pickface
+            $config = PickfaceSplitter::getPickfaceConfig($skuId, $db);
+            if (!$config) continue;
+
+            // Split order line: bulk_qty picked from bulk (B-E), pickface_qty from pickface (A-level)
+            $split = PickfaceSplitter::splitOrderLine($totalQty, $config['pickface_max']);
+
+            // Only check replenishment for the pickface_qty (remainder picked from A-level)
+            $pickfaceQty = $split['pickface_qty'];
+            if ($pickfaceQty <= 0) continue;
+
+            // Check if replenishment is needed (projected_on_hand <= pickface_min)
+            $check = PickfaceSplitter::checkReplenishment($skuId, $pickfaceQty, $db);
+
+            if ($check['needs_replenishment']) {
+                $replenishQty = $config['pickface_max'] - $check['projected_on_hand'];
+            } else {
+                $replenishQty = 0;
+            }
+
+            // Always check picklist item source bins — even if a replen task already exists,
+            // we need to ensure each source bin has its own task (FefoAllocator may have
+            // created one from a different bin)
+            {
+                $triggerStmt = $db->prepare("
+                    SELECT oi.outbound_order_id
+                    FROM picklist_items pki
+                    JOIN outbound_items oi ON oi.id = pki.outbound_item_id
+                    WHERE pki.picklist_id = ? AND pki.product_id = ?
+                    LIMIT 1
+                ");
+                $triggerStmt->execute([$picklistId, $skuId]);
+                $triggerOrderId = $triggerStmt->fetchColumn();
+                $triggerOrderId = $triggerOrderId ? (int)$triggerOrderId : null;
+
+                // Get picklist item source bins (bulk B-E levels only)
+                $binStmt = $db->prepare("
+                    SELECT DISTINCT lm.id AS stock_location_id, SUM(pki.quantity) as bin_qty
+                    FROM picklist_items pki
+                    JOIN stock_locations sl ON sl.id = pki.stock_location_id
+                    JOIN location_master lm ON lm.location_code = sl.location_code
+                    WHERE pki.picklist_id = ? AND pki.product_id = ?
+                      AND lm.row_name IN ('B', 'C', 'D', 'E')
+                    GROUP BY lm.id
+                ");
+                $binStmt->execute([$picklistId, $skuId]);
+                $sourceBins = $binStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+                // Check which source bins already have pending replen tasks
+                $existingSources = [];
+                if (!empty($sourceBins)) {
+                    $binIds = array_column($sourceBins, 'stock_location_id');
+                    $placeholders = implode(',', array_fill(0, count($binIds), '?'));
+                    $existStmt = $db->prepare("
+                        SELECT DISTINCT source_bin_id FROM replen_task
+                        WHERE sku_id = ? AND destination_bin_id = ?
+                          AND status IN ('pending', 'printed', 'in_progress')
+                          AND source_bin_id IN ($placeholders)
+                    ");
+                    $existParams = array_merge([$skuId, $config['pickface_bin_id']], $binIds);
+                    $existStmt->execute($existParams);
+                    $existingSources = array_map('intval', $existStmt->fetchAll(\PDO::FETCH_COLUMN));
+                }
+
+                // Only create replenishment tasks when pickface is running low
+                // The task qty is the DEFICIT (less than full pallet), not a full pallet
+                $needQty = max(0, (int)ceil($replenishQty));
+                if ($needQty > 0 && !empty($sourceBins)) {
+                    foreach ($sourceBins as $bin) {
+                        if ($needQty <= 0) break;
+                        $srcBinId = (int)$bin['stock_location_id'];
+                        if (in_array($srcBinId, $existingSources, true)) continue;
+
+                        $taskQty = min($needQty, $config['pickface_max']);
+                        try {
+                            PickfaceSplitter::createReplenTask(
+                                $skuId,
+                                $taskQty,
+                                $triggerOrderId,
+                                $db,
+                                $srcBinId
+                            );
+                            $needQty -= $taskQty;
+                            error_log("[PickfaceSplitter] Created replenishment task: SKU #{$skuId}, qty {$taskQty}, source #{$srcBinId}, order #{$triggerOrderId}");
+                        } catch (\Throwable $e) {
+                            error_log("[PickfaceSplitter] Failed to create replenishment task for SKU #{$skuId}: " . $e->getMessage());
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Partial Pallet Consolidation ─────────────────────────────────
+        // After replenishment triggers, scan all SKUs for partial pallets
+        // in bulk bins (B-E) and move them down to pickface (A-level).
+        foreach ($skuRows as $skuRow) {
+            $skuId = (int)$skuRow['product_id'];
+            try {
+                PickfaceSplitter::consolidatePartialPallets($skuId, $db);
+            } catch (\Throwable $e) {
+                error_log("[PickfaceSplitter] consolidatePartialPallets failed for SKU #{$skuId}: " . $e->getMessage());
             }
         }
     }

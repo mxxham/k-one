@@ -48,7 +48,7 @@ class AutoReplenishment {
         $skipped   = [];
         $failed    = [];
 
-        // 5. Process each shortage
+        // 5. Process each shortage independently — avoid N x M by not re-running detectShortages()
         foreach ($shortages as $s) {
             $productId    = (int)$s['product_id'];
             $locationCode = $s['pick_face_location'];
@@ -68,27 +68,21 @@ class AutoReplenishment {
                 continue;
             }
 
-            // 5b. Generate transfer via Replenishment class (system user_id=1)
+            // 5b. Generate transfer for this single shortage only
             try {
-                $result = Replenishment::generateTransfersFull(1);
+                $transfer = self::generateSingleTransfer($s, 1);
 
-                if (!empty($result['generated'])) {
-                    $transfer = end($result['generated']);
+                if ($transfer) {
                     $transferId = (int)$transfer['transfer_id'];
                     self::logAction($productId, $locationCode, $triggerType, $shortageQty, $transferId, 'generated');
                     $generated[] = $transfer;
-                } elseif (!empty($result['skipped'])) {
-                    $skip = end($result['skipped']);
-                    self::logAction($productId, $locationCode, $triggerType, $shortageQty, null, 'skipped', $skip['reason'] ?? null);
-                    $skipped[] = $skip;
-                } elseif (!empty($result['insufficient'])) {
-                    $ins = end($result['insufficient']);
-                    self::logAction($productId, $locationCode, $triggerType, $shortageQty, null, 'failed', 'Insufficient source stock');
-                    $failed[] = [
-                        'product_id'    => $productId,
-                        'location_code' => $locationCode,
-                        'shortage'      => $shortageQty,
-                        'reason'        => 'Insufficient source stock',
+                } else {
+                    self::logAction($productId, $locationCode, $triggerType, $shortageQty, null, 'skipped', 'No transfer generated');
+                    $skipped[] = [
+                        'product_id'      => $productId,
+                        'location_code'   => $locationCode,
+                        'shortage'        => $shortageQty,
+                        'reason'          => 'No transfer generated',
                     ];
                 }
             } catch (\Throwable $e) {
@@ -384,6 +378,57 @@ class AutoReplenishment {
             return $value !== false ? $value : $default;
         } catch (\Throwable $e) {
             return $default;
+        }
+    }
+
+    /**
+     * Generate a single replenishment transfer for one shortage item.
+     * Avoids calling Replenishment::generateTransfersFull() which re-runs
+     * detectShortages() — fixing the N x M complexity bug.
+     *
+     * @param array $shortage Shortage row from detectShortages()
+     * @param int   $userId   User ID for the transfer
+     * @return array|null Transfer result array or null if skipped/insufficient
+     */
+    private static function generateSingleTransfer(array $shortage, int $userId): ?array {
+        $db = db();
+
+        $needed = $shortage['shortage'];
+        $sourceRows = Replenishment::_findSourceRows(
+            $shortage['product_id'],
+            $shortage['pick_face_location'],
+            $needed
+        );
+        $available = array_sum(array_column($sourceRows, 'take_qty'));
+
+        if ($available < $needed - 0.001) {
+            return null;
+        }
+
+        try {
+            $transferId = BinTransfer::create([
+                'transfer_date'    => date('Y-m-d'),
+                'product_id'       => $shortage['product_id'],
+                'from_location'    => $sourceRows[0]['location'],
+                'to_location'      => $shortage['pick_face_location'],
+                'quantity'         => $needed,
+                'uom'              => $shortage['uom_type'],
+                'reason'           => "Auto-replenishment pick-face {$shortage['pick_face_location']} (min {$shortage['min_qty']})",
+                'transfer_type'    => 'REPLENISHMENT',
+                'pick_face_target_id' => $shortage['target_id'],
+                'is_breakdown'     => 1,
+                'source_rows'      => $sourceRows,
+            ]);
+
+            return [
+                'target_id'          => (int)$shortage['target_id'],
+                'pick_face_location' => $shortage['pick_face_location'],
+                'transfer_id'        => $transferId,
+                'transfer_number'    => Replenishment::_getTransferNumber($transferId),
+                'quantity'           => $needed,
+            ];
+        } catch (\Throwable $e) {
+            return null;
         }
     }
 }

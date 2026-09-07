@@ -231,6 +231,11 @@ class Wave {
             if ($o['status'] !== 'Open') {
                 throw new ApiException('Order must be Open to add to wave (current: ' . $o['status'] . ')', 409);
             }
+            $itemCount = $db->prepare("SELECT COUNT(*) FROM outbound_items WHERE outbound_order_id = ?");
+            $itemCount->execute([$orderId]);
+            if ((int)$itemCount->fetchColumn() === 0) {
+                throw new ApiException('Order tidak memiliki item — tidak bisa ditambahkan ke wave.', 400);
+            }
             // Idempotent insert
             $db->prepare(
                 "INSERT IGNORE INTO wave_orders (wave_id, outbound_order_id) VALUES (?, ?)"
@@ -258,6 +263,7 @@ class Wave {
                 throw new ApiException('Wave must be in Planning to release (current: ' . $w['status'] . ')', 409);
             }
             $db->prepare("UPDATE waves SET status = 'Active' WHERE id = ?")->execute([$waveId]);
+            $db->prepare("UPDATE picklists SET status = 'Confirmed', updated_at = NOW() WHERE wave_id = ? AND status = 'Draft'")->execute([$waveId]);
             $db->commit();
             return ['wave_id' => $waveId, 'status' => 'Active'];
         } catch (\Throwable $e) {

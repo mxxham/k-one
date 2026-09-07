@@ -59,6 +59,24 @@ class PickingService
                    ->execute([$newQty, (int)$stockLoc['id']]);
             }
 
+            // Deduct from stock table (sync with stock_locations)
+            $productId = (int)$item['product_id'];
+            $stockStmt = $db->prepare(
+                "SELECT id, quantity FROM stock
+                 WHERE product_id = ? AND batch_number = ? AND location = ? AND stock_status = 'Available' AND quantity >= ?"
+            );
+            $stockStmt->execute([$productId, $item['batch_number'] ?? null, $item['bin_location'], $qty]);
+            $stockRow = $stockStmt->fetch();
+            if ($stockRow) {
+                $newStockQty = round((float)$stockRow['quantity'] - $qty, 6);
+                if ($newStockQty < 1e-9) {
+                    $db->prepare("DELETE FROM stock WHERE id = ?")->execute([(int)$stockRow['id']]);
+                } else {
+                    $db->prepare("UPDATE stock SET quantity = ?, updated_at = NOW() WHERE id = ?")
+                       ->execute([$newStockQty, (int)$stockRow['id']]);
+                }
+            }
+
             // Update picklist item
             $db->prepare(
                 "UPDATE picklist_items

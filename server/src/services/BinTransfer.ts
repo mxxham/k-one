@@ -294,7 +294,7 @@ export class BinTransfer {
 
       await BinTransfer._addLedger(productId, 'TRANSFER_OUT', 'BinTransfer', transferId,
         transfer.transfer_number, usedBatch, 0, qty, uom, fromLoc,
-        `Bin Transfer ke ${toLoc}`, currentBalance);
+        `Bin Transfer ke ${toLoc}`, currentBalance - qty);
 
       await BinTransfer._addLedger(productId, 'TRANSFER_IN', 'BinTransfer', transferId,
         transfer.transfer_number, usedBatch, qty, 0, uom, toLoc,

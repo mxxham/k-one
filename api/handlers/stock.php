@@ -95,7 +95,7 @@ function handle_stock($action) {
             }
             $grouped = array_values($grouped);
             $total = count($grouped);
-            [$page, $perPage] = page_params(50);
+            [$page, $perPage] = page_params(200);
             $offset = ($page - 1) * $perPage;
             $rows = array_slice($grouped, $offset, $perPage);
             json_out(['rows' => $rows, 'summary' => Stock::getSummary()] + paginationMeta($total, $page, $perPage));

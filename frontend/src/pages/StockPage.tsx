@@ -24,6 +24,7 @@ import { Card, EmptyState } from '@/components/Card';
 import StatusBadge from '@/components/StatusBadge';
 import Modal from '@/components/Modal';
 import Spinner from '@/components/Spinner';
+import { PageState } from '@/components/PageState';
 import { Field, TextInput, Select, TextArea } from '@/components/Field';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/context/AuthContext';
@@ -380,6 +381,7 @@ export default function StockPage() {
   };
 
   return (
+    <PageState loading={loading} onRetry={loadList} empty={rows.length === 0} emptyMessage="Tidak ada data stok">
     <div>
       <PageHeader
         title="Stock"
@@ -496,12 +498,7 @@ export default function StockPage() {
         <div className="px-5 py-3.5 border-b border-gray-100 bg-brand-50/50 flex items-center justify-between">
           <h3 className="font-bold text-sm text-brand-700">Daftar Stok</h3>
         </div>
-        {loading ? (
-          <Spinner label="Memuat stok…" />
-        ) : rows.length === 0 ? (
-          <EmptyState message="Tidak ada data stok" />
-        ) : (
-          <div className="overflow-x-auto">
+        <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[1200px]">
               <thead>
                 <tr className="bg-brand-50 text-[11px] uppercase tracking-wider text-brand-700">
@@ -570,7 +567,6 @@ export default function StockPage() {
               </tbody>
             </table>
           </div>
-        )}
       </div>
 
       <Card title="Stok per Area">
@@ -968,5 +964,6 @@ export default function StockPage() {
         )}
       </Modal>
     </div>
+    </PageState>
   );
 }

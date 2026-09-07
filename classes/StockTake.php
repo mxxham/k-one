@@ -419,7 +419,10 @@ class StockTake {
     }
 
     public static function saveCounters(int $id, array $counters): void {
-        $db   = db();
+        $db = db();
+        $st = self::getById($id);
+        if (!$st) throw new \Exception("Stock take tidak ditemukan");
+        if ($st['status'] !== 'Counting') throw new \Exception("Status harus Counting untuk menyimpan counter");
         $stmt = $db->prepare("UPDATE stock_take_items SET counter_1=?, counter_2=?, counter_3=? WHERE id=? AND stock_take_id=?");
         foreach ($counters as $itemId => $v) {
             $c1 = ($v['c1'] !== '' && $v['c1'] !== null) ? floatval($v['c1']) : null;

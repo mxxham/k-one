@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, RefreshCw, FileInput, Search } from 'lucide-react';
+import { Plus, RefreshCw, FileInput, Search, ClipboardPaste } from 'lucide-react';
 import { api } from '@/lib/api';
 import { fmtDate, fmtNum } from '@/lib/format';
 import { useToast } from '@/components/Toast';
@@ -276,11 +276,26 @@ export default function PicklistList() {
                     onChange={(e) => handleOutboundSearch(e.target.value)}
                     onFocus={() => outboundResults.length && setOutboundDropdownOpen(true)}
                     placeholder="Cari outbound order…"
-                    className="pl-9"
+                    className="pl-9 pr-10"
                     autoFocus
                   />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const text = await navigator.clipboard.readText();
+                        if (text) {
+                          handleOutboundSearch(text);
+                        }
+                      } catch { /* noop */ }
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-brand-600 transition-colors"
+                    title="Paste from clipboard"
+                  >
+                    <ClipboardPaste className="w-4 h-4" />
+                  </button>
                   {outboundSearching && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-brand-600 font-semibold">Searching...</span>
+                    <span className="absolute right-10 top-1/2 -translate-y-1/2 text-[11px] text-brand-600 font-semibold">Searching...</span>
                   )}
                 </>
               )}

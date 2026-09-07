@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState, memo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Warehouse, Droplets, Boxes, Timer, AlertTriangle, ArrowDownToLine,
   PackageOpen, Truck, MapPin, Plus, FileText, ClipboardCheck, TrendingUp, TrendingDown,
@@ -53,6 +53,329 @@ function safeJson(v: any): any {
 const TH = 'px-3 py-2.5 font-bold whitespace-nowrap';
 const TD = 'px-3 py-2.5 whitespace-nowrap';
 
+const KpiRow1 = memo(function KpiRow1({ kpi }: { kpi: DashboardStats['kpi'] }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+      <Link to="/stock" className="rounded-xl bg-gradient-to-br from-brand-500 to-brand-300 p-4 text-white shadow-sm block no-underline">
+        <div className="flex items-center justify-between">
+          <Droplets className="w-5 h-5 opacity-80" />
+          {kpi?.total_drums_trend !== undefined && (
+            <div className={`flex items-center gap-1 text-xs font-semibold ${kpi.total_drums_trend >= 0 ? 'text-white/90' : 'text-white/90'}`}>
+              {kpi.total_drums_trend >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+              {Math.abs(kpi.total_drums_trend).toFixed(1)}%
+            </div>
+          )}
+        </div>
+        <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi?.total_qty ?? kpi?.total_drums, 0)}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Total Qty</div>
+      </Link>
+
+      <Link to="/locations" className="rounded-xl bg-gradient-to-br from-[#0d1f1f] to-brand-700 p-4 text-white shadow-sm block no-underline">
+        <Boxes className="w-5 h-5 opacity-80" />
+        <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi?.total_pallets, 0)}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Total Pallets</div>
+        {kpi?.total_pallets_utilization != null && kpi.total_pallets_utilization > 0 && (
+          <div className="text-xs opacity-75 mt-1">{kpi.total_pallets_utilization}% capacity</div>
+        )}
+      </Link>
+
+      <Link to="/locations" className="rounded-xl bg-gradient-to-br from-purple-600 to-purple-400 p-4 text-white shadow-sm block no-underline">
+        <MapPin className="w-5 h-5 opacity-80" />
+        <div className="text-2xl font-extrabold mt-2">
+          {(kpi?.total_locations ?? 0) > 0 ? Math.round(((kpi?.occupied_locations ?? 0) / (kpi?.total_locations ?? 1)) * 100) : 0}%
+        </div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Location Utilization</div>
+        <div className="text-xs opacity-75 mt-1">{kpi?.occupied_locations || 0}/{kpi?.total_locations || 0} occupied</div>
+      </Link>
+
+      <Link to="/stock?filter=aging" className="rounded-xl bg-gradient-to-br from-amber-600 to-amber-400 p-4 text-white shadow-sm block no-underline">
+        <Timer className="w-5 h-5 opacity-80" />
+        <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi?.aging_batch_count || 0, 0)}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Aging Inventory</div>
+        <div className="text-xs opacity-75 mt-1">{fmtNum(kpi?.aging_quantity || 0, 0)} units, 90+ days</div>
+      </Link>
+    </div>
+  );
+});
+
+const KpiRow2 = memo(function KpiRow2({ kpi, pipeline }: { kpi: DashboardStats['kpi']; pipeline: number }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+      <Link to="/inbound" className="rounded-xl bg-gradient-to-br from-sky-600 to-sky-400 p-4 text-white shadow-sm block no-underline">
+        <ArrowDownToLine className="w-5 h-5 opacity-80" />
+        <div className="text-2xl font-extrabold mt-2">{pipeline}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Inbound Pipeline</div>
+        <div className="text-xs opacity-75 mt-1">{kpi?.receiving_now || 0} receiving</div>
+      </Link>
+
+      <Link to="/picklist" className="rounded-xl bg-gradient-to-br from-violet-600 to-violet-400 p-4 text-white shadow-sm block no-underline">
+        <PackageOpen className="w-5 h-5 opacity-80" />
+        <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi?.pending_outbound || 0, 0)}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Pending Picks</div>
+      </Link>
+
+      <Link to="/outbound" className="rounded-xl bg-gradient-to-br from-brand-600 to-brand-400 p-4 text-white shadow-sm block no-underline">
+        <Truck className="w-5 h-5 opacity-80" />
+        <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi?.shipped_today_orders || 0, 0)}</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Shipped Today</div>
+        <div className="text-xs opacity-75 mt-1">{fmtNum(kpi?.shipped_today_quantity || 0, 0)} units</div>
+      </Link>
+
+      <Link to="/reports" className={`rounded-xl bg-gradient-to-br ${(kpi?.pick_accuracy_percent ?? 100) >= 95 ? 'from-emerald-600 to-emerald-400' : 'from-orange-600 to-orange-400'} p-4 text-white shadow-sm block no-underline`}>
+        <Warehouse className="w-5 h-5 opacity-80" />
+        <div className="text-2xl font-extrabold mt-2">{kpi?.pick_accuracy_percent ?? 100}%</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Pick Accuracy</div>
+        <div className="text-xs opacity-75 mt-1">{kpi?.pick_accurate_lines || 0}/{kpi?.pick_total_lines || 0} lines</div>
+      </Link>
+    </div>
+  );
+});
+
+const WorkQueues = memo(function WorkQueues({ pendingInbound, pendingOutbound }: { pendingInbound: any[]; pendingOutbound: any[] }) {
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
+      <Card
+        title="Inbound — Dues In / Receiving"
+        actions={
+          <Link to="/inbound" className="text-xs font-semibold text-brand-600 hover:underline">
+            Lihat semua
+          </Link>
+        }
+      >
+        {pendingInbound.length === 0 ? (
+          <EmptyState message="Tidak ada inbound menunggu" />
+        ) : (
+          <div className="overflow-x-auto -mx-5 px-5">
+            <table className="w-full text-sm">
+              <thead className="bg-brand-50">
+                <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
+                  <th className={TH}>Order</th>
+                  <th className={TH}>Status</th>
+                  <th className={TH}>Tanggal</th>
+                  <th className={TH}>Shipment</th>
+                  <th className={TH}>Carrier</th>
+                  <th className={TH}>Items</th>
+                  <th className={TH}>Qty</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {pendingInbound.map((o: any) => (
+                  <tr key={o.id} className="hover:bg-brand-50 transition-colors">
+                    <td className={TD}>
+                      <Link to={`/inbound/${o.id}`} className="font-semibold text-brand-600 hover:underline">
+                        {o.order_number}
+                      </Link>
+                    </td>
+                    <td className={TD}>
+                      <StatusBadge status={o.status} />
+                    </td>
+                    <td className={TD}>{fmtDate(o.order_date)}</td>
+                    <td className={TD}>{o.shipment_no || '—'}</td>
+                    <td className={TD}>{o.carrier_name || '—'}</td>
+                    <td className={TD}>{fmtNum(o.line_count, 0)}</td>
+                    <td className={`${TD} font-semibold`}>{fmtNum(o.total_qty, 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Card
+        title="Outbound — Open / Picking"
+        actions={
+          <Link to="/outbound" className="text-xs font-semibold text-brand-600 hover:underline">
+            Lihat semua
+          </Link>
+        }
+      >
+        {pendingOutbound.length === 0 ? (
+          <EmptyState message="Tidak ada outbound terbuka" />
+        ) : (
+          <div className="overflow-x-auto -mx-5 px-5">
+            <table className="w-full text-sm">
+              <thead className="bg-brand-50">
+                <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
+                  <th className={TH}>Order</th>
+                  <th className={TH}>Status</th>
+                  <th className={TH}>Tanggal</th>
+                  <th className={TH}>Shipment</th>
+                  <th className={TH}>Items</th>
+                  <th className={TH}>Qty</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {pendingOutbound.map((o: any) => (
+                  <tr key={o.id} className="hover:bg-brand-50 transition-colors">
+                    <td className={TD}>
+                      <Link to={`/outbound/${o.id}`} className="font-semibold text-brand-600 hover:underline">
+                        {o.order_number}
+                      </Link>
+                    </td>
+                    <td className={TD}>
+                      <StatusBadge status={o.status} />
+                    </td>
+                    <td className={TD}>{fmtDate(o.order_date)}</td>
+                    <td className={TD}>{o.shipment_number || '—'}</td>
+                    <td className={TD}>{fmtNum(o.line_count, 0)}</td>
+                    <td className={`${TD} font-semibold`}>{fmtNum(o.total_qty, 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+});
+
+const StockSummaryCard = memo(function StockSummaryCard({ stockSummary }: { stockSummary: StockSummaryRow[] }) {
+  return (
+    <Card title="Stock Summary">
+      {stockSummary.length === 0 ? (
+        <EmptyState message="Tidak ada data stok" />
+      ) : (
+        <div className="overflow-x-auto -mx-5 px-5">
+          <table className="w-full text-sm">
+            <thead className="bg-brand-50">
+              <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
+                <th className={TH}>Kode</th>
+                <th className={TH}>Produk</th>
+                <th className={TH}>UOM</th>
+                <th className={TH}>Batch</th>
+                <th className={TH}>Total Qty</th>
+                <th className={TH}>Total Pallet</th>
+                <th className={TH}>Exp Terdekat</th>
+                <th className={TH}>Segera Exp</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {stockSummary.map((r: any) => (
+                <tr key={r.id} className="hover:bg-brand-50 transition-colors">
+                  <td className={TD}>
+                    <Link to={`/stock?q=${encodeURIComponent(r.product_code)}`} className="font-semibold text-brand-600 hover:underline">
+                      {r.product_code}
+                    </Link>
+                  </td>
+                  <td className={TD}>{r.product_name}</td>
+                  <td className={TD}>{r.uom_type || '—'}</td>
+                  <td className={TD}>{r.batches ?? '—'}</td>
+                  <td className={`${TD} font-semibold`}>{fmtNum(r.total_qty, 0)}</td>
+                  <td className={TD}>{fmtNum(r.total_pallet, 0)}</td>
+                  <td className={TD}>{expiryCell(r.nearest_expiry)}</td>
+                  <td className={TD}>
+                    {Number(r.expiring_count) > 0 ? (
+                      <span className="inline-flex px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold">
+                        {r.expiring_count}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+});
+
+const MonthlyActivityAisles = memo(function MonthlyActivityAisles({
+  monthly,
+  maxQty,
+  stockByLocation,
+  onOpenAisle,
+}: {
+  monthly: MonthlyActivity[];
+  maxQty: number;
+  stockByLocation: StockByLocationRow[];
+  onOpenAisle: (aisle: string) => void;
+}) {
+  const navigate = useNavigate();
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <Card title="Monthly Activity">
+        <div className="flex items-center gap-4 text-[11px] text-gray-500 mb-3">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm bg-brand-500" /> Inbound
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm bg-amber-400" /> Outbound
+          </span>
+        </div>
+        {monthly.length === 0 ? (
+          <EmptyState message="Belum ada aktivitas bulanan" />
+        ) : (
+          <div className="flex items-end gap-1.5 h-40">
+            {monthly.map((m: any) => {
+              const inQ = Number(m.inbound_qty) || 0;
+              const outQ = Number(m.outbound_qty) || 0;
+              const ml = String(m.month || '');
+              const monthLabel = /^\d{4}-\d{2}/.test(ml)
+                ? new Date(`${ml}-01`).toLocaleDateString('en-GB', { month: 'short' })
+                : ml;
+              return (
+                <div key={ml} className="flex-1 flex flex-col items-center gap-1 min-w-0 cursor-pointer" onClick={() => navigate('/reports')}>
+                  <div className="flex items-end justify-center gap-1 h-28 w-full">
+                    <div
+                      className="w-2.5 rounded-t bg-brand-500 transition-all"
+                      style={{ height: `${Math.round((inQ / maxQty) * 100)}%` }}
+                      title={`Inbound ${fmtNum(inQ, 0)}`}
+                    />
+                    <div
+                      className="w-2.5 rounded-t bg-amber-400 transition-all"
+                      style={{ height: `${Math.round((outQ / maxQty) * 100)}%` }}
+                      title={`Outbound ${fmtNum(outQ, 0)}`}
+                    />
+                  </div>
+                  <span className="text-[10px] text-gray-500 truncate max-w-full">{monthLabel}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Aisle / Stock by Location">
+        {stockByLocation.length === 0 ? (
+          <EmptyState message="Tidak ada data lokasi" />
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {stockByLocation.map((l: any) => {
+              const pct = l.total_locs ? Math.round((l.occupied_locs / l.total_locs) * 100) : 0;
+              return (
+                <button
+                  key={l.aisle}
+                  onClick={() => onOpenAisle(l.aisle)}
+                  className="text-left rounded-xl border border-gray-200 p-3.5 hover:border-brand-400 hover:shadow-md transition bg-white group"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-brand-700 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5" /> Aisle {l.aisle}
+                    </span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-600">{pct}%</span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">
+                    {l.occupied_locs}/{l.total_locs} lokasi
+                  </div>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <span className="font-semibold text-gray-800">{fmtNum(l.total_qty, 0)}</span>
+                    <span className="text-xs text-gray-400">{fmtNum(l.total_pallet, 0)} pallet</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+});
+
 export default function Dashboard() {
   const { user, canAdmin } = useAuth();
   const toast = useToast();
@@ -65,18 +388,20 @@ export default function Dashboard() {
   const [aisleLoading, setAisleLoading] = useState(false);
   const [scanRows, setScanRows] = useState<ActivityLogRow[]>([]);
   const [scanLoading, setScanLoading] = useState(true);
-  const [scanError, setScanError] = useState('');
   const [abcStatus, setAbcStatus] = useState<AbcStatus | null>(null);
   const [abcLoading, setAbcLoading] = useState(true);
-  const [abcError, setAbcError] = useState('');
   const reqId = useRef(0);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const id = ++reqId.current;
     let alive = true;
-    api('dashboard', 'stats')
-      .then((res) => {
-        if (alive && id === reqId.current) setData(res as unknown as DashboardStats);
+    api('dashboard', 'overview')
+      .then((res: any) => {
+        if (!alive || id !== reqId.current) return;
+        setData((res.stats ?? res) as unknown as DashboardStats);
+        setScanRows(((res.activityLog ?? []) as ActivityLogRow[]).slice(0, 10));
+        if (res.abcStatus) setAbcStatus(res.abcStatus);
       })
       .catch((e: any) => {
         if (alive && id === reqId.current) {
@@ -85,45 +410,16 @@ export default function Dashboard() {
         }
       })
       .finally(() => {
-        if (alive && id === reqId.current) setLoading(false);
+        if (alive && id === reqId.current) {
+          setLoading(false);
+          setScanLoading(false);
+          setAbcLoading(false);
+        }
       });
-
-    if (canAdmin) {
-      api('activitylog', 'list', { params: { module: 'stock', action: 'SCAN_OVERRIDE', limit: 10 } })
-        .then((l: any) => {
-          if (alive && id === reqId.current) setScanRows((l.rows || []).slice(0, 10));
-        })
-        .catch((e: any) => {
-          if (alive && id === reqId.current) {
-            setScanError(e.message || 'Gagal memuat scan override');
-            toast('error', e.message || 'Gagal memuat scan override');
-          }
-        })
-        .finally(() => {
-          if (alive && id === reqId.current) setScanLoading(false);
-        });
-
-      api('abc', 'status')
-        .then((s: any) => {
-          if (alive && id === reqId.current) setAbcStatus(s);
-        })
-        .catch((e: any) => {
-          if (alive && id === reqId.current) {
-            setAbcError(e.message || 'Gagal memuat status ABC');
-            toast('error', e.message || 'Gagal memuat status ABC');
-          }
-        })
-        .finally(() => {
-          if (alive && id === reqId.current) setAbcLoading(false);
-        });
-    } else {
-      setScanLoading(false);
-      setAbcLoading(false);
-    }
     return () => {
       alive = false;
     };
-  }, [canAdmin]);
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -227,84 +523,10 @@ export default function Dashboard() {
           <DashboardAlerts />
 
           {/* KPI Cards - Row 1: Inventory Health */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
-            {/* Total Qty with Trend */}
-            <div className="rounded-xl bg-gradient-to-br from-brand-500 to-brand-300 p-4 text-white shadow-sm">
-              <div className="flex items-center justify-between">
-                <Droplets className="w-5 h-5 opacity-80" />
-                {kpi.total_drums_trend !== undefined && (
-                  <div className={`flex items-center gap-1 text-xs font-semibold ${kpi.total_drums_trend >= 0 ? 'text-white/90' : 'text-white/90'}`}>
-                    {kpi.total_drums_trend >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                    {Math.abs(kpi.total_drums_trend).toFixed(1)}%
-                  </div>
-                )}
-              </div>
-              <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi.total_qty ?? kpi.total_drums, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Total Qty</div>
-            </div>
-            
-            {/* Total Pallets */}
-            <div className="rounded-xl bg-gradient-to-br from-[#0d1f1f] to-brand-700 p-4 text-white shadow-sm">
-              <Boxes className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi.total_pallets, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Total Pallets</div>
-              {kpi.total_pallets_utilization != null && kpi.total_pallets_utilization > 0 && (
-                <div className="text-xs opacity-75 mt-1">{kpi.total_pallets_utilization}% capacity</div>
-              )}
-            </div>
-
-            {/* Location Utilization */}
-            <div className="rounded-xl bg-gradient-to-br from-purple-600 to-purple-400 p-4 text-white shadow-sm">
-              <MapPin className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">
-                {(kpi.total_locations ?? 0) > 0 ? Math.round(((kpi.occupied_locations ?? 0) / (kpi.total_locations ?? 1)) * 100) : 0}%
-              </div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Location Utilization</div>
-              <div className="text-xs opacity-75 mt-1">{kpi.occupied_locations || 0}/{kpi.total_locations || 0} occupied</div>
-            </div>
-
-            {/* Aging Inventory */}
-            <div className="rounded-xl bg-gradient-to-br from-amber-600 to-amber-400 p-4 text-white shadow-sm">
-              <Timer className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi.aging_batch_count || 0, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Aging Inventory</div>
-              <div className="text-xs opacity-75 mt-1">{fmtNum(kpi.aging_quantity || 0, 0)} units, 90+ days</div>
-            </div>
-          </div>
+          <KpiRow1 kpi={kpi} />
 
           {/* KPI Cards - Row 2: Today's Operations */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
-            {/* Inbound Pipeline */}
-            <div className="rounded-xl bg-gradient-to-br from-sky-600 to-sky-400 p-4 text-white shadow-sm">
-              <ArrowDownToLine className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{pipeline}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Inbound Pipeline</div>
-              <div className="text-xs opacity-75 mt-1">{kpi.receiving_now || 0} receiving</div>
-            </div>
-
-            {/* Pending Picks */}
-            <div className="rounded-xl bg-gradient-to-br from-violet-600 to-violet-400 p-4 text-white shadow-sm">
-              <PackageOpen className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi.pending_outbound || 0, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Pending Picks</div>
-            </div>
-
-            {/* Shipped Today */}
-            <div className="rounded-xl bg-gradient-to-br from-brand-600 to-brand-400 p-4 text-white shadow-sm">
-              <Truck className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi.shipped_today_orders || 0, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Shipped Today</div>
-              <div className="text-xs opacity-75 mt-1">{fmtNum(kpi.shipped_today_quantity || 0, 0)} units</div>
-            </div>
-
-            {/* Pick Accuracy */}
-            <div className={`rounded-xl bg-gradient-to-br ${(kpi.pick_accuracy_percent ?? 100) >= 95 ? 'from-emerald-600 to-emerald-400' : 'from-orange-600 to-orange-400'} p-4 text-white shadow-sm`}>
-              <Warehouse className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{kpi.pick_accuracy_percent ?? 100}%</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Pick Accuracy</div>
-              <div className="text-xs opacity-75 mt-1">{kpi.pick_accurate_lines || 0}/{kpi.pick_total_lines || 0} lines</div>
-            </div>
-          </div>
+          <KpiRow2 kpi={kpi} pipeline={pipeline} />
 
           {/* Quick Actions */}
           <div className="mb-5">
@@ -352,101 +574,7 @@ export default function Dashboard() {
           </div>
 
           {/* Work queues */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
-            <Card
-              title="Inbound — Dues In / Receiving"
-              actions={
-                <Link to="/inbound" className="text-xs font-semibold text-brand-600 hover:underline">
-                  Lihat semua
-                </Link>
-              }
-            >
-              {pendingInbound.length === 0 ? (
-                <EmptyState message="Tidak ada inbound menunggu" />
-              ) : (
-                <div className="overflow-x-auto -mx-5 px-5">
-                  <table className="w-full text-sm">
-                    <thead className="bg-brand-50">
-                      <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
-                        <th className={TH}>Order</th>
-                        <th className={TH}>Status</th>
-                        <th className={TH}>Tanggal</th>
-                        <th className={TH}>Shipment</th>
-                        <th className={TH}>Carrier</th>
-                        <th className={TH}>Items</th>
-                        <th className={TH}>Qty</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {pendingInbound.map((o: any) => (
-                        <tr key={o.id} className="hover:bg-brand-50 transition-colors">
-                          <td className={TD}>
-                            <Link to={`/inbound/${o.id}`} className="font-semibold text-brand-600 hover:underline">
-                              {o.order_number}
-                            </Link>
-                          </td>
-                          <td className={TD}>
-                            <StatusBadge status={o.status} />
-                          </td>
-                          <td className={TD}>{fmtDate(o.order_date)}</td>
-                          <td className={TD}>{o.shipment_no || '—'}</td>
-                          <td className={TD}>{o.carrier_name || '—'}</td>
-                          <td className={TD}>{fmtNum(o.line_count, 0)}</td>
-                          <td className={`${TD} font-semibold`}>{fmtNum(o.total_qty, 0)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Card>
-
-            <Card
-              title="Outbound — Open / Picking"
-              actions={
-                <Link to="/outbound" className="text-xs font-semibold text-brand-600 hover:underline">
-                  Lihat semua
-                </Link>
-              }
-            >
-              {pendingOutbound.length === 0 ? (
-                <EmptyState message="Tidak ada outbound terbuka" />
-              ) : (
-                <div className="overflow-x-auto -mx-5 px-5">
-                  <table className="w-full text-sm">
-                    <thead className="bg-brand-50">
-                      <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
-                        <th className={TH}>Order</th>
-                        <th className={TH}>Status</th>
-                        <th className={TH}>Tanggal</th>
-                        <th className={TH}>Shipment</th>
-                        <th className={TH}>Items</th>
-                        <th className={TH}>Qty</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {pendingOutbound.map((o: any) => (
-                        <tr key={o.id} className="hover:bg-brand-50 transition-colors">
-                          <td className={TD}>
-                            <Link to={`/outbound/${o.id}`} className="font-semibold text-brand-600 hover:underline">
-                              {o.order_number}
-                            </Link>
-                          </td>
-                          <td className={TD}>
-                            <StatusBadge status={o.status} />
-                          </td>
-                          <td className={TD}>{fmtDate(o.order_date)}</td>
-                          <td className={TD}>{o.shipment_number || '—'}</td>
-                          <td className={TD}>{fmtNum(o.line_count, 0)}</td>
-                          <td className={`${TD} font-semibold`}>{fmtNum(o.total_qty, 0)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Card>
-          </div>
+          <WorkQueues pendingInbound={pendingInbound} pendingOutbound={pendingOutbound} />
 
           {canAdmin && (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
@@ -460,8 +588,6 @@ export default function Dashboard() {
               >
                 {scanLoading ? (
                   <Spinner label="Memuat scan override..." />
-                ) : scanError ? (
-                  <div className="px-4 py-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">{scanError}</div>
                 ) : scanRows.length === 0 ? (
                   <EmptyState message="Belum ada scan override" />
                 ) : (
@@ -480,7 +606,7 @@ export default function Dashboard() {
                           const oldV = safeJson(r.old_value) || {};
                           const newV = safeJson(r.new_value) || {};
                           return (
-                            <tr key={r.id} className="hover:bg-brand-50 transition-colors">
+                            <tr key={r.id} className="hover:bg-brand-50 transition-colors cursor-pointer" onClick={() => navigate('/activity-log')}>
                               <td className={`${TD} text-xs text-gray-500`}>{fmtDateTime(r.created_at)}</td>
                               <td className={`${TD} font-semibold`}>{r.full_name || r.username || '—'}</td>
                               <td className={`${TD} font-mono text-xs`}>{oldV.scanned || '—'}</td>
@@ -497,8 +623,6 @@ export default function Dashboard() {
               <Card title="ABC Analysis — Status ABC">
                 {abcLoading ? (
                   <Spinner label="Memuat status ABC..." />
-                ) : abcError ? (
-                  <div className="px-4 py-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">{abcError}</div>
                 ) : abcStatus ? (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -547,132 +671,15 @@ export default function Dashboard() {
           )}
 
           {/* Stock summary */}
-          <Card title="Stock Summary">
-            {stockSummary.length === 0 ? (
-              <EmptyState message="Tidak ada data stok" />
-            ) : (
-              <div className="overflow-x-auto -mx-5 px-5">
-                <table className="w-full text-sm">
-                  <thead className="bg-brand-50">
-                    <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
-                      <th className={TH}>Kode</th>
-                      <th className={TH}>Produk</th>
-                      <th className={TH}>UOM</th>
-                      <th className={TH}>Batch</th>
-                      <th className={TH}>Total Qty</th>
-                      <th className={TH}>Total Pallet</th>
-                      <th className={TH}>Exp Terdekat</th>
-                      <th className={TH}>Segera Exp</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {stockSummary.map((r: any) => (
-                      <tr key={r.id} className="hover:bg-brand-50 transition-colors">
-                        <td className={TD}>
-                          <Link to={`/stock?q=${encodeURIComponent(r.product_code)}`} className="font-semibold text-brand-600 hover:underline">
-                            {r.product_code}
-                          </Link>
-                        </td>
-                        <td className={TD}>{r.product_name}</td>
-                        <td className={TD}>{r.uom_type || '—'}</td>
-                        <td className={TD}>{r.batches ?? '—'}</td>
-                        <td className={`${TD} font-semibold`}>{fmtNum(r.total_qty, 0)}</td>
-                        <td className={TD}>{fmtNum(r.total_pallet, 0)}</td>
-                        <td className={TD}>{expiryCell(r.nearest_expiry)}</td>
-                        <td className={TD}>
-                          {Number(r.expiring_count) > 0 ? (
-                            <span className="inline-flex px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-bold">
-                              {r.expiring_count}
-                            </span>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
+          <StockSummaryCard stockSummary={stockSummary} />
 
           {/* Monthly activity + aisles */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <Card title="Monthly Activity">
-              <div className="flex items-center gap-4 text-[11px] text-gray-500 mb-3">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-brand-500" /> Inbound
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-amber-400" /> Outbound
-                </span>
-              </div>
-              {monthly.length === 0 ? (
-                <EmptyState message="Belum ada aktivitas bulanan" />
-              ) : (
-                <div className="flex items-end gap-1.5 h-40">
-                  {monthly.map((m: any) => {
-                    const inQ = Number(m.inbound_qty) || 0;
-                    const outQ = Number(m.outbound_qty) || 0;
-                    const ml = String(m.month || '');
-                    const monthLabel = /^\d{4}-\d{2}/.test(ml)
-                      ? new Date(`${ml}-01`).toLocaleDateString('en-GB', { month: 'short' })
-                      : ml;
-                    return (
-                      <div key={ml} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-                        <div className="flex items-end justify-center gap-1 h-28 w-full">
-                          <div
-                            className="w-2.5 rounded-t bg-brand-500 transition-all"
-                            style={{ height: `${Math.round((inQ / maxQty) * 100)}%` }}
-                            title={`Inbound ${fmtNum(inQ, 0)}`}
-                          />
-                          <div
-                            className="w-2.5 rounded-t bg-amber-400 transition-all"
-                            style={{ height: `${Math.round((outQ / maxQty) * 100)}%` }}
-                            title={`Outbound ${fmtNum(outQ, 0)}`}
-                          />
-                        </div>
-                        <span className="text-[10px] text-gray-500 truncate max-w-full">{monthLabel}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
-
-            <Card title="Aisle / Stock by Location">
-              {stockByLocation.length === 0 ? (
-                <EmptyState message="Tidak ada data lokasi" />
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {stockByLocation.map((l: any) => {
-                    const pct = l.total_locs ? Math.round((l.occupied_locs / l.total_locs) * 100) : 0;
-                    return (
-                      <button
-                        key={l.aisle}
-                        onClick={() => openAisle(l.aisle)}
-                        className="text-left rounded-xl border border-gray-200 p-3.5 hover:border-brand-400 hover:shadow-md transition bg-white group"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-sm text-brand-700 flex items-center gap-1.5">
-                            <MapPin className="w-3.5 h-3.5" /> Aisle {l.aisle}
-                          </span>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-600">{pct}%</span>
-                        </div>
-                        <div className="text-xs text-gray-500 mt-2">
-                          {l.occupied_locs}/{l.total_locs} lokasi
-                        </div>
-                        <div className="flex items-center justify-between mt-1.5">
-                          <span className="font-semibold text-gray-800">{fmtNum(l.total_qty, 0)}</span>
-                          <span className="text-xs text-gray-400">{fmtNum(l.total_pallet, 0)} pallet</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
-          </div>
+          <MonthlyActivityAisles
+            monthly={monthly}
+            maxQty={maxQty}
+            stockByLocation={stockByLocation}
+            onOpenAisle={openAisle}
+          />
         </>
       )}
 

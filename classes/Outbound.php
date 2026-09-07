@@ -465,15 +465,26 @@ public static function generateNumber($db = null): string {
         } else {
             // Check if SKU has pickface config — if so, prioritize pickface allocation
             require_once __DIR__ . '/FefoAllocator.php';
+            require_once __DIR__ . '/PickfaceSplitter.php';
             $pfConfig = PickfaceSplitter::getPickfaceConfig((int)$item['product_id'], $db);
             
             if ($pfConfig) {
                 // Use pickface-priority allocation
+                // If product_code is not provided, look it up from product_id first
+                $sku = $item['product_code'] ?? null;
+                if (!$sku && isset($item['product_id'])) {
+                    $skuLookup = $db->prepare("SELECT product_code FROM products WHERE id = ? LIMIT 1");
+                    $skuLookup->execute([(int)$item['product_id']]);
+                    $skuRow = $skuLookup->fetch();
+                    $sku = $skuRow['product_code'] ?? null;
+                }
+                // Fall back to numeric ID if no product_code found
+                $allocateSku = $sku ?? (string)$item['product_id'];
                 $fefo = FefoAllocator::allocate(
-                    (string)($item['product_code'] ?? $item['product_id']),
+                    $allocateSku,
                     $quantity,
                     null,
-                    true  // pickfacePriority
+                    'bulk_first'  // bulk (B-E) first, pickface (A-level) for remainder
                 );
                 // Store replen_task_id for blocking later
                 $item['_replen_task_id'] = $fefo['replen_task_id'] ?? null;
@@ -913,6 +924,7 @@ public static function generateNumber($db = null): string {
                         AND (hold_status = 'available' OR hold_status IS NULL)
                         AND quantity > 0
                         $locFilter
+                        FOR UPDATE
                         ORDER BY
                             CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END ASC,
                             expiry_date ASC,

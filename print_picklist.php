@@ -44,61 +44,47 @@ $allDo = array_unique(array_filter($picklist['do_number'] ? [$picklist['do_numbe
 <head>
 <meta charset="UTF-8">
 <title>Pick List — <?= htmlspecialchars($picklistNo) ?></title>
+<link rel="stylesheet" href="assets/css/print-shared.css">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',system-ui,sans-serif;font-size:10pt;color:#0f172a;background:#f1f5f9;line-height:1.5}
-@page{size:A4 portrait;margin:0}
-@media print{body{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}.document{box-shadow:none;margin:0;padding:12mm 14mm;border-radius:0}tr{page-break-inside:avoid}}
+/* picklist-specific: compact overrides only */
 
-.print-bar{background:#0f2e2d;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:99}
 .print-bar-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px}
-.btns{display:flex;gap:8px}
-.btn-print{background:#fff;color:#026766;border:none;padding:8px 18px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px}
-.btn-back{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.3);padding:8px 14px;border-radius:6px;font-weight:600;font-size:12px;text-decoration:none}
 
-.document{max-width:794px;margin:20px auto;background:#fff;padding:28px 32px;box-shadow:0 1px 12px rgba(0,0,0,.06);border-radius:6px}
-@media print{.document{box-shadow:none;margin:0;padding:14mm 14mm 16mm;max-width:100%;border-radius:0}}
+.document{padding:28px 32px}
+@media print{.document{padding:12mm 14mm}}
 
-/* Header */
+/* Header - compact picklist variant */
 .doc-header{display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;margin-bottom:16px;border-bottom:2px solid #e2e8f0}
 .logo-area{display:flex;align-items:center;gap:12px}
 .logo-mark{width:44px;height:44px;background:linear-gradient(135deg,#026766,#013d3c);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;font-weight:800;flex-shrink:0}
 .company-name{font-size:18px;font-weight:800;color:#0f172a;letter-spacing:-.5px}
 .company-name span{color:#64748b;font-weight:400}
-.doc-title-block{text-align:right}
 .doc-title{font-size:20px;font-weight:800;color:#0f172a;letter-spacing:-.3px}
 .doc-subtitle{font-size:11px;color:#64748b;margin-top:1px}
 .doc-orderno{font-size:12px;font-weight:700;color:#334155;margin-top:4px;font-family:'SF Mono',Consolas,monospace}
 
-/* Info grid */
-.info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:16px}
-.info-cell{padding:10px 14px;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;background:#fff}
-.info-cell:nth-child(3n){border-right:none}
-.info-cell:nth-last-child(-n+3){border-bottom:none}
-.info-cell.span2{grid-column:span 2}
-.info-cell .lbl{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:2px}
-.info-cell .val{font-size:12px;font-weight:600;color:#0f172a;line-height:1.6}
+/* Info grid compact */
+.info-grid{margin-bottom:16px}
+.info-cell{padding:10px 14px}
+.info-cell .lbl{font-size:9px;letter-spacing:.6px}
+.info-cell .val{font-size:12px;line-height:1.6}
 .info-cell .val .sub{font-size:10px;font-weight:400;color:#94a3b8}
+.info-cell.span2{grid-column:span 2}
 
-.section-title{font-size:11px;font-weight:700;color:#334155;margin-bottom:10px;display:flex;align-items:center;gap:6px}
-.section-title::before{content:'';display:block;width:3px;height:14px;background:#026766;border-radius:2px}
-
-/* Table */
-table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:14px}
-thead th{background:#0f2e2d;color:#fff;padding:8px 10px;text-align:left;font-weight:600;font-size:9px;letter-spacing:.4px;text-transform:uppercase}
+/* Table compact */
+table{font-size:10px;margin-bottom:14px}
+thead th{padding:8px 10px;font-size:9px;letter-spacing:.4px;text-transform:uppercase}
 thead th:first-child{border-radius:6px 0 0 0}
 thead th:last-child{border-radius:0 6px 0 0}
 thead th.c{text-align:center}
 thead th.r{text-align:right}
-tbody tr{border-bottom:1px solid #f1f5f9}
-tbody tr:nth-child(even){background:#f8fafc}
-tbody td{padding:8px 10px;vertical-align:middle;line-height:1.5}
+tbody td{padding:8px 10px;line-height:1.5}
 tbody td.c{text-align:center}
 tbody td.r{text-align:right;font-weight:600}
-tfoot td{padding:10px;font-weight:700;font-size:11px;border-top:2px solid #0f2e2d;background:#f0fdfa;color:#0f172a}
+tfoot td{padding:10px;font-size:11px;color:#0f172a}
 tfoot td.r{text-align:right}
 
+/* Chip variants */
 .chip{display:inline-block;border-radius:4px;padding:2px 8px;font-family:'SF Mono',Consolas,monospace;font-size:9px;font-weight:600}
 .chip-batch{background:#f1f5f9;color:#334155;border:1px solid #e2e8f0}
 .chip-od{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}
@@ -110,15 +96,15 @@ tfoot td.r{text-align:right}
 .remarks-box{border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:16px;min-height:40px;background:#f8fafc}
 .remarks-lbl{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:4px}
 
-/* Signature */
-.sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0}
+/* Signature compact */
+.sig-grid{gap:24px;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0}
 .sig-box{padding-top:0}
 .sig-role{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:4px}
 .sig-space{height:48px}
 .sig-line{border-bottom:1px solid #cbd5e1;margin:0 0 6px}
 .sig-name{font-size:10px;color:#94a3b8;font-style:italic}
 
-.doc-footer{margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8}
+.doc-footer{font-size:9px}
 </style>
 </head>
 <body>

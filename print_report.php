@@ -39,264 +39,77 @@ $themeColors = [
 <head>
 <meta charset="UTF-8">
 <title><?= htmlspecialchars($reportTitle) ?> — Shell CKB WMS</title>
+<link rel="stylesheet" href="assets/css/print-shared.css">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  body { background: #f8fafc; }
+  @media print { .document { box-shadow: none !important; margin: 0 !important; padding: 14mm 14mm 16mm !important; max-width: 100% !important; border-radius: 0 !important; } }
 
-  * { margin:0; padding:0; box-sizing:border-box; }
-
-  body {
-    font-family: 'Inter', sans-serif;
-    font-size: 10pt;
-    color: #0f172a;
-    background: #f8fafc;
-  }
-
-  @page { size: A4; margin: 0; }
-
-  @media print {
-    .no-print  { display: none !important; }
-    body       { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .document  { box-shadow: none !important; margin: 0 !important; padding: 14mm 14mm 16mm !important; max-width: 100% !important; border-radius: 0 !important; }
-    .page-break { page-break-before: always; }
-  }
-
-  
-  .print-bar {
-    background: #0f2e2d;
-    color: #fff;
-    padding: 10px 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: sticky;
-    top: 0;
-    z-index: 999;
-    box-shadow: 0 2px 12px rgba(0,0,0,.25);
-  }
+  .print-bar { padding: 10px 24px; box-shadow: 0 2px 12px rgba(0,0,0,.25); z-index: 999; }
   .print-bar .left { display: flex; align-items: center; gap: 10px; }
-  .print-bar .left .badge {
-    background: rgba(255,255,255,.2);
-    border: 1px solid rgba(255,255,255,.4);
-    border-radius: 20px;
-    padding: 3px 12px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: .5px;
-  }
+  .print-bar .left .badge { background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.4); border-radius: 20px; padding: 3px 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
   .print-bar .title { font-weight: 700; font-size: 14px; }
-  .print-bar .btns  { display: flex; gap: 8px; }
-  .btn-print {
-    background: #fff;
-    color: #0f2e2d;
-    border: none;
-    padding: 7px 20px;
-    border-radius: 7px;
-    font-weight: 700;
-    font-size: 13px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: 'Inter', sans-serif;
-  }
-  .btn-back {
-    background: transparent;
-    color: #fff;
-    border: 1.5px solid rgba(255,255,255,.5);
-    padding: 7px 18px;
-    border-radius: 7px;
-    font-weight: 600;
-    font-size: 13px;
-    text-decoration: none;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
+  .btn-print { color: #0f2e2d; padding: 7px 20px; border-radius: 7px; font-size: 13px; display: flex; align-items: center; gap: 6px; font-family: 'Inter', sans-serif; }
+  .btn-back { background: transparent; border: 1.5px solid rgba(255,255,255,.5); padding: 7px 18px; border-radius: 7px; font-size: 13px; display: flex; align-items: center; gap: 6px; }
 
-  
-  .document {
-    max-width: 794px;
-    margin: 22px auto 40px;
-    background: #fff;
-    padding: 32px 34px;
-    box-shadow: 0 4px 30px rgba(0,0,0,.12);
-    border-radius: 6px;
-  }
+  .document { max-width: 794px; margin: 22px auto 40px; padding: 32px 34px; box-shadow: 0 4px 30px rgba(0,0,0,.12); }
+  @media print { .document { box-shadow: none; margin: 0; padding: 14mm 14mm 16mm; max-width: 100%; border-radius: 0; } }
 
-  
-  .doc-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    padding-bottom: 16px;
-    margin-bottom: 20px;
-    border-bottom: 2px solid #e2e8f0;
-  }
+  .doc-header { padding-bottom: 16px; margin-bottom: 20px; }
   .hdr-left { display: flex; align-items: center; gap: 14px; }
-  .hdr-logo {
-    width: 52px; height: 52px;
-    background: linear-gradient(135deg, #026766, #013d3c);
-    border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-  }
+  .hdr-logo { width: 52px; height: 52px; }
   .hdr-logo .logo-k { color: #fff; font-size: 26px; font-weight: 900; line-height: 1; }
   .hdr-company .name { line-height: 1.1; }
-  .hdr-company .name .nk  { font-size: 24pt; font-weight: 900; color: #026766; }
+  .hdr-company .name .nk { font-size: 24pt; font-weight: 900; color: #026766; }
   .hdr-company .name .none { font-size: 18pt; font-weight: 400; color: #026766; opacity: .7; }
   .hdr-right { text-align: right; }
-  .hdr-right .report-type {
-    font-size: 17pt;
-    font-weight: 700;
-    color: #026766;
-    letter-spacing: -.5px;
-    line-height: 1.1;
-  }
-  .hdr-right .report-sub  { font-size: 8.5pt; color: #64748b; margin-top: 3px; }
-  .hdr-right .report-date {
-    margin-top: 6px;
-    background: #e8f5e9;
-    color: #013d3c;
-    display: inline-block;
-    padding: 3px 12px;
-    border-radius: 20px;
-    font-size: 9pt;
-    font-weight: 600;
-  }
+  .hdr-right .report-type { font-size: 17pt; font-weight: 700; color: #026766; letter-spacing: -.5px; line-height: 1.1; }
+  .hdr-right .report-sub { font-size: 8.5pt; color: #64748b; margin-top: 3px; }
+  .hdr-right .report-date { margin-top: 6px; background: #e8f5e9; color: #013d3c; display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 9pt; font-weight: 600; }
 
-  
-  .sec-title {
-    font-size: 9.5pt;
-    font-weight: 700;
-    color: #026766;
-    border-left: 4px solid #026766;
-    padding-left: 8px;
-    margin: 16px 0 8px;
-    text-transform: uppercase;
-    letter-spacing: .6px;
-  }
+  .sec-title { font-size: 9.5pt; font-weight: 700; color: #026766; border-left: 4px solid #026766; padding-left: 8px; margin: 16px 0 8px; text-transform: uppercase; letter-spacing: .6px; }
 
-  
-  .summary-row {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-    margin-bottom: 18px;
-  }
-  .sum-card {
-    border-radius: 8px;
-    padding: 11px 14px;
-    text-align: center;
-  }
+  .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+  .sum-card { border-radius: 8px; padding: 11px 14px; text-align: center; }
   .sum-card .num { font-size: 18pt; font-weight: 700; line-height: 1.1; }
   .sum-card .lbl { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; opacity: .75; }
-  .sc-in  { background: #e8f5e9; color: #026766; }
+  .sc-in { background: #e8f5e9; color: #026766; }
   .sc-out { background: #fce4ec; color: #880e4f; }
   .sc-trx { background: #e3f2fd; color: #026766; }
   .sc-exp { background: #fff3e0; color: #e65100; }
 
-  
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 8.5pt;
-    margin-bottom: 18px;
-    page-break-inside: auto;
-  }
-  thead th {
-    background: #0f2e2d;
-    color: #fff;
-    padding: 7px 8px;
-    text-align: left;
-    font-weight: 600;
-    font-size: 7.5pt;
-    letter-spacing: .3px;
-    position: sticky;
-    top: 0;
-  }
+  table { font-size: 8.5pt; margin-bottom: 18px; page-break-inside: auto; }
+  thead th { padding: 7px 8px; font-size: 7.5pt; letter-spacing: .3px; position: sticky; top: 0; }
   thead th.r { text-align: right; }
   thead th.c { text-align: center; }
-
   tbody tr { page-break-inside: avoid; }
-  tbody tr:nth-child(even) { background: #f8fafc; }
-  tbody td {
-    padding: 5.5px 8px;
-    border-bottom: 1px solid #e2e8f0;
-    vertical-align: top;
-    line-height: 1.4;
-  }
+  tbody td { padding: 5.5px 8px; border-bottom: 1px solid #e2e8f0; line-height: 1.4; }
   tbody td.r { text-align: right; font-weight: 600; }
   tbody td.c { text-align: center; }
-
-  tfoot td {
-    padding: 7px 8px;
-    font-weight: 700;
-    font-size: 9pt;
-    border-top: 2px solid #0f2e2d;
-    background: #f8fafc;
-  }
+  tfoot td { font-size: 9pt; background: #f8fafc; }
   tfoot td.r { text-align: right; }
 
-  
-  .uom-badge {
-    display: inline-block;
-    padding: 1px 7px;
-    border-radius: 20px;
-    font-size: 7.5pt;
-    font-weight: 700;
-  }
-  .uom-drum   { background: #e3f2fd; color: #014f4e; }
+  .uom-badge { display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 7.5pt; font-weight: 700; }
+  .uom-drum { background: #e3f2fd; color: #014f4e; }
   .uom-carton { background: #e8f5e9; color: #026766; }
-  .uom-pail   { background: #fff8e1; color: #f57f17; }
-  .uom-ea     { background: #e0f7f7; color: #026766; }
-  .uom-bags   { background: #fff3e0; color: #e65100; }
+  .uom-pail { background: #fff8e1; color: #f57f17; }
+  .uom-ea { background: #e0f7f7; color: #026766; }
+  .uom-bags { background: #fff3e0; color: #e65100; }
 
-  
-  .tx-in  { background: #e8f5e9; color: #026766; font-weight: 700; display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 8pt; }
+  .tx-in { background: #e8f5e9; color: #026766; font-weight: 700; display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 8pt; }
   .tx-out { background: #fce4ec; color: #014f4e; font-weight: 700; display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 8pt; }
 
-  
-  .exp-crit  { color: #014f4e; font-weight: 700; }
-  .exp-warn  { color: #e65100; font-weight: 700; }
-  .exp-ok    { color: #026766; }
+  .exp-crit { color: #014f4e; font-weight: 700; }
+  .exp-warn { color: #e65100; font-weight: 700; }
+  .exp-ok { color: #026766; }
 
-  
-  .mono { font-family: 'SF Mono', Consolas, monospace; font-size: 8pt; color: #64748b; }
-
-  
-  .act-badge {
-    display: inline-block;
-    padding: 1px 8px;
-    border-radius: 4px;
-    font-size: 7.5pt;
-    font-weight: 600;
-  }
+  .act-badge { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 7.5pt; font-weight: 600; }
   .act-completed { background: #e8f5e9; color: #026766; }
-  .act-dues      { background: #fff3e0; color: #e65100; }
-  .act-default   { background: #f8fafc; color: #64748b; }
+  .act-dues { background: #fff3e0; color: #e65100; }
+  .act-default { background: #f8fafc; color: #64748b; }
 
-  
-  .doc-footer {
-    margin-top: 28px;
-    padding-top: 10px;
-    border-top: 1px solid #e2e8f0;
-    display: flex;
-    justify-content: space-between;
-    font-size: 7pt;
-    color: #94a3b8;
-  }
-  .watermark-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .watermark-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: #026766;
-    opacity: .4;
-  }
+  .doc-footer { margin-top: 28px; font-size: 7pt; }
+  .watermark-row { display: flex; align-items: center; gap: 8px; }
+  .watermark-dot { width: 8px; height: 8px; border-radius: 50%; background: #026766; opacity: .4; }
 </style>
 </head>
 <body>

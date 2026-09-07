@@ -18,7 +18,7 @@ import { fmtDateTime } from '@/lib/format';
 import { useToast } from '@/components/Toast';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, EmptyState } from '@/components/Card';
-import Spinner from '@/components/Spinner';
+import { PageState } from '@/components/PageState';
 
 interface Shortage {
   product_id: string;
@@ -378,15 +378,8 @@ const ReplenishmentPage: React.FC = () => {
 
       {/* Shortages Tab */}
       {activeTab === 'shortages' && (
-        <div>
-          {loading ? (
-            <Spinner label="Loading shortages..." />
-          ) : shortages.length === 0 ? (
-            <Card>
-              <EmptyState message="No shortages detected" />
-            </Card>
-          ) : (
-            <div className="space-y-3">
+        <PageState loading={loading} onRetry={detectShortages} empty={shortages.length === 0} emptyMessage="No shortages detected">
+          <div className="space-y-3">
               {shortages.map((shortage) => (
                 <div
                   key={`${shortage.product_id}-${shortage.pick_face_location}`}
@@ -475,21 +468,13 @@ const ReplenishmentPage: React.FC = () => {
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </PageState>
       )}
 
       {/* Suggestions Tab */}
       {activeTab === 'suggestions' && (
-        <div>
-          {loading ? (
-            <Spinner label="Loading suggestions..." />
-          ) : suggestions.length === 0 ? (
-            <Card>
-              <EmptyState message="No transfer suggestions" />
-            </Card>
-          ) : (
-            <div className="space-y-3">
+        <PageState loading={loading} onRetry={suggestTransfers} empty={suggestions.length === 0} emptyMessage="No transfer suggestions">
+          <div className="space-y-3">
               {suggestions.map((suggestion) => (
                 <div
                   key={suggestion.id}
@@ -591,17 +576,13 @@ const ReplenishmentPage: React.FC = () => {
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </PageState>
       )}
 
       {/* Auto-Replenish Tab */}
       {activeTab === 'auto-replenish' && (
-        <div className="space-y-5">
-          {autoLoading ? (
-            <Spinner label="Loading auto-replenish status..." />
-          ) : (
-            <>
+        <PageState loading={autoLoading} onRetry={loadAutoStatus} emptyMessage="Loading auto-replenish status...">
+          <div className="space-y-5">
               <Card title="Auto-Replenishment System">
                 <div className="flex items-center justify-between mb-5">
                   <p className="text-sm text-gray-500">
@@ -867,9 +848,8 @@ const ReplenishmentPage: React.FC = () => {
                   </div>
                 )}
               </Card>
-            </>
-          )}
-        </div>
+            </div>
+          </PageState>
       )}
 
       {/* History Tab */}

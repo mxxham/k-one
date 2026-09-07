@@ -253,12 +253,12 @@ export async function createReplenTask(
   skuId: number,
   pickfaceQty: number,
   orderId: number | null,
+  overrideSourceBinId?: number,
 ): Promise<number> {
   if (pickfaceQty <= 0) {
     throw new Error(`pickfaceQty must be greater than zero, got ${pickfaceQty}`);
   }
 
-  // 1. Get pickface config and destination bin
   const config = await getPickfaceConfig(skuId);
   if (!config) {
     throw new Error(`No pickface config found for SKU #${skuId}`);
@@ -266,8 +266,21 @@ export async function createReplenTask(
 
   const pickfaceBinId = config.pickface_bin_id;
 
-  // 2. Find best source bin (bulk/reserve locations, B–E levels, FEFO order)
-  const sourceBinId = await findSourceBin(skuId, pickfaceBinId, Math.ceil(pickfaceQty));
+  const existingTaskVal = await dbScalar(
+    `SELECT id FROM replen_task
+     WHERE sku_id = ?
+       AND destination_bin_id = ?
+       AND status IN ('pending', 'printed', 'in_progress')
+     LIMIT 1`,
+    [skuId, pickfaceBinId],
+  );
+  if (existingTaskVal) {
+    const existingId = Number(existingTaskVal);
+    console.log(`[PickfaceSplitter] Dedup: SKU #${skuId} already has pending task #${existingId} for bin #${pickfaceBinId}, skipping creation`);
+    return existingId;
+  }
+
+  const sourceBinId = overrideSourceBinId ?? await findSourceBin(skuId, pickfaceBinId, Math.ceil(pickfaceQty));
 
   if (!sourceBinId) {
     throw new Error(
@@ -275,12 +288,12 @@ export async function createReplenTask(
     );
   }
 
-  // 3. Acquire Redis lock on pickface_bin_id
+  // 4. Acquire Redis lock on pickface_bin_id
   const lockKey = `pickface:${pickfaceBinId}:${skuId}`;
   await redisLock.acquire(lockKey, 30);
 
   try {
-    // 4. Insert replen_task record (no nested transaction — caller already owns one)
+    // 5. Insert replen_task record (no nested transaction — caller already owns one)
     const ins = await dbExec(
       `INSERT INTO replen_task
          (sku_id, source_bin_id, destination_bin_id, qty, triggering_order_id, status, created_at)
@@ -289,7 +302,7 @@ export async function createReplenTask(
     );
     const taskId = Number((ins as any).insertId);
 
-    // 5. Enqueue BullMQ job
+    // 6. Enqueue BullMQ job
     const jobData: ReplenishmentJobData = {
       task_id: taskId,
       sku_id: skuId,
@@ -303,7 +316,7 @@ export async function createReplenTask(
 
     return taskId;
   } finally {
-    // 6. Release Redis lock
+    // 7. Release Redis lock
     await redisLock.release(lockKey);
   }
 }

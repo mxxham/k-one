@@ -14,11 +14,11 @@ class Replenishment {
     public static function list(array $params = []): array {
         $db = db();
         $blocked = self::_blockedClause('lm');
-        $sql = "SELECT lm.id AS target_id, t.id AS config_id,
+        $sql = "                SELECT lm.id AS target_id, c.id AS config_id,
                        lm.location_code, lm.row_name, lm.zone, lm.aisle,
                        s.product_id,
                        p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
-                       COALESCE(t.min_qty, 1) AS min_qty,
+                       COALESCE(c.pickface_min, 1) AS min_qty,
                        COALESCE(SUM(s.quantity),0) AS available_qty
                 FROM location_master lm
                 JOIN stock s ON s.location = lm.location_code
@@ -26,7 +26,7 @@ class Replenishment {
                     AND (s.hold_status = 'available' OR s.hold_status IS NULL)
                     AND s.quantity > 0
                 JOIN products p ON p.id = s.product_id
-                LEFT JOIN pick_face_targets t ON t.location_id = lm.id AND t.product_id = s.product_id
+                LEFT JOIN sku_pickface_config c ON c.sku_id = s.product_id AND c.pickface_bin_id = lm.id
                 WHERE lm.is_pick_face = 1
                   AND lm.row_name = 'A'
                   AND lm.is_active = 1
@@ -41,8 +41,8 @@ class Replenishment {
             $args[] = $params['location_code'];
         }
         $sql .= " GROUP BY lm.id, lm.location_code, lm.row_name, lm.zone, lm.aisle,
-                          s.product_id, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet, t.min_qty
-                  HAVING available_qty <= COALESCE(t.min_qty, 1)
+                          s.product_id, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet, c.pickface_min
+                  HAVING available_qty <= COALESCE(c.pickface_min, 1)
                   ORDER BY lm.location_code, p.product_code";
         $stmt = $db->prepare($sql);
         $stmt->execute($args);
@@ -67,16 +67,16 @@ class Replenishment {
      */
     public static function targets(array $params = []): array {
         $db = db();
-        $sql = "SELECT lm.id AS target_id, t.id AS config_id,
+        $sql = "SELECT lm.id AS target_id, c.id AS config_id,
                        lm.location_code, lm.row_name, lm.aisle, lm.zone,
                        s.product_id,
                        p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
-                       COALESCE(t.min_qty, 1) AS min_qty,
+                       COALESCE(c.pickface_min, 1) AS min_qty,
                        COALESCE(SUM(s.quantity),0) AS available_qty,
                        EXISTS(SELECT 1 FROM putaway_location_blocks b
-                              WHERE b.is_active = 1
-                                AND ((b.scope_type='location' AND b.location_code=lm.location_code)
-                                  OR (b.scope_type='aisle' AND lm.location_code LIKE CONCAT(b.aisle_prefix,'%')))
+                               WHERE b.is_active = 1
+                                 AND ((b.scope_type='location' AND b.location_code=lm.location_code)
+                                   OR (b.scope_type='aisle' AND lm.location_code LIKE CONCAT(b.aisle_prefix,'%')))
                        ) AS is_blocked
                 FROM location_master lm
                 JOIN stock s ON s.location = lm.location_code
@@ -84,7 +84,7 @@ class Replenishment {
                     AND (s.hold_status = 'available' OR s.hold_status IS NULL)
                     AND s.quantity > 0
                 JOIN products p ON p.id = s.product_id
-                LEFT JOIN pick_face_targets t ON t.location_id = lm.id AND t.product_id = s.product_id
+                LEFT JOIN sku_pickface_config c ON c.sku_id = s.product_id AND c.pickface_bin_id = lm.id
                 WHERE lm.is_pick_face = 1
                   AND lm.row_name = 'A'
                   AND lm.is_active = 1";
@@ -94,7 +94,7 @@ class Replenishment {
             $args[] = $params['location_code'];
         }
         $sql .= " GROUP BY lm.id, lm.location_code, lm.row_name, lm.aisle, lm.zone,
-                          s.product_id, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet, t.min_qty
+                          s.product_id, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet, c.pickface_min
                   ORDER BY lm.aisle, lm.location_code, p.product_code";
         $stmt = $db->prepare($sql);
         $stmt->execute($args);
@@ -117,6 +117,13 @@ class Replenishment {
      */
     private static function _findSourceRows(int $productId, string $pickFaceLocation, float $needed): array {
         $db = db();
+        $uomStmt = $db->prepare("SELECT uom_per_pallet FROM products WHERE id = ? LIMIT 1");
+        $uomStmt->execute([$productId]);
+        $uomPerPallet = max((int)$uomStmt->fetchColumn(), 1);
+
+        // Priority: partial pallets first (qty < uom_per_pallet), then FEFO,
+        // then lowest qty, then location.  This avoids draining full pallets
+        // while partials sit in reserve.
         $stmt = $db->prepare("SELECT s.*, lm.row_name AS level, lm.rack
                 FROM stock s
                 JOIN location_master lm ON lm.location_code = s.location
@@ -128,10 +135,15 @@ class Replenishment {
                   AND s.location NOT IN ('QUA_SHELL','STAGING','UNALLOCATED')
                   AND lm.row_name IN ('B','C','D','E')
                   " . self::_blockedClause('lm') . "
-                ORDER BY CASE WHEN s.expiry_date IS NULL THEN 1 ELSE 0 END,
-                         s.expiry_date ASC, s.location, s.id
+                ORDER BY
+                    CASE WHEN s.quantity < ? THEN 0 ELSE 1 END,
+                    CASE WHEN s.expiry_date IS NULL THEN 1 ELSE 0 END,
+                    s.expiry_date ASC,
+                    s.quantity ASC,
+                    s.location ASC,
+                    s.id ASC
                 LIMIT 50");
-        $stmt->execute([$productId, $pickFaceLocation]);
+        $stmt->execute([$productId, $pickFaceLocation, $uomPerPallet]);
         $rows = $stmt->fetchAll();
 
         $remaining = $needed;
@@ -157,7 +169,7 @@ class Replenishment {
      * Shortage = uom_per_pallet - available_qty.
      * Replenishment target is always the product's uom_per_pallet (Level A pick-face only).
      * Auto-discovers all Level A pick-face bins across all aisles (CA-CG).
-     * Uses pick_face_targets for per-product min_qty override (default: 1).
+     * Uses sku_pickface_config for per-product pickface_min override (default: 1).
      * Excludes blocked locations from putaway_location_blocks.
      */
     public static function detectShortages(): array {
@@ -169,7 +181,7 @@ class Replenishment {
                        lm.aisle,
                        s.product_id,
                        p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
-                       COALESCE(t.min_qty, 1) AS min_qty,
+                       COALESCE(c.pickface_min, 1) AS min_qty,
                        COALESCE(SUM(s.quantity),0) AS available_qty,
                        GREATEST(p.uom_per_pallet - COALESCE(SUM(s.quantity),0), 0) AS shortage
                 FROM location_master lm
@@ -178,14 +190,14 @@ class Replenishment {
                     AND (s.hold_status = 'available' OR s.hold_status IS NULL)
                     AND s.quantity > 0
                 JOIN products p ON p.id = s.product_id
-                LEFT JOIN pick_face_targets t ON t.location_id = lm.id AND t.product_id = s.product_id
+                LEFT JOIN sku_pickface_config c ON c.sku_id = s.product_id AND c.pickface_bin_id = lm.id
                 WHERE lm.is_pick_face = 1
                   AND lm.row_name = 'A'
                   AND lm.is_active = 1
                   $blocked
                 GROUP BY lm.id, lm.location_code, lm.aisle, s.product_id, p.product_code,
-                         p.product_name, p.uom_type, p.uom_per_pallet, t.min_qty
-                HAVING available_qty <= COALESCE(t.min_qty, 1)
+                         p.product_name, p.uom_type, p.uom_per_pallet, c.pickface_min
+                HAVING available_qty <= COALESCE(c.pickface_min, 1)
                    AND p.uom_per_pallet > available_qty
                 ORDER BY lm.location_code, p.product_code";
         $stmt = $db->prepare($sql);
@@ -455,17 +467,17 @@ class Replenishment {
         $chkP->execute([$productId]);
         if (!$chkP->fetch()) throw new Exception("Produk tidak ditemukan.");
 
-        $stmt = $db->prepare("INSERT INTO pick_face_targets (location_id, product_id, min_qty, max_qty)
+        $stmt = $db->prepare("INSERT INTO sku_pickface_config (sku_id, pickface_bin_id, pickface_min, pickface_max)
                 VALUES (?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE min_qty = VALUES(min_qty), max_qty = VALUES(max_qty),
+                ON DUPLICATE KEY UPDATE pickface_min = VALUES(pickface_min), pickface_max = VALUES(pickface_max),
                     updated_at = CURRENT_TIMESTAMP");
-        $stmt->execute([$locationId, $productId, $minQty, $maxQty]);
+        $stmt->execute([$productId, $locationId, $minQty, $maxQty]);
         return (int)$db->lastInsertId();
     }
 
     public static function deleteTarget(int $id): bool {
         $db = db();
-        $stmt = $db->prepare("DELETE FROM pick_face_targets WHERE id = ?");
+        $stmt = $db->prepare("DELETE FROM sku_pickface_config WHERE id = ?");
         $stmt->execute([$id]);
         return $stmt->rowCount() > 0;
     }

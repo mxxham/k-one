@@ -164,6 +164,12 @@ set_permission('replenishment', 'generate', 'write');
 set_permission('replenishment', 'for_demand', 'write');
 set_module_departments('replenishment', ['inventory']);
 
+// pickface (pickface.actions.ts): create/update/delete write; ['inventory']
+set_permission('pickface', 'create', 'write');
+set_permission('pickface', 'update', 'write');
+set_permission('pickface', 'delete', 'write');
+set_module_departments('pickface', ['inventory']);
+
 // replenishment_auto (auto replenishment): run_cycle/update_config write; ['inventory']
 set_permission('replenishment_auto', 'run_cycle', 'write');
 set_permission('replenishment_auto', 'update_config', 'admin');
@@ -284,6 +290,10 @@ set_action_departments('replenishment', 'run_cycle', ['inventory']);
 set_action_departments('replenishment', 'auto_status', ['inventory']);
 set_action_departments('replenishment', 'auto_config', ['inventory']);
 set_action_departments('replenishment', 'update_auto_config', ['inventory']);
+set_permission('replenishment', 'find_for_picklist', 'any');
+set_action_departments('replenishment', 'find_for_picklist', ['inventory']);
+set_permission('replenishment', 'task_status', 'any');
+set_action_departments('replenishment', 'task_status', ['inventory']);
 
 // quality (quality.php): create/record/approve/reject write; get/list any; ['inventory']
 set_permission('quality', 'create', 'write');

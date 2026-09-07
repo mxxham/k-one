@@ -220,7 +220,7 @@ export default function SmartInsights() {
                 const textColor = pct >= 90 ? 'text-red-600' : pct >= 75 ? 'text-amber-600' : pct >= 50 ? 'text-blue-600' : 'text-emerald-600';
                 
                 return (
-                  <div key={loc.aisle}>
+                  <Link key={loc.aisle} to="/locations" className="block cursor-pointer hover:opacity-80 transition-opacity">
                     <div className="flex items-center justify-between mb-1">
                       <div className="font-semibold text-sm text-gray-900">Aisle {loc.aisle}</div>
                       <div className={`font-bold text-sm ${textColor}`}>{pct.toFixed(1)}%</div>
@@ -236,7 +236,7 @@ export default function SmartInsights() {
                         {loc.occupied}/{loc.total_locations}
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
             </div>

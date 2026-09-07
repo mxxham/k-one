@@ -118,17 +118,22 @@ function renderTaskHtml(task: ReplenishmentTaskData, pageBreak: boolean): string
         <div class="lbl">Date</div>
         <div class="val">${fmtDateShort(task.created_at)}</div>
       </div>
+      <div class="info-cell span2">
+        <div class="lbl">Product / SKU</div>
+        <div class="val" style="font-weight:700">${escapeHtml(task.product_name || '—')}</div>
+        <div class="val" style="font-family:'SF Mono',Consolas,monospace;font-size:10px;color:#64748b">${escapeHtml(task.product_code)}</div>
+      </div>
       <div class="info-cell">
         <div class="lbl">Linked Order</div>
         <div class="val" style="font-family:'SF Mono',Consolas,monospace">${escapeHtml(task.order_number ?? '—')}</div>
       </div>
       <div class="info-cell">
         <div class="lbl">Source Location</div>
-        <div class="val">${escapeHtml(task.source_location)}</div>
+        <div class="val" style="font-family:'SF Mono',Consolas,monospace">${escapeHtml(task.source_location)}</div>
       </div>
       <div class="info-cell">
         <div class="lbl">Destination</div>
-        <div class="val">${escapeHtml(task.dest_location)}</div>
+        <div class="val" style="font-family:'SF Mono',Consolas,monospace">${escapeHtml(task.dest_location)}</div>
       </div>
       <div class="info-cell">
         <div class="lbl">Qty to Move</div>

@@ -269,16 +269,15 @@ class Stock {
             $oldQuantity = $stock['quantity'];
             $difference = $newQuantity - $oldQuantity;
 
+            $stmt = $db->prepare("SELECT COALESCE(SUM(quantity), 0) as balance FROM stock WHERE product_id = ? AND stock_status = 'Available'");
+            $stmt->execute([$stock['product_id']]);
+            $balance = $stmt->fetch()['balance'];
+
             
             $stmt = $db->prepare("UPDATE stock SET quantity = ?, pallet = ? WHERE id = ?");
             $uomPerPallet = $stock['uom_per_pallet'] ?? 4;
             $newPallet = ceil($newQuantity / $uomPerPallet);
             $stmt->execute([$newQuantity, $newPallet, $stockId]);
-
-            
-            $stmt = $db->prepare("SELECT COALESCE(SUM(quantity), 0) as balance FROM stock WHERE product_id = ? AND stock_status = 'Available'");
-            $stmt->execute([$stock['product_id']]);
-            $balance = $stmt->fetch()['balance'];
 
             $type = $difference > 0 ? 'IN' : 'OUT';
             $refNo = 'ADJ-' . date('Ymd') . gmdate('His');
@@ -292,7 +291,7 @@ class Stock {
                 $stock['uom_type'] ?? $stock['uom'],
                 $difference / $uomPerPallet,
                 $refNo,
-                $balance + ($type === 'IN' ? $difference : 0),
+                $balance,
                 $stock['location'],
                 $reason
             ]);

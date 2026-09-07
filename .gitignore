@@ -76,3 +76,9 @@ frontend.zip
 
 # k-one directory (if it's a submodule or separate project)
 k-one/
+
+# Storage (user uploads)
+storage/
+
+# Build artifacts
+frontend/tsconfig.tsbuildinfo

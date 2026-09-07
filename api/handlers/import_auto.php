@@ -22,6 +22,8 @@ function import_auto_classify_sheet(string $name): string {
     if (str_contains($n, 'wms'))    return 'wms';
     if (str_contains($n, 'putaway'))return 'putaway';
     if (str_contains($n, 'schedule'))return 'schedule';
+    // Also recognize "data level A" style sheets as WMS (stock data)
+    if (str_contains($n, 'data level') || str_contains($n, 'level a')) return 'wms';
     return 'skip';
 }
 
@@ -297,13 +299,23 @@ function _import_enrich_wms_locations(string $tmpPath, array $sheets): array {
     $xml = simplexml_load_string($content);
     if (!$xml) { $zip->close(); return $stats; }
 
-    // Parse rows: col H = location, col AE = on hand, col L = item, col I = batch, col AL = uom
-    $binData = []; // location_code => ['qty' => ..., 'item_code' => ..., 'batch' => ..., 'uom' => ...]
+    // Excel serial date → Y-m-d (Excel epoch = 1899-12-30)
+    $excelEpoch = new \DateTime('1899-12-30');
+    $_excelSerialToDate = function($serial) use ($excelEpoch) {
+        $s = intval($serial);
+        if ($s < 1) return null;
+        $dt = clone $excelEpoch;
+        $dt->modify("+{$s} days");
+        return $dt->format('Y-m-d');
+    };
+
+    // Parse rows: col H = location, col AE = on hand, col L = item, col I = batch, col AL = uom, col K = expired date
+    $binData = []; // location_code => ['qty' => ..., 'item_code' => ..., 'batch' => ..., 'uom' => ..., 'expiry_date' => ...]
     foreach ($xml->sheetData->row as $row) {
         $rowNum = (int)$row['r'];
         if ($rowNum < 5) continue; // skip header rows (rows 1-4)
         $hVal = null; $aeVal = null; $vVal = null;
-        $lVal = null; $iVal = null; $alVal = null;
+        $lVal = null; $iVal = null; $alVal = null; $kVal = null;
         foreach ($row->c as $c) {
             $ref = (string)$c['r'];
             $col = preg_replace('/\d+/', '', $ref);
@@ -321,6 +333,7 @@ function _import_enrich_wms_locations(string $tmpPath, array $sheets): array {
                 if ($col === 'L')  $lVal = $val;  // item code
                 if ($col === 'I')  $iVal = $val;  // batch
                 if ($col === 'AL') $alVal = $val; // uom
+                if ($col === 'K')  $kVal = $val;  // expired date (Excel serial)
             }
         }
         if (is_string($hVal) && preg_match('/^[A-Z]{2}\d+[A-E]\d{2}$/', $hVal)) {
@@ -328,10 +341,11 @@ function _import_enrich_wms_locations(string $tmpPath, array $sheets): array {
             $qty = floatval($aeVal ?? 0);
             if ($qty <= 0 && floatval($vVal ?? 0) > 0) $qty = floatval($vVal);
             $binData[strtoupper($hVal)] = [
-                'qty'       => $qty,
-                'item_code' => is_numeric($lVal) ? strval(intval($lVal)) : ($lVal ?? null),
-                'batch'     => is_numeric($iVal) ? strval(intval($iVal)) : ($iVal ?? null),
-                'uom'       => !empty($alVal) ? trim($alVal) : null,
+                'qty'          => $qty,
+                'item_code'    => is_numeric($lVal) ? strval(intval($lVal)) : ($lVal ?? null),
+                'batch'        => is_numeric($iVal) ? strval(intval($iVal)) : ($iVal ?? null),
+                'uom'          => !empty($alVal) ? trim($alVal) : null,
+                'expiry_date'  => is_numeric($kVal) ? $_excelSerialToDate($kVal) : null,
             ];
         }
     }
@@ -390,8 +404,8 @@ function _import_enrich_wms_locations(string $tmpPath, array $sheets): array {
         $db->exec("DELETE FROM stock WHERE location IS NOT NULL AND location != '' AND stock_status = 'Available'");
 
         $stmtStock = $db->prepare("
-            INSERT INTO stock (product_id, batch_number, location, quantity, uom, pallet, stock_status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'Available', NOW(), NOW())
+            INSERT INTO stock (product_id, batch_number, location, quantity, uom, pallet, expiry_date, stock_status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'Available', NOW(), NOW())
         ");
         $stmtSL = $db->prepare("
             INSERT INTO stock_locations (stock_id, location_code, quantity, original_quantity, uom, batch_number, lpn_code, status, created_at, updated_at)
@@ -454,6 +468,12 @@ function _import_enrich_wms_locations(string $tmpPath, array $sheets): array {
 
             $upp = $uppMap[$product_id] ?? 0;
             $pallet = (int)ceil($qty / max(1, $upp));
+            $expiryDate = $binInfo['expiry_date'] ?? null;
+            // Set stock_status to Expired if expiry_date has passed
+            $stockStatus = 'Available';
+            if ($expiryDate && $expiryDate < date('Y-m-d')) {
+                $stockStatus = 'Expired';
+            }
             $stmtStock->execute([
                 $product_id,
                 $batch,
@@ -461,7 +481,13 @@ function _import_enrich_wms_locations(string $tmpPath, array $sheets): array {
                 $qty,
                 $uom,
                 $pallet,
+                $expiryDate,
             ]);
+            // Update stock_status if expired
+            if ($stockStatus === 'Expired') {
+                $stockIdTmp = $db->lastInsertId();
+                $db->prepare("UPDATE stock SET stock_status = 'Expired' WHERE id = ?")->execute([$stockIdTmp]);
+            }
             $stockId = $db->lastInsertId();
             $stmtSL->execute([
                 $stockId,
@@ -594,7 +620,17 @@ function import_auto_run(): void {
             $type = import_auto_classify_sheet($sheet['name']);
             if ($type !== 'wms' && $type !== 'putaway') continue;
 
-            $rows = import_stock_parse($sheet['rows']);
+            // WMS sheet may have non-standard headers (cols 7+) — _import_enrich_wms_locations()
+            // already handles stock creation via raw XML, so parse failure is non-fatal for WMS.
+            try {
+                $rows = import_stock_parse($sheet['rows']);
+            } catch (\Throwable $e) {
+                if ($type === 'wms') {
+                    $log[] = "Sheet '{$sheet['name']}' — parse skipped (WMS stock via XML): {$e->getMessage()}";
+                    continue;
+                }
+                throw $e;
+            }
 
             // Fill blank UOM from Master SKU lookup; flag unknown as 'UNKNOWN'
             if (!empty($masterSkuUom)) {

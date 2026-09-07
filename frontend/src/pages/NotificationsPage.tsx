@@ -19,6 +19,7 @@ import Spinner from '@/components/Spinner';
 import { Field, TextInput, Select, TextArea } from '@/components/Field';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/context/AuthContext';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { fmtDate } from '@/lib/format';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -66,6 +67,7 @@ const STATUS_DOT_COLORS: Record<string, string> = {
 export default function NotificationsPage() {
   const toast = useToast();
   const { canWrite } = useAuth();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
 
   // ── List state ──
   const [rows, setRows] = useState<Notification[]>([]);
@@ -179,7 +181,7 @@ export default function NotificationsPage() {
 
   // ── Delete ──
   const deleteNotification = async (id: number) => {
-    if (!window.confirm('Hapus notifikasi ini?')) return;
+    if (!(await confirm('Hapus notifikasi ini?'))) return;
     try {
       await api('notification', 'delete', {
         method: 'POST',
@@ -555,6 +557,7 @@ export default function NotificationsPage() {
           </div>
         )}
       </Modal>
+      <ConfirmDialog />
     </div>
   );
 }

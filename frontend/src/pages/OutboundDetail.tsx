@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, FormEvent, ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, PackagePlus, Trash2, Printer, FileText, ClipboardList, MapPin } from 'lucide-react';
-import { api, apiHref, webBase, getToken, OutboundOrderDetail } from '@/lib/api';
+import { ArrowLeft, Plus, PackagePlus, Trash2, Printer, FileText, ClipboardList, Copy } from 'lucide-react';
+import { api, webBase, OutboundOrderDetail } from '@/lib/api';
 import { WebBtn } from '@/components/WebBtn';
 import { fmtNum, fmtDate, fmtDateTime } from '@/lib/format';
 import { useAuth } from '@/context/AuthContext';
@@ -10,9 +10,10 @@ import { PageHeader } from '@/components/PageHeader';
 import { Card, EmptyState } from '@/components/Card';
 import StatusBadge from '@/components/StatusBadge';
 
-import Spinner from '@/components/Spinner';
+import { PageState } from '@/components/PageState';
 import Modal from '@/components/Modal';
 import ConfirmButton from '@/components/ConfirmButton';
+import ProductSearchCombobox from '@/components/ProductSearchCombobox';
 import { Field, TextInput, Select, Grid } from '@/components/Field';
 
 interface OutboundItem {
@@ -67,118 +68,6 @@ function InProcessPill({ status }: { status?: string }) {
       <span className="w-1.5 h-1.5 rounded-full bg-current" />
       {status || '—'}
     </span>
-  );
-}
-
-interface SearchProduct {
-  id: number;
-  product_code: string;
-  product_name: string;
-  uom: string;
-  uom_per_pallet: number;
-  stock_qty: number;
-}
-
-function ProductSearch({
-  selected,
-  onSelect,
-  onClear,
-  placeholder = 'Cari produk…',
-  autoFocus,
-}: {
-  selected: { id: number; code: string; name: string } | null;
-  onSelect: (p: SearchProduct) => void;
-  onClear: () => void;
-  placeholder?: string;
-  autoFocus?: boolean;
-}) {
-  const toast = useToast();
-  const [q, setQ] = useState('');
-  const [results, setResults] = useState<SearchProduct[]>([]);
-  const [open, setOpen] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
-    if (!q.trim()) {
-      setResults([]);
-      setOpen(false);
-      return;
-    }
-    timer.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const res = await api('outbound', 'search_products', { params: { q } });
-        setResults(res.results || []);
-        setOpen(true);
-      } catch (e: any) {
-        toast('error', e.message || 'Gagal mencari produk');
-      } finally {
-        setSearching(false);
-      }
-    }, 300);
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
-
-  if (selected) {
-    return (
-      <div className="flex items-center gap-2">
-        <div className="flex-1 px-3 py-2 rounded-lg bg-brand-50 border border-brand-100 text-sm">
-          <div className="font-semibold text-brand-900">{selected.code}</div>
-          <div className="text-[11px] text-gray-500 truncate">{selected.name}</div>
-        </div>
-        <button type="button" onClick={onClear} className="px-2 py-1 text-xs font-semibold text-gray-500 hover:text-red-600 flex-shrink-0">
-          Clear
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative">
-      <div className="relative">
-        <MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <TextInput
-          value={q}
-          autoFocus={autoFocus}
-          onChange={(e) => setQ(e.target.value)}
-          onFocus={() => results.length && setOpen(true)}
-          placeholder={placeholder}
-          className="pl-9"
-        />
-        {searching && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-brand-600 font-semibold">Searching...</span>
-        )}
-      </div>
-      {open && (
-        <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-          {results.length === 0 && !searching && <div className="px-3 py-2 text-xs text-gray-400">No products found</div>}
-          {results.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => {
-                onSelect(p);
-                setOpen(false);
-                setQ('');
-                setResults([]);
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-brand-50 flex items-center justify-between gap-2"
-            >
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-gray-800">{p.product_code}</div>
-                <div className="text-[11px] text-gray-500 truncate">{p.product_name}</div>
-              </div>
-              <div className="text-[11px] text-gray-400 flex-shrink-0">Stock: {fmtNum(p.stock_qty, 0)}</div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -268,7 +157,8 @@ function AddItemModal({ open, onClose, outboundId, onDone }: { open: boolean; on
       <form onSubmit={handleSubmit} className="space-y-4">
         <Grid cols={2}>
           <Field label="Product" required>
-            <ProductSearch
+            <ProductSearchCombobox
+              endpoint="outbound/search_products"
               selected={productId ? { id: productId, code: productCode, name: productName } : null}
               onSelect={(p) => {
                 setProductId(p.id);
@@ -450,27 +340,36 @@ export default function OutboundDetail() {
     }
   };
 
-  if (loading && !order) {
-    return <Spinner label="Memuat detail order…" />;
-  }
-
-  if (!order) {
-    return <EmptyState message="Order tidak ditemukan" />;
-  }
-
   const deletable = ['Open', 'Picking', 'Picked'].includes(status);
 
+  if (!order) return null;
+
   return (
+    <PageState loading={loading} onRetry={fetchDetail} empty={false} emptyMessage="Order tidak ditemukan">
     <div>
       <PageHeader
-        title={order.order_number || `Order #${orderId}`}
+        title={
+          <span className="inline-flex items-center gap-2">
+            {order.order_number || `Order #${orderId}`}
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(order.order_number || `Order #${orderId}`);
+                toast('success', 'Order number copied!');
+              }}
+              className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-white/20 hover:bg-white/30 transition-colors cursor-pointer"
+              title="Copy order number"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+          </span>
+        }
         subtitle={order.display_order_no ? `Display No: ${order.display_order_no}` : undefined}
         actions={
           <>
             <StatusBadge status={order.status} />
-            <WebBtn href={`${webBase()}/print_outbound.php?id=${orderId}&token=${getToken() || ''}`} label="DO" icon={<Printer className="w-4 h-4" />} />
-            <WebBtn href={`${webBase()}/surat_jalan.php?id=${orderId}&token=${getToken() || ''}`} label="Surat Jalan" icon={<FileText className="w-4 h-4" />} />
-            <WebBtn href={`${webBase()}/picklist_pdf.php?outbound_id=${orderId}&token=${getToken() || ''}`} label="Picklist PDF" icon={<ClipboardList className="w-4 h-4" />} />
+            <WebBtn href={`${webBase()}/print_outbound.php?id=${orderId}`} label="DO" icon={<Printer className="w-4 h-4" />} />
+            <WebBtn href={`${webBase()}/surat_jalan.php?id=${orderId}`} label="Surat Jalan" icon={<FileText className="w-4 h-4" />} />
+            <WebBtn href={`${webBase()}/picklist_pdf.php?outbound_id=${orderId}`} label="Picklist PDF" icon={<ClipboardList className="w-4 h-4" />} />
             {canWrite && status === 'Open' && (
               <button
                 onClick={handlePick}
@@ -690,5 +589,6 @@ export default function OutboundDetail() {
         <AddItemModal key={addItemOpen ? 'open' : 'closed'} open={addItemOpen} onClose={() => setAddItemOpen(false)} outboundId={orderId} onDone={fetchDetail} />
       )}
     </div>
+    </PageState>
   );
 }

@@ -47,6 +47,7 @@ const QualityPage = lazy(() => import('@/pages/QualityPage'));
 const RmaPage = lazy(() => import('@/pages/RmaPage'));
 const MonitoringPage = lazy(() => import('@/pages/MonitoringPage'));
 const NotificationsPage = lazy(() => import('@/pages/NotificationsPage'));
+const PickfaceManagementPage = lazy(() => import('@/pages/PickfaceManagementPage'));
 
 function RequireAuth() {
   const { isAuthenticated, department } = useAuth();
@@ -107,6 +108,7 @@ export default function App() {
                   <Route path="/bin-transfer" element={<BinTransferPage />} />
                   <Route path="/replenishment" element={<ReplenishmentPage />} />
                   <Route path="/reconciliation" element={<StockReconciliationPage />} />
+                  <Route path="/pickface-management" element={<PickfaceManagementPage />} />
                   <Route path="/putaway-tasks" element={<PutawayTasksPage />} />
                   <Route path="/putaway-scan" element={<PutawayScanPage />} />
                   <Route path="/reports" element={<ReportsPage />} />

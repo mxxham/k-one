@@ -196,6 +196,22 @@ export default function ReplenishmentSheet({
             <div className="lbl">Date</div>
             <div className="val">{fmtDateShort(task.created_at)}</div>
           </div>
+          <div className="info-cell span2">
+            <div className="lbl">Product / SKU</div>
+            <div className="val" style={{ fontWeight: 700 }}>
+              {task.product_name || '—'}
+            </div>
+            <div
+              className="val"
+              style={{
+                fontFamily: "'SF Mono',Consolas,monospace",
+                fontSize: 10,
+                color: '#64748b',
+              }}
+            >
+              {task.product_code}
+            </div>
+          </div>
           <div className="info-cell">
             <div className="lbl">Linked Order</div>
             <div
@@ -207,11 +223,21 @@ export default function ReplenishmentSheet({
           </div>
           <div className="info-cell">
             <div className="lbl">Source Location</div>
-            <div className="val">{task.source_location}</div>
+            <div
+              className="val"
+              style={{ fontFamily: "'SF Mono',Consolas,monospace" }}
+            >
+              {task.source_location}
+            </div>
           </div>
           <div className="info-cell">
             <div className="lbl">Destination</div>
-            <div className="val">{task.dest_location}</div>
+            <div
+              className="val"
+              style={{ fontFamily: "'SF Mono',Consolas,monospace" }}
+            >
+              {task.dest_location}
+            </div>
           </div>
           <div className="info-cell">
             <div className="lbl">Qty to Move</div>

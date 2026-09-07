@@ -50,15 +50,16 @@ class PickfaceSplitter
     /**
      * Check if replenishment is needed for a SKU's pickface bin.
      *
-     * Spec §4:
-     *   projected_on_hand = current_on_hand + in_transit - reserved
-     *   Trigger replenishment when projected_on_hand <= pickface_min
+     * Trigger condition:
+     *   projected_on_hand <= pickface_min
+     *
+     * projected_on_hand = current_on_hand + in_transit - reserved
      *
      * In-flight dedup: open/incomplete replen_task records for the same SKU
      * and pickface bin are treated as "already received" when computing the trigger.
      *
      * @param int         $skuId       The product/SKU ID
-     * @param float       $pickfaceQty The pickface qty from splitOrderLine
+     * @param float       $pickfaceQty The pickface qty from splitOrderLine (remainder)
      * @param \PDO|null   $db          PDO connection (uses db() singleton if null)
      * @return array{needs_replenishment: bool, projected_on_hand: float, pickface_min: float, config: ?array}
      */
@@ -168,11 +169,12 @@ class PickfaceSplitter
      * @param float       $pickfaceQty The quantity to replenish
      * @param int|null    $orderId     The triggering outbound order ID (nullable)
      * @param \PDO|null   $db          PDO connection (uses db() singleton if null)
+     * @param int|null    $sourceBinId Override source bin (from picklist item location)
      * @return int The ID of the created replen_task
      * @throws \Exception if no suitable source bin is found
      * @throws StockException if stock data is invalid
      */
-    public static function createReplenTask(int $skuId, float $pickfaceQty, ?int $orderId, $db = null): int
+    public static function createReplenTask(int $skuId, float $pickfaceQty, ?int $orderId, $db = null, ?int $sourceBinId = null): int
     {
         $db = $db ?? db();
 
@@ -190,25 +192,46 @@ class PickfaceSplitter
 
         $pickfaceBinId = (int)$config['pickface_bin_id'];
 
-        // 2. Find best source bin (bulk/reserve locations, B-E levels, FEFO order)
-        $sourceBinId = self::_findSourceBin($skuId, $pickfaceBinId, $db);
-
-        if (!$sourceBinId) {
-            throw new StockException(
-                "No suitable source bin found for replenishment of SKU #{$skuId}, qty {$pickfaceQty}",
-                [
-                    'sku_id'          => $skuId,
-                    'pickface_qty'    => $pickfaceQty,
-                    'pickface_bin_id' => $pickfaceBinId,
-                ]
-            );
+        // 2. Find best source bin — use override if provided, otherwise search bulk bins
+        if ($sourceBinId) {
+            $sourceBinId = (int)$sourceBinId;
+        } else {
+            $sourceBinId = self::_findSourceBin($skuId, $pickfaceBinId, $db);
+            if (!$sourceBinId) {
+                throw new StockException(
+                    "No suitable source bin found for replenishment of SKU #{$skuId}, qty {$pickfaceQty}",
+                    [
+                        'sku_id'          => $skuId,
+                        'pickface_qty'    => $pickfaceQty,
+                        'pickface_bin_id' => $pickfaceBinId,
+                    ]
+                );
+            }
         }
 
-        // 3. Acquire Redis lock on pickface_bin_id (stub — logs acquisition)
-        self::_acquirePickfaceLock($pickfaceBinId, $skuId);
+        // 3. In-flight dedup: if there's already a pending replen_task for this SKU+source+destination,
+        //    skip creation to prevent duplicates (race-condition guard)
+        $existingStmt = $db->prepare(
+            "SELECT id FROM replen_task
+             WHERE sku_id = ?
+               AND source_bin_id = ?
+               AND destination_bin_id = ?
+               AND status IN ('pending', 'printed', 'in_progress')
+             LIMIT 1
+             FOR UPDATE"
+        );
+        $existingStmt->execute([$skuId, $sourceBinId, $pickfaceBinId]);
+        $existingTaskId = $existingStmt->fetchColumn();
+        if ($existingTaskId) {
+            error_log("[PickfaceSplitter] Dedup: SKU #{$skuId} already has pending task #{$existingTaskId} for source #{$sourceBinId} -> dest #{$pickfaceBinId}, skipping creation");
+            return (int)$existingTaskId;
+        }
+
+        // 4. Acquire Redis lock on pickface_bin_id (stub — logs acquisition)
+        self::_acquirePickfaceLock($pickfaceBinId, $skuId, $db);
 
         try {
-            // 4. Insert replen_task record (no nested transaction — caller may already own one)
+            // 5. Insert replen_task record (no nested transaction — caller may already own one)
             $stmt = $db->prepare(
                 "INSERT INTO replen_task
                     (sku_id, source_bin_id, destination_bin_id, qty, triggering_order_id, status, created_at)
@@ -218,19 +241,19 @@ class PickfaceSplitter
                 $skuId,
                 $sourceBinId,
                 $pickfaceBinId,
-                (int)$pickfaceQty,
+                round($pickfaceQty),
                 $orderId,
             ]);
 
             $taskId = (int)$db->lastInsertId();
 
-            // 5. Enqueue BullMQ job (stub for now)
-            self::_enqueueBullMqJob($taskId, $skuId, $sourceBinId, $pickfaceBinId, (int)$pickfaceQty);
+            // 6. Enqueue BullMQ job (stub for now)
+            self::_enqueueBullMqJob($taskId, $skuId, $sourceBinId, $pickfaceBinId, (int)round($pickfaceQty));
 
             return $taskId;
         } finally {
-            // 6. Release Redis lock
-            self::_releasePickfaceLock($pickfaceBinId, $skuId);
+            // 7. Release Redis lock
+            self::_releasePickfaceLock($pickfaceBinId, $skuId, $db);
         }
     }
 
@@ -374,10 +397,18 @@ class PickfaceSplitter
             return null;
         }
 
-        // Find bulk bins (levels B–E) with any available stock, FEFO order
+        $palletStmt = $db->prepare(
+            "SELECT uom_per_pallet FROM products WHERE id = ? LIMIT 1"
+        );
+        $palletStmt->execute([$skuId]);
+        $uomPerPallet = max((int)$palletStmt->fetchColumn(), 1);
+
+        // Aggregate expiry + row id so ORDER BY is deterministic after GROUP BY.
+        // Priority: (1) partial pallets first, (2) FEFO, (3) lowest qty, (4) location.
         $stmt = $db->prepare(
             "SELECT s.location, lm.id AS location_id, lm.row_name,
-                    COALESCE(SUM(s.quantity), 0) AS available_qty
+                    COALESCE(SUM(s.quantity), 0) AS available_qty,
+                    MIN(s.expiry_date) AS min_expiry
              FROM stock s
              JOIN location_master lm ON lm.location_code = s.location
              WHERE s.product_id = ?
@@ -391,47 +422,52 @@ class PickfaceSplitter
              GROUP BY s.location, lm.id, lm.row_name
              HAVING available_qty > 0
              ORDER BY
-                CASE WHEN s.expiry_date IS NULL THEN 1 ELSE 0 END,
-                s.expiry_date ASC,
-                s.location ASC,
-                s.id ASC
+                CASE WHEN SUM(s.quantity) < ? THEN 0 ELSE 1 END,
+                CASE WHEN MIN(s.expiry_date) IS NULL THEN 1 ELSE 0 END,
+                MIN(s.expiry_date) ASC,
+                SUM(s.quantity) ASC,
+                s.location ASC
              LIMIT 1"
         );
-        $stmt->execute([$skuId, $pickfaceLocation]);
+        $stmt->execute([$skuId, $pickfaceLocation, $uomPerPallet]);
         $row = $stmt->fetch();
 
         return $row ? (int)$row['location_id'] : null;
     }
 
     /**
-     * Acquire a Redis-style lock on the pickface bin for a SKU.
-     * Stub implementation — logs lock acquisition. Replace with actual Redis lock
-     * (e.g., Redisson, Predis) when infrastructure is available.
+     * Acquire a database-level lock on the pickface config row for a SKU
+     * using SELECT ... FOR UPDATE. This prevents concurrent replenishment
+     * tasks from being created for the same SKU.
      *
-     * @param int $pickfaceBinId The pickface bin location ID
-     * @param int $skuId         The product/SKU ID
+     * @param int   $pickfaceBinId The pickface bin location ID
+     * @param int   $skuId         The product/SKU ID
+     * @param \PDO  $db            PDO connection
      */
-    private static function _acquirePickfaceLock(int $pickfaceBinId, int $skuId): void
+    private static function _acquirePickfaceLock(int $pickfaceBinId, int $skuId, \PDO $db): void
     {
-        // TODO: Replace with actual Redis lock when infrastructure is available
-        // Example: $redis = new Redis(); $redis->connect('127.0.0.1');
-        //          $lockKey = "replen:pickface:lock:{$pickfaceBinId}:{$skuId}";
-        //          $redis->set($lockKey, '1', ['NX', 'EX' => 30]);
-        error_log("[PickfaceSplitter] Acquire lock: pickface_bin={$pickfaceBinId}, sku={$skuId}");
+        // Lock the sku_pickface_config row for this SKU using SELECT ... FOR UPDATE
+        $stmt = $db->prepare(
+            "SELECT id FROM sku_pickface_config
+             WHERE sku_id = ?
+             FOR UPDATE"
+        );
+        $stmt->execute([$skuId]);
+        // Row is locked until the transaction commits or rolls back
     }
 
     /**
-     * Release the Redis-style lock on the pickface bin for a SKU.
-     * Stub implementation — logs lock release. Replace with actual Redis lock.
+     * Release the lock on the pickface config row for a SKU.
+     * With SELECT ... FOR UPDATE, the lock is released when the
+     * transaction commits or rolls back — no explicit release needed.
      *
-     * @param int $pickfaceBinId The pickface bin location ID
-     * @param int $skuId         The product/SKU ID
+     * @param int   $pickfaceBinId The pickface bin location ID
+     * @param int   $skuId         The product/SKU ID
+     * @param \PDO  $db            PDO connection
      */
-    private static function _releasePickfaceLock(int $pickfaceBinId, int $skuId): void
+    private static function _releasePickfaceLock(int $pickfaceBinId, int $skuId, \PDO $db): void
     {
-        // TODO: Replace with actual Redis lock release when infrastructure is available
-        // Example: $redis->del("replen:pickface:lock:{$pickfaceBinId}:{$skuId}");
-        error_log("[PickfaceSplitter] Release lock: pickface_bin={$pickfaceBinId}, sku={$skuId}");
+        // Lock is released on transaction commit/rollback — no explicit action needed
     }
 
     /**
@@ -453,15 +489,6 @@ class PickfaceSplitter
         int $qty
     ): void {
         // TODO: Replace with actual BullMQ producer when queue infrastructure is available
-        // Example:
-        //   $queue = new \BullMQ\Queue('replenishment');
-        //   $queue->add([
-        //       'task_id'          => $taskId,
-        //       'sku_id'           => $skuId,
-        //       'source_bin_id'    => $sourceBinId,
-        //       'destination_bin_id' => $pickfaceBinId,
-        //       'qty'              => $qty,
-        //   ]);
         error_log("[PickfaceSplitter] Enqueue BullMQ job: task={$taskId}, sku={$skuId}, "
             . "source={$sourceBinId}, dest={$pickfaceBinId}, qty={$qty}");
     }
@@ -476,5 +503,83 @@ class PickfaceSplitter
     {
         require_once __DIR__ . '/FefoAllocator.php';
         return FefoAllocator::allocate($sku, $qty, null, true);
+    }
+
+    public static function consolidatePartialPallets(int $skuId, $db = null): array
+    {
+        $db = $db ?? db();
+        $taskIds = [];
+        $partialBinsFound = 0;
+
+        $palletStmt = $db->prepare(
+            "SELECT uom_per_pallet FROM products WHERE id = ? LIMIT 1"
+        );
+        $palletStmt->execute([$skuId]);
+        $uomPerPallet = (int)$palletStmt->fetchColumn();
+
+        if ($uomPerPallet <= 0) {
+            error_log("[PickfaceSplitter] consolidatePartialPallets: SKU #{$skuId} has invalid uom_per_pallet={$uomPerPallet}, skipping");
+            return ['task_ids' => [], 'partial_bins_found' => 0];
+        }
+
+        $config = self::getPickfaceConfig($skuId, $db);
+        if (!$config) {
+            error_log("[PickfaceSplitter] consolidatePartialPallets: SKU #{$skuId} has no pickface config, skipping");
+            return ['task_ids' => [], 'partial_bins_found' => 0];
+        }
+
+        $pickfaceBinId = (int)$config['pickface_bin_id'];
+
+        $partialStmt = $db->prepare(
+            "SELECT lm.id AS location_id, lm.location_code,
+                    COALESCE(SUM(s.quantity), 0) AS total_qty
+             FROM stock s
+             JOIN location_master lm ON lm.location_code = s.location
+             WHERE s.product_id = ?
+               AND s.stock_status = 'Available'
+               AND (s.hold_status = 'available' OR s.hold_status IS NULL)
+               AND s.quantity > 0
+               AND lm.row_name IN ('B', 'C', 'D', 'E')
+               AND lm.is_active = 1
+             GROUP BY lm.id, lm.location_code
+             HAVING total_qty > 0 AND total_qty < ?
+             ORDER BY lm.location_code ASC"
+        );
+        $partialStmt->execute([$skuId, $uomPerPallet]);
+        $partialBins = $partialStmt->fetchAll();
+
+        $partialBinsFound = count($partialBins);
+
+        foreach ($partialBins as $bin) {
+            $sourceBinId = (int)$bin['location_id'];
+            $binQty = (float)$bin['total_qty'];
+
+            $dedupStmt = $db->prepare(
+                "SELECT id FROM replen_task
+                 WHERE sku_id = ?
+                   AND source_bin_id = ?
+                   AND destination_bin_id = ?
+                   AND status IN ('pending', 'printed', 'in_progress')
+                 LIMIT 1"
+            );
+            $dedupStmt->execute([$skuId, $sourceBinId, $pickfaceBinId]);
+            if ($dedupStmt->fetchColumn()) {
+                error_log("[PickfaceSplitter] consolidatePartialPallets: dedup — SKU #{$skuId} source bin #{$sourceBinId} already has pending task, skipping");
+                continue;
+            }
+
+            try {
+                $taskId = self::createReplenTask($skuId, $binQty, null, $db);
+                $taskIds[] = $taskId;
+                error_log("[PickfaceSplitter] consolidatePartialPallets: created task #{$taskId} for SKU #{$skuId} from bin #{$sourceBinId} ({$bin['location_code']}) qty={$binQty}");
+            } catch (\Exception $e) {
+                error_log("[PickfaceSplitter] consolidatePartialPallets: failed to create task for SKU #{$skuId} from bin #{$sourceBinId}: " . $e->getMessage());
+            }
+        }
+
+        return [
+            'task_ids' => $taskIds,
+            'partial_bins_found' => $partialBinsFound,
+        ];
     }
 }

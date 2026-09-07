@@ -33,6 +33,7 @@ class Auth {
             $_SESSION['role'] = $user['role'];
             $_SESSION['department'] = $user['department'] ?? 'all';
             $_SESSION['must_change_password'] = (int)($user['must_change_password'] ?? 0);
+            session_regenerate_id(true);
             return true;
         }
         return false;
@@ -54,6 +55,7 @@ class Auth {
             $db = db();
             $db->prepare("UPDATE users SET must_change_password = 0 WHERE id = ?")->execute([$user['id']]);
             $_SESSION['must_change_password'] = 0;
+            self::invalidateTokens($user['id']);
         }
     }
 
@@ -62,13 +64,13 @@ class Auth {
         session_destroy();
     }
 
+    public static function invalidateTokens(int $userId): void {
+        $db = db();
+        $db->prepare("DELETE FROM auth_tokens WHERE user_id = ?")->execute([$userId]);
+    }
+
     public static function requireAuth() {
         if (!self::check()) {
-            // Try token auth (for SPA print/export pages opened in new tabs)
-            $token = $_GET['token'] ?? null;
-            if ($token && self::loginByToken($token)) {
-                return; // session established via token
-            }
             header('Location: ' . BASE_URL . '/login.php');
             exit;
         }
@@ -130,7 +132,7 @@ class Auth {
 
     public static function canWrite() {
         $user = self::user();
-        return $user && in_array($user['role'], ['admin', 'operator']);
+        return $user && in_array($user['role'], ['admin', 'operator', 'warehouse', 'supervisor', 'staff']);
     }
 
     public static function canAdmin() {

@@ -18,6 +18,7 @@ import Spinner from '@/components/Spinner';
 import { Field, TextInput, Select, TextArea } from '@/components/Field';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/context/AuthContext';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { fmtDateTime, fmtNum } from '@/lib/format';
 
 interface RmaRow {
@@ -61,6 +62,7 @@ const PAGE_SIZE = 25;
 export default function RmaPage() {
   const toast = useToast();
   const { canWrite } = useAuth();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
 
   const [rows, setRows] = useState<RmaRow[]>([]);
   const [stats, setStats] = useState<RmaStats | null>(null);
@@ -171,7 +173,7 @@ export default function RmaPage() {
   };
 
   const handleApprove = async (row: RmaRow) => {
-    if (!confirm('Approve RMA ' + row.rma_number + '?')) return;
+    if (!(await confirm('Approve RMA ' + row.rma_number + '?'))) return;
     setSubmitting(true);
     try {
       await api('rma', 'approve', { method: 'POST', body: { id: row.id } });
@@ -246,7 +248,7 @@ export default function RmaPage() {
   };
 
   const handleComplete = async (row: RmaRow) => {
-    if (!confirm('Selesaikan RMA ' + row.rma_number + '?')) return;
+    if (!(await confirm('Selesaikan RMA ' + row.rma_number + '?'))) return;
     setSubmitting(true);
     try {
       await api('rma', 'complete', { method: 'POST', body: { id: row.id } });
@@ -661,6 +663,7 @@ export default function RmaPage() {
           </form>
         )}
       </Modal>
+      <ConfirmDialog />
     </div>
   );
 }

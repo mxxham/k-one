@@ -4,6 +4,7 @@ import { Package, CheckCircle2, AlertCircle, MapPin, Box } from 'lucide-react';
 import { api } from '@/lib/api';
 import Spinner from '@/components/Spinner';
 import { fmtNum } from '@/lib/format';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 
 interface PicklistItem {
   id: number;
@@ -38,6 +39,7 @@ export default function MobilePickerUI() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeItem, setActiveItem] = useState<number | null>(null);
+  const { confirm, alert: showAlert, ConfirmDialog } = useConfirmDialog();
 
   useEffect(() => {
     loadPicklist();
@@ -76,7 +78,7 @@ export default function MobilePickerUI() {
         setActiveItem(nextPending.id);
       }
     } catch (e: any) {
-      alert(e.message || 'Failed to update item');
+      await showAlert(e.message || 'Failed to update item');
     }
   };
 
@@ -84,16 +86,16 @@ export default function MobilePickerUI() {
     if (!picklist) return;
     const pending = picklist.items.filter((i) => i.status === 'Pending');
     if (pending.length > 0) {
-      alert(`${pending.length} items still pending. Complete all items first.`);
+      await showAlert(`${pending.length} items still pending. Complete all items first.`);
       return;
     }
     
-    if (confirm('Complete picking? This will finalize the picklist.')) {
+    if (await confirm('Complete picking? This will finalize the picklist.')) {
       try {
         await api('picklist', 'complete', { body: { id: picklist.id } });
         navigate('/picklist');
       } catch (e: any) {
-        alert(e.message || 'Failed to complete');
+        await showAlert(e.message || 'Failed to complete');
       }
     }
   };
@@ -290,6 +292,7 @@ export default function MobilePickerUI() {
           </button>
         </div>
       )}
+      <ConfirmDialog />
     </div>
   );
 }

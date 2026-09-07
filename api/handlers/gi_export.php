@@ -10,7 +10,7 @@ function handle_gi_export($action)
     switch ($action) {
 
         case 'export':
-            api_require_auth();
+            api_require_write();
             $filters = [
                 'status'    => query('status') ?: null,
                 'from_date' => query('from_date') ?: null,

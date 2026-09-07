@@ -12,7 +12,7 @@ function import_stock_parse(array $allRows): array {
         'sku_code'        => ['sku', 'sku code', 'sku_number', 'sku no'],
         'batch_number'    => ['batch number', 'batch no', 'batch', 'lot', 'no batch', 'batch_number', 'lot number', 'batch', 'batch no'],
         'location'        => ['lokasi', 'location', 'bin', 'warehouse location', 'storage bin', 'zone'],
-        'quantity'        => ['remain qty', 'remaining qty', 'available qty', 'Qty', 'on hand', 'on-hand', 'onhand', 'quantity', 'actual qty', 'stock qty', 'qty', 'jumlah'],
+        'quantity'        => ['remain qty', 'remaining qty', 'available qty', 'Qty', 'on hand', 'on-hand', 'onhand', 'quantity', 'actual qty', 'stock qty', 'qty', 'jumlah', 'total', 'sum of remain qty'],
         'uom'             => ['uom', 'unit', 'satuan', 'unit of measure', 'sales unit', 'uom code'],
         'manufacture_date'=> ['gr date', 'goods receipt date', 'receipt date', 'mfg date', 'manufacture date', 'production date', 'tgl produksi', 'manufacturing date', 'production_date', 'GR date'],
         'expiry_date'     => ['expired date', 'expiry date', 'exp date', 'expiration date', 'best before', 'tgl exp', 'expiry', 'exp_date', 'Expired Date'],
@@ -33,10 +33,16 @@ function import_stock_parse(array $allRows): array {
     if ($resolved['quantity'] === null)     throw new Exception("Kolom qty ('on hand' / 'Qty') tidak ditemukan.");
 
     $rows = [];
+    $lastProductCode = '';
     for ($i = $headerIdx + 1; $i < count($allRows); $i++) {
         $row = $allRows[$i];
         $productCode = trim((string)($row[$resolved['product_code']] ?? ''));
-        if (empty($productCode) || strtolower($productCode) === 'kode produk (wajib)') continue;
+        // Pivot table format: carry forward product code from previous row
+        if (empty($productCode) || strtolower($productCode) === 'kode produk (wajib)') {
+            $productCode = $lastProductCode;
+        }
+        if (empty($productCode)) continue;
+        $lastProductCode = $productCode;
         $qty = floatval($row[$resolved['quantity']] ?? 0);
         if ($qty <= 0) continue;
         $uomRaw = trim((string)($row[$resolved['uom'] ?? -1] ?? 'Drum')) ?: 'Drum';
