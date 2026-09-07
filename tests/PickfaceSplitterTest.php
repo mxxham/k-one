@@ -119,12 +119,17 @@ final class PickfaceSplitterTest extends TestCase
         $this->assertEquals(5, $config['pickface_min']);
     }
 
-    /** Returns null when SKU has no pickface config */
-    public function testGetPickfaceConfigReturnsNullForUnconfigured(): void
+    /** Auto-detect kicks in when SKU has no pickface config — claims an empty A-level bin */
+    public function testGetPickfaceConfigAutoDetectsForUnconfigured(): void
     {
         $pid = TestDataFactory::createProduct();
         $config = PickfaceSplitter::getPickfaceConfig($pid, self::$pdo);
-        $this->assertNull($config);
+        $this->assertNotNull($config);
+        $this->assertGreaterThan(0, $config['id'], 'Auto-detected config should be persisted');
+        $this->assertMatchesRegularExpression(
+            '/^[A-Z]{2}[0-9]{2}A[0-9]{2}$/',
+            $config['pickface_location_code']
+        );
     }
 
     /* ================================================================== */
@@ -160,14 +165,14 @@ final class PickfaceSplitterTest extends TestCase
         $this->assertGreaterThan(5.0, $result['projected_on_hand']);
     }
 
-    /** §4 No pickface config → no trigger, returns null config */
-    public function testCheckReplenishmentNoConfig(): void
+    /** §4 Auto-detect provides config → replenishment triggers when projected <= min */
+    public function testCheckReplenishmentAutoDetectTriggersWhenLow(): void
     {
         $pid = TestDataFactory::createProduct();
         $result = PickfaceSplitter::checkReplenishment($pid, 0.0, self::$pdo);
 
-        $this->assertFalse($result['needs_replenishment']);
-        $this->assertNull($result['config']);
+        $this->assertNotNull($result['config'], 'Auto-detect should provide config');
+        $this->assertTrue($result['needs_replenishment'], 'Projected 0 <= pickface_min → triggers');
     }
 
     /** §4 projected_on_hand exactly equals pickface_min → triggers (<=) */
@@ -432,5 +437,92 @@ final class PickfaceSplitterTest extends TestCase
         )->execute([$skuId, $srcBinId, $destBinId, $qty, $status]);
 
         return (int) self::$pdo->lastInsertId();
+    }
+
+    /* ================================================================== */
+    /* Auto-detect pickface config — occupancy-based assignment            */
+    /* ================================================================== */
+
+    /** Low occupancy (<90%): SKU with no A-level stock → empty bin claimed and persisted */
+    public function testAutoDetectLowOccupancyClaimsEmptyBin(): void
+    {
+        // Ensure low occupancy: clear all stock from A-level bins
+        self::$pdo->exec(
+            "DELETE s FROM stock s
+             JOIN location_master lm ON lm.location_code = s.location
+             WHERE lm.location_code REGEXP '[A-Z]{2}[0-9]{2}A[0-9]{2}$'"
+        );
+
+        // Create a product with no existing pickface config
+        $pid = TestDataFactory::createProduct();
+
+        $config = PickfaceSplitter::getPickfaceConfig($pid, self::$pdo);
+
+        // Should have auto-detected and persisted a config
+        self::assertNotNull($config, 'Auto-detect should claim an empty A-level bin');
+        self::assertGreaterThan(0, $config['id'], 'Config should be persisted with a real ID');
+        self::assertMatchesRegularExpression(
+            '/^[A-Z]{2}[0-9]{2}A[0-9]{2}$/',
+            $config['pickface_location_code']
+        );
+
+        // Confirm row exists in sku_pickface_config
+        $check = ApiTestHelpers::q(
+            "SELECT * FROM sku_pickface_config WHERE sku_id = ?",
+            [$pid]
+        );
+        self::assertCount(1, $check);
+    }
+
+    /** High occupancy (≥90%): SKU with existing A-level stock → stock-based bin returned, not persisted */
+    public function testAutoDetectHighOccupancyFallsBackToStock(): void
+    {
+        // Create product and seed stock in an A-level bin
+        $pid = TestDataFactory::createProduct();
+        $aLoc = 'CA01A01';
+        TestDataFactory::createStock($pid, $aLoc, 50.0, 'LPN-HIGH', '2030-12-31');
+
+        // Force high occupancy: fill all but one A-level bin with dummy stock
+        $allABins = ApiTestHelpers::q(
+            "SELECT location_code FROM location_master
+             WHERE location_code REGEXP '[A-Z]{2}[0-9]{2}A[0-9]{2}$'
+               AND is_active = 1 AND location_code != ?
+             ORDER BY location_code",
+            [$aLoc]
+        );
+        $dummyPid = TestDataFactory::createProduct();
+        foreach ($allABins as $row) {
+            TestDataFactory::createStock($dummyPid, $row['location_code'], 1.0, 'LPN-DUM', '2030-12-31');
+        }
+        // 11/12 occupied = 91.7% ≥ 90%
+
+        $config = PickfaceSplitter::getPickfaceConfig($pid, self::$pdo);
+
+        self::assertNotNull($config, 'Stock-based fallback should find a bin');
+        self::assertEquals(0, $config['id'], 'Stock-based path is not persisted (id=0)');
+        self::assertEquals($aLoc, $config['pickface_location_code']);
+    }
+
+    /** High occupancy + SKU with no existing A-level stock at all → null */
+    public function testAutoDetectHighOccupancyNoStockReturnsNull(): void
+    {
+        // Force high occupancy: fill all A-level bins with dummy stock
+        $allABins = ApiTestHelpers::q(
+            "SELECT location_code FROM location_master
+             WHERE location_code REGEXP '[A-Z]{2}[0-9]{2}A[0-9]{2}$' AND is_active = 1
+             ORDER BY location_code"
+        );
+        $dummyPid = TestDataFactory::createProduct();
+        foreach ($allABins as $row) {
+            TestDataFactory::createStock($dummyPid, $row['location_code'], 1.0, 'LPN-DUM', '2030-12-31');
+        }
+        // 12/12 = 100% ≥ 90%
+
+        // New product with no stock anywhere
+        $pid = TestDataFactory::createProduct();
+
+        $config = PickfaceSplitter::getPickfaceConfig($pid, self::$pdo);
+
+        self::assertNull($config, 'No A-level stock + high occupancy → null');
     }
 }

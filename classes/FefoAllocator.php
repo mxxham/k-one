@@ -237,12 +237,14 @@ class FefoAllocator
             return self::_allocateFefo($db, $productId, $sku, $qty, null);
         }
 
+        $split = PickfaceSplitter::splitOrderLine($qty, (int)$pfConfig['pickface_max']);
+        $bulkQty            = $split['bulk_qty'];
+        $pickfaceQty        = $split['pickface_qty'];
+        $originalPickfaceQty = $split['pickface_qty'];
+
         $pickfaceBinId   = (int)$pfConfig['pickface_bin_id'];
         $pickfaceBinCode = $pfConfig['pickface_location_code'];
 
-        // Step 1: Allocate from bulk bins (levels B–E) in FEFO order
-        // Location format: xxNNxNN — e.g. CB36B02 (aisle=CB, rack=36, level=B, bin=02)
-        // Level letter is at position 5: A=pickface, B–E=bulk
         $bulkSql = "SELECT
                         sl.id AS stock_location_id,
                         sl.lpn_code,
@@ -276,15 +278,15 @@ class FefoAllocator
         $bulkRows = $bulkStmt->fetchAll();
 
         $bulkAllocations = [];
-        $remainingQty    = round($qty, 6);
+        $remainingBulk   = round($bulkQty, 6);
         $totalBulkAvail  = 0.0;
 
         foreach ($bulkRows as $row) {
             $avail = round((float)$row['quantity'], 6);
             $totalBulkAvail += $avail;
-            if ($remainingQty <= 1e-9) break;
+            if ($remainingBulk <= 1e-9) break;
 
-            $take      = min($remainingQty, $avail);
+            $take      = min($remainingBulk, $avail);
             $isPartial = $take < $avail;
 
             $bulkAllocations[] = [
@@ -298,14 +300,17 @@ class FefoAllocator
                 'is_partial'        => $isPartial,
             ];
 
-            $remainingQty = round($remainingQty - $take, 6);
+            $remainingBulk = round($remainingBulk - $take, 6);
         }
 
-        // Step 2: Allocate remainder from pickface bin (A-level)
+        $bulkShortage = max(0, $remainingBulk);
+        $pickfaceQty = round($pickfaceQty + $bulkShortage, 6);
+
         $pickfaceAllocations = [];
         $totalPickfaceAvail  = 0.0;
+        $actualPickfaceUsed  = 0.0;
 
-        if ($remainingQty > 1e-5) {
+        if ($pickfaceQty > 1e-5) {
             $pfSql = "SELECT
                           sl.id AS stock_location_id,
                           sl.lpn_code,
@@ -327,12 +332,14 @@ class FefoAllocator
             $pfStmt->execute([$productId, $pickfaceBinCode]);
             $pfRows = $pfStmt->fetchAll();
 
+            $remainingPickface = round($pickfaceQty, 6);
+
             foreach ($pfRows as $row) {
                 $avail = round((float)$row['quantity'], 6);
                 $totalPickfaceAvail += $avail;
-                if ($remainingQty <= 1e-9) break;
+                if ($remainingPickface <= 1e-9) break;
 
-                $take      = min($remainingQty, $avail);
+                $take      = min($remainingPickface, $avail);
                 $isPartial = $take < $avail;
 
                 $pickfaceAllocations[] = [
@@ -346,25 +353,71 @@ class FefoAllocator
                     'is_partial'        => $isPartial,
                 ];
 
-                $remainingQty = round($remainingQty - $take, 6);
+                $remainingPickface = round($remainingPickface - $take, 6);
+            }
+            $actualPickfaceUsed = round($pickfaceQty - $remainingPickface, 6);
+        }
+
+        if ($remainingPickface > 1e-5) {
+            $alreadyAllocatedIds = array_column($bulkAllocations, 'stock_location_id');
+            $excludePlaceholders = !empty($alreadyAllocatedIds)
+                ? ' AND sl.id NOT IN (' . implode(',', array_fill(0, count($alreadyAllocatedIds), '?')) . ')'
+                : '';
+
+            $fallbackSql = "SELECT
+                                sl.id AS stock_location_id, sl.lpn_code, sl.location_code,
+                                sl.quantity, s.expiry_date, s.batch_number
+                            FROM stock_locations sl
+                            JOIN stock s ON s.id = sl.stock_id
+                            WHERE s.product_id = ?
+                              AND sl.quantity > 0
+                              AND sl.status = 'Available'
+                              AND s.stock_status = 'Available'
+                              AND (s.hold_status IS NULL OR s.hold_status = 'available')
+                              AND sl.lpn_code IS NOT NULL AND sl.lpn_code != ''
+                              AND SUBSTRING(sl.location_code, 5, 1) IN ('B','C','D','E')
+                              {$excludePlaceholders}
+                            ORDER BY s.expiry_date ASC, sl.id ASC";
+
+            $fallbackStmt = $db->prepare($fallbackSql);
+            $fallbackStmt->execute(array_merge([$productId], $alreadyAllocatedIds));
+            $fallbackRows = $fallbackStmt->fetchAll();
+
+            foreach ($fallbackRows as $row) {
+                if ($remainingPickface <= 1e-9) break;
+                $avail = round((float)$row['quantity'], 6);
+                $take = min($remainingPickface, $avail);
+
+                $bulkAllocations[] = [
+                    'lpn_code'          => $row['lpn_code'],
+                    'bin_location'      => $row['location_code'],
+                    'qty_to_take'       => round($take, 6),
+                    'stock_location_id' => (int)$row['stock_location_id'],
+                    'expiry_date'       => $row['expiry_date'],
+                    'batch_number'      => $row['batch_number'],
+                    'available_qty'     => $avail,
+                    'is_partial'        => $take < $avail,
+                ];
+                $totalBulkAvail += $avail;
+                $remainingPickface = round($remainingPickface - $take, 6);
             }
         }
 
-        $shortage   = max(0, $remainingQty);
+        $pickfaceShortage = max(0, $remainingPickface ?? 0);
+        $shortage   = max(0, $pickfaceShortage);
         $sufficient = $shortage <= 1e-5;
-
-        // Replenishment tasks are created by Picklist::insertPicklistItems() trigger
-        // with the correct source bin (the picklist item's actual bulk bin location).
 
         $allAllocations = array_merge($bulkAllocations, $pickfaceAllocations);
         $totalAvailable = $totalBulkAvail + $totalPickfaceAvail;
 
         return [
-            'allocation'      => $allAllocations,
-            'sufficient'      => $sufficient,
-            'shortage'        => $shortage,
-            'total_available' => round($totalAvailable, 6),
-            'replen_task_id'  => null,
+            'allocation'              => $allAllocations,
+            'sufficient'              => $sufficient,
+            'shortage'                => round($shortage, 6),
+            'total_available'         => round($totalAvailable, 6),
+            'replen_task_id'          => null,
+            'pickface_qty_intended'   => $originalPickfaceQty,
+            'pickface_qty_used'       => $actualPickfaceUsed,
         ];
     }
 

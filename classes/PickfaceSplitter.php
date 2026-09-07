@@ -311,7 +311,6 @@ class PickfaceSplitter
      */
     private static function _autoDetectPickfaceConfig(int $skuId, \PDO $db): ?array
     {
-        // Get product UOM details
         $productStmt = $db->prepare(
             "SELECT id, uom_type, uom_per_pallet FROM products WHERE id = ? LIMIT 1"
         );
@@ -325,7 +324,6 @@ class PickfaceSplitter
         $uomType = $product['uom_type'];
         $uomPerPallet = max((int)$product['uom_per_pallet'], 1);
 
-        // Determine pickface_min based on UOM type
         $pickfaceMin = match ($uomType) {
             'Carton', 'CAR' => 10,
             'Drum'          => 1,
@@ -333,7 +331,68 @@ class PickfaceSplitter
             default         => 1,
         };
 
-        // Find A-level bins with available stock for this product
+        // Step 1: compute A-level occupancy
+        $occupancyStmt = $db->query(
+            "SELECT
+                (SELECT COUNT(*) FROM location_master
+                 WHERE location_code REGEXP '[A-Z]{2}[0-9]{2}A[0-9]{2}$' AND is_active = 1) AS total_a_bins,
+                (SELECT COUNT(DISTINCT lm.id)
+                 FROM location_master lm
+                 JOIN stock s ON s.location = lm.location_code
+                 WHERE lm.location_code REGEXP '[A-Z]{2}[0-9]{2}A[0-9]{2}$'
+                   AND lm.is_active = 1
+                   AND s.quantity > 0
+                   AND s.stock_status = 'Available') AS occupied_a_bins"
+        );
+        $occ = $occupancyStmt->fetch();
+        $totalABins    = (int)($occ['total_a_bins'] ?? 0);
+        $occupiedABins = (int)($occ['occupied_a_bins'] ?? 0);
+        $occupancyPct  = $totalABins > 0 ? ($occupiedABins / $totalABins) * 100 : 100.0;
+
+        // Step 2: below 90% occupancy — prioritize claiming an empty bin
+        if ($occupancyPct < 90.0) {
+            $emptyBinStmt = $db->prepare(
+                "SELECT lm.id AS location_id, lm.location_code, lm.row_name, lm.aisle, lm.zone
+                 FROM location_master lm
+                 WHERE lm.location_code REGEXP '[A-Z]{2}[0-9]{2}A[0-9]{2}$'
+                   AND lm.is_active = 1
+                   AND lm.id NOT IN (SELECT pickface_bin_id FROM sku_pickface_config)
+                   AND NOT EXISTS (
+                       SELECT 1 FROM stock s
+                       WHERE s.location = lm.location_code AND s.quantity > 0
+                   )
+                 ORDER BY lm.location_code ASC
+                 LIMIT 5"
+            );
+            $emptyBinStmt->execute();
+            $candidates = $emptyBinStmt->fetchAll();
+
+            foreach ($candidates as $candidate) {
+                try {
+                    $insertStmt = $db->prepare(
+                        "INSERT INTO sku_pickface_config (sku_id, pickface_bin_id, pickface_max, pickface_min)
+                         VALUES (?, ?, ?, ?)"
+                    );
+                    $insertStmt->execute([$skuId, $candidate['location_id'], $uomPerPallet, $pickfaceMin]);
+                    return [
+                        'id'                     => (int)$db->lastInsertId(),
+                        'sku_id'                 => $skuId,
+                        'pickface_bin_id'        => (int)$candidate['location_id'],
+                        'pickface_max'           => $uomPerPallet,
+                        'pickface_min'           => $pickfaceMin,
+                        'pickface_location_code' => $candidate['location_code'],
+                        'row_name'               => $candidate['row_name'],
+                        'aisle'                  => $candidate['aisle'],
+                        'zone'                   => $candidate['zone'],
+                    ];
+                } catch (\PDOException $e) {
+                    continue;
+                }
+            }
+        }
+
+        // Step 3: occupancy >= 90%, or no empty bin found — reuse a bin
+        // that already holds this SKU's stock (not persisted, same as before)
         $binStmt = $db->prepare(
             "SELECT lm.id AS location_id, lm.location_code, lm.row_name, lm.aisle, lm.zone,
                     SUM(s.quantity) AS total_qty
@@ -357,15 +416,15 @@ class PickfaceSplitter
         }
 
         return [
-            'id'                    => 0,  // auto-detected, not from config table
-            'sku_id'                => $skuId,
-            'pickface_bin_id'       => (int)$bin['location_id'],
-            'pickface_max'          => $uomPerPallet,
-            'pickface_min'          => $pickfaceMin,
+            'id'                     => 0,
+            'sku_id'                 => $skuId,
+            'pickface_bin_id'        => (int)$bin['location_id'],
+            'pickface_max'           => $uomPerPallet,
+            'pickface_min'           => $pickfaceMin,
             'pickface_location_code' => $bin['location_code'],
-            'row_name'              => $bin['row_name'],
-            'aisle'                 => $bin['aisle'],
-            'zone'                  => $bin['zone'],
+            'row_name'               => $bin['row_name'],
+            'aisle'                  => $bin['aisle'],
+            'zone'                   => $bin['zone'],
         ];
     }
 

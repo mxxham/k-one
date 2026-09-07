@@ -364,11 +364,10 @@ class Picklist {
             $config = PickfaceSplitter::getPickfaceConfig($skuId, $db);
             if (!$config) continue;
 
-            // Split order line: bulk_qty picked from bulk (B-E), pickface_qty from pickface (A-level)
-            $split = PickfaceSplitter::splitOrderLine($totalQty, $config['pickface_max']);
-
-            // Only check replenishment for the pickface_qty (remainder picked from A-level)
-            $pickfaceQty = $split['pickface_qty'];
+            // Compute intended pickface qty from splitOrderLine — the design-time
+            // remainder, regardless of whether the pickface bin actually had stock.
+            $split = PickfaceSplitter::splitOrderLine($totalQty, (int)$config['pickface_max']);
+            $pickfaceQty = (float)$split['pickface_qty'];
             if ($pickfaceQty <= 0) continue;
 
             // Check if replenishment is needed (projected_on_hand <= pickface_min)
