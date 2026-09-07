@@ -453,11 +453,17 @@ class Picklist {
             $codeStmt->execute([$skuId]);
             $productCode = $codeStmt->fetchColumn();
 
-            // Step 4: Query ALL bulk bins (B-E) for this SKU with partial pallets
+            // Step 4: Query ALL bulk bins (B-E) for this SKU with remainder after picking
             $binStmt = $db->prepare("
-                SELECT lm.id, lm.location_code, SUM(s.quantity) as total_qty
+                SELECT lm.id, lm.location_code,
+                       SUM(s.quantity) as total_qty,
+                       COALESCE(SUM(pki.quantity), 0) as picked_qty,
+                       SUM(s.quantity) - COALESCE(SUM(pki.quantity), 0) as remainder
                 FROM stock s
                 JOIN location_master lm ON lm.location_code = s.location AND lm.is_active = 1
+                LEFT JOIN stock_locations sl ON sl.location_code = lm.location_code AND sl.stock_id = s.id
+                LEFT JOIN picklist_items pki ON pki.stock_location_id = sl.id
+                    AND pki.picklist_id = ? AND pki.product_id = ?
                 WHERE s.product_id = ?
                   AND s.location != ?
                   AND UPPER(lm.row_name) IN ('B', 'C', 'D', 'E')
@@ -465,13 +471,13 @@ class Picklist {
                   AND (s.hold_status = 'available' OR s.hold_status IS NULL)
                   AND s.quantity > 0
                 GROUP BY lm.id, lm.location_code
-                HAVING total_qty > 0 AND total_qty < ?
+                HAVING remainder > 0 AND remainder < ?
             ");
-            $binStmt->execute([$skuId, $pfLocCode, $pickfaceMax]);
+            $binStmt->execute([$picklistId, $skuId, $skuId, $pfLocCode, $pickfaceMax]);
             $partialBins = $binStmt->fetchAll();
 
             foreach ($partialBins as $bin) {
-                $binQty = (float)$bin['total_qty'];
+                $binQty = (float)$bin['remainder'];
 
                 // Step 5: INSERT bin-to-bin task for each partial bin
                 $insStmt = $db->prepare("
