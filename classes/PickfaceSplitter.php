@@ -285,19 +285,67 @@ class PickfaceSplitter
         $row = $stmt->fetch();
 
         if ($row) {
-            return [
-                'id'                              => (int)$row['id'],
-                'sku_id'                          => (int)$row['sku_id'],
-                'pickface_bin_id'                 => (int)$row['pickface_bin_id'],
-                'pickface_max'                    => (int)$row['pickface_max'],
-                'pickface_min'                    => (int)$row['pickface_min'],
-                'pickface_location_code'          => $row['pickface_location_code'],
-                'row_name'                        => $row['row_name'],
-                'aisle'                           => $row['aisle'],
-                'zone'                            => $row['zone'],
-                'inbound_pickface_bin_id'         => $row['inbound_pickface_bin_id'] ? (int)$row['inbound_pickface_bin_id'] : null,
-                'inbound_pickface_location_code'  => $row['inbound_pickface_location_code'] ?? null,
-            ];
+            // Validation: verify the configured bin actually holds this SKU's stock
+            $binId = (int)$row['pickface_bin_id'];
+            $locCode = $row['pickface_location_code'];
+            $validator = $db->prepare(
+                "SELECT s.product_id, s.quantity
+                 FROM stock s
+                 WHERE s.location = ? AND s.quantity > 0
+                 LIMIT 1"
+            );
+            $validator->execute([$locCode]);
+            $binStock = $validator->fetch();
+
+            if ($binStock && (int)$binStock['product_id'] !== $skuId) {
+                // Bin holds a DIFFERENT product — stale config. Self-heal by reassigning.
+                error_log(
+                    "[PickfaceSplitter] STALE CONFIG: SKU #{$skuId} config points to {$locCode} "
+                    . "which holds product #{$binStock['product_id']} (qty={$binStock['quantity']}). "
+                    . "Self-healing: reassigning pickface bin."
+                );
+                // Auto-detect correct bin and persist the fix
+                $fixed = self::_autoDetectPickfaceConfig($skuId, $db);
+                if ($fixed && isset($fixed['pickface_bin_id']) && $fixed['pickface_bin_id'] > 0) {
+                    $upd = $db->prepare(
+                        "UPDATE sku_pickface_config SET pickface_bin_id = ?, pickface_max = ?, pickface_min = ? WHERE sku_id = ?"
+                    );
+                    $upd->execute([$fixed['pickface_bin_id'], $fixed['pickface_max'], $fixed['pickface_min'], $skuId]);
+                    error_log(
+                        "[PickfaceSplitter] SELF-HEALED: SKU #{$skuId} reassigned from {$locCode} "
+                        . "to {$fixed['pickface_location_code']} (bin_id={$fixed['pickface_bin_id']})"
+                    );
+                    // Audit trail for the self-heal
+                    if (class_exists('ActivityLogger')) {
+                        ActivityLogger::log($db, null, 'pickface_self_heal', $skuId, [
+                            'old_bin'       => $locCode,
+                            'old_product'   => $binStock['product_id'],
+                            'new_bin'       => $fixed['pickface_location_code'],
+                            'new_bin_id'    => $fixed['pickface_bin_id'],
+                        ]);
+                    }
+                    // Return the corrected, persisted config
+                    $fixed['id'] = (int)$row['id'];
+                    return $fixed;
+                }
+                // Auto-detect found nothing — fall through to return null
+                return null;
+            } else {
+                // Bin is empty (normal — replenishment fills it) or holds correct product
+                return [
+                    'id'                              => (int)$row['id'],
+                    'sku_id'                          => (int)$row['sku_id'],
+                    'pickface_bin_id'                 => $binId,
+                    'pickface_max'                    => (int)$row['pickface_max'],
+                    'pickface_min'                    => (int)$row['pickface_min'],
+                    'pickface_location_code'          => $locCode,
+                    'row_name'                        => $row['row_name'],
+                    'aisle'                           => $row['aisle'],
+                    'zone'                            => $row['zone'],
+                    'inbound_pickface_bin_id'         => $row['inbound_pickface_bin_id'] ? (int)$row['inbound_pickface_bin_id'] : null,
+                    'inbound_pickface_location_code'  => $row['inbound_pickface_location_code'] ?? null,
+                ];
+            }
         }
 
         // 2. No explicit config — auto-detect pickface bin from A-level locations
