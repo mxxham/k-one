@@ -570,9 +570,7 @@ class PickfaceSplitter
     }
 
     /**
-     * Enqueue a BullMQ job for the replenishment task.
-     * Stub implementation — logs the job. Replace with actual BullMQ producer
-     * when the queue infrastructure is available.
+     * Enqueue a BullMQ job for the replenishment task via the Node.js API.
      *
      * @param int      $taskId         The replen_task ID
      * @param int      $skuId          The product/SKU ID
@@ -587,9 +585,31 @@ class PickfaceSplitter
         int $pickfaceBinId,
         int $qty
     ): void {
-        // TODO: Replace with actual BullMQ producer when queue infrastructure is available
-        error_log("[PickfaceSplitter] Enqueue BullMQ job: task={$taskId}, sku={$skuId}, "
-            . "source={$sourceBinId}, dest={$pickfaceBinId}, qty={$qty}");
+        $nodeApiUrl = defined('NODE_API_URL') ? NODE_API_URL : 'http://localhost:4000';
+        $url = $nodeApiUrl . '/api/replenishment/enqueue';
+
+        $payload = json_encode([
+            'task_id'           => $taskId,
+            'sku_id'            => $skuId,
+            'source_bin_id'     => $sourceBinId,
+            'destination_bin_id' => $pickfaceBinId,
+            'qty'               => $qty,
+        ], JSON_THROW_ON_ERROR);
+
+        $ctx = stream_context_create([
+            'http' => [
+                'method'  => 'POST',
+                'header'  => "Content-Type: application/json\r\n",
+                'content' => $payload,
+                'timeout' => 5,
+                'ignore_errors' => true,
+            ],
+        ]);
+
+        $result = @file_get_contents($url, false, $ctx);
+        if ($result === false) {
+            error_log("[PickfaceSplitter] Failed to enqueue BullMQ job for task #{$taskId}: HTTP request failed");
+        }
     }
 
     /**

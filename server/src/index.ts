@@ -136,6 +136,34 @@ app.get('/api/replenishment/tasks/:taskId', upload.any(), async (req: Request, r
   }
 });
 
+app.post('/api/replenishment/enqueue', upload.any(), async (req: Request, res: Response) => {
+  const queryParams: Record<string, any> = { ...(req.query as any) };
+  try {
+    const store: ReqContext = {
+      user: null,
+      ip: req.ip ?? req.socket.remoteAddress ?? null,
+      body: { ...req.body },
+      queryParams: { ...queryParams, module: 'replenishment', action: 'enqueue' },
+      res,
+      files: (req as any).files ?? [],
+    };
+    await reqStore.run(store, async () => {
+      await dispatch('replenishment', 'enqueue');
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: 'No response produced' });
+      }
+    });
+  } catch (e: any) {
+    if (e instanceof JsonOutSent) return;
+    if (e instanceof ApiError) {
+      if (!res.headersSent) res.status(e.status).json({ success: false, message: e.message });
+      return;
+    }
+    console.error(e);
+    if (!res.headersSent) res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+});
+
 app.all('*', upload.any(), async (req: Request, res: Response) => {
   const module = String(req.query.module ?? (req.body?.module ?? ''));
   const action = String(req.query.action ?? (req.body?.action ?? ''));

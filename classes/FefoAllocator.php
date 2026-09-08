@@ -309,6 +309,7 @@ class FefoAllocator
         $pickfaceAllocations = [];
         $totalPickfaceAvail  = 0.0;
         $actualPickfaceUsed  = 0.0;
+        $remainingPickface   = 0.0;
 
         if ($pickfaceQty > 1e-5) {
             $pfSql = "SELECT
@@ -403,7 +404,7 @@ class FefoAllocator
             }
         }
 
-        $pickfaceShortage = max(0, $remainingPickface ?? 0);
+        $pickfaceShortage = max(0, $remainingPickface);
         $shortage   = max(0, $pickfaceShortage);
         $sufficient = $shortage <= 1e-5;
 

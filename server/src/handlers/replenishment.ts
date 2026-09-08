@@ -7,6 +7,8 @@ import {
 } from '../helpers';
 import { dbExec, dbExecFirst } from '../db';
 import { activityLog } from '../activityLog';
+import { replenishmentQueue } from '../queue/replenishmentQueue';
+import type { ReplenishmentJobData } from '../queue/replenishmentQueue';
 
 /** Port of ReplenishmentTask.php — dispatch by action string. */
 export async function handleReplenishment(action: string): Promise<void> {
@@ -17,9 +19,41 @@ export async function handleReplenishment(action: string): Promise<void> {
     case 'task_status':
       return getTaskStatus();
 
+    case 'enqueue':
+      return enqueue();
+
     default:
       jsonErr('Invalid action: ' + action, 404);
   }
+}
+
+// ─── POST /api/replenishment/enqueue ─────────────────────────────────────
+
+async function enqueue(): Promise<void> {
+  const b = body();
+  const taskId = Number(b.task_id ?? 0);
+  const skuId = Number(b.sku_id ?? 0);
+  const sourceBinId = Number(b.source_bin_id ?? 0);
+  const destinationBinId = Number(b.destination_bin_id ?? 0);
+  const qty = Number(b.qty ?? 0);
+
+  if (!taskId || !skuId || !sourceBinId || !destinationBinId || qty <= 0) {
+    jsonErr('Missing required fields: task_id, sku_id, source_bin_id, destination_bin_id, qty', 400);
+  }
+
+  const jobData: ReplenishmentJobData = {
+    task_id: taskId,
+    sku_id: skuId,
+    source_bin_id: sourceBinId,
+    destination_bin_id: destinationBinId,
+    qty,
+  };
+
+  await replenishmentQueue.add('replenish', jobData, {
+    jobId: `replen-task-${taskId}`,
+  });
+
+  jsonOut({ enqueued: true, task_id: taskId });
 }
 
 // ─── POST /api/replenishment/:id/scan-confirm ──────────────────────────

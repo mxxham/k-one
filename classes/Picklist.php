@@ -366,18 +366,17 @@ class Picklist {
             $config = PickfaceSplitter::getPickfaceConfig($skuId, $db);
             if (!$config) continue;
 
-            // Compute intended pickface qty from splitOrderLine — the design-time
-            // remainder, regardless of whether the pickface bin actually had stock.
             $split = PickfaceSplitter::splitOrderLine($totalQty, (int)$config['pickface_max']);
             $pickfaceQty = (float)$split['pickface_qty'];
-            if ($pickfaceQty <= 0) continue;
 
-            // Only replenish when pickface doesn't have enough for the order's share.
-            // Cap at pickfaceQty — never overfill beyond what the order needs.
-            $check = PickfaceSplitter::checkReplenishment($skuId, $pickfaceQty, $db);
+            // When pickfaceQty=0 (exact multiple), the pickface still needs a full
+            // pallet of stock for picking. Use pickface_max as the target.
+            $replenishTarget = ($pickfaceQty > 0) ? $pickfaceQty : (float)$config['pickface_max'];
 
-            if ($check['needs_replenishment'] && $check['projected_on_hand'] < $pickfaceQty) {
-                $replenishQty = $pickfaceQty - $check['projected_on_hand'];
+            $check = PickfaceSplitter::checkReplenishment($skuId, $replenishTarget, $db);
+
+            if ($check['needs_replenishment'] && $check['projected_on_hand'] < $replenishTarget) {
+                $replenishQty = $replenishTarget - $check['projected_on_hand'];
             } else {
                 $replenishQty = 0;
             }
