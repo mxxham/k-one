@@ -4,7 +4,7 @@
 
 ### Warehouse Management System for Shell CKB
 
-A modern, web-based WMS built with PHP 8.2+, React 18, TypeScript, and Tailwind CSS.
+A modern, web-based warehouse management system for Shell CKB built with PHP 8.2+, React 18, TypeScript, and Tailwind CSS.
 
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-777BB4?style=for-the-badge&logo=php&logoColor=white)](https://php.net)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
