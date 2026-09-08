@@ -1,44 +1,144 @@
+<div align="center">
+
 # K-one
 
-A web-based warehouse management system for Shell CKB warehouse operations, built with PHP, React, TypeScript, and Tailwind CSS.
+### Warehouse Management System for Shell CKB
 
-## Tech Stack
+A modern, web-based WMS built with PHP 8.2+, React 18, TypeScript, and Tailwind CSS.
 
-| Category | Technology |
-|----------|------------|
-| **Backend** | PHP 8.2+, MySQL/MariaDB |
-| **Frontend** | React 18, TypeScript, Vite |
-| **Styling** | Tailwind CSS |
-| **Libraries** | PhpSpreadsheet ^5.5, PHPMailer ^7.0, Three.js |
-| **Testing** | PHPUnit ^11.0, Vitest |
-| **3D Visualization** | React Three Fiber |
+[![PHP](https://img.shields.io/badge/PHP-8.2%2B-777BB4?style=for-the-badge&logo=php&logoColor=white)](https://php.net)
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![Vite](https://img.shields.io/badge/Vite-5-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![MySQL](https://img.shields.io/badge/MySQL-5.7%2B-4479A1?style=for-the-badge&logo=mysql&logoColor=white)](https://mysql.com)
+[![Three.js](https://img.shields.io/badge/Three.js-R152-000000?style=for-the-badge&logo=three.js&logoColor=white)](https://threejs.org)
+
+<br>
+
+[![PHPUnit](https://img.shields.io/badge/PHPUnit-11-3DA343?style=flat-square&logo=phpunit&logoColor=white)](#testing)
+[![Vitest](https://img.shields.io/badge/Vitest-1-729B1B?style=flat-square&logo=vitest&logoColor=white)](#testing)
+[![MIT License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](#license)
+
+</div>
 
 ---
 
-## Key Features
+## Overview
+
+K-one is a comprehensive warehouse management system designed for **Shell CKB** operations. It handles the full warehouse lifecycle — from inbound receiving and putaway to outbound shipping with FEFO allocation, cycle counting, and real-time stock monitoring with 3D visualization.
+
+---
+
+## Features
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Core Modules
 
 | Module | Description |
 |--------|-------------|
-| **Dashboard** | Visual warehouse operations summary + interactive aisle map |
-| **Inbound** | Goods receiving with multi-status, multi-OD/SO, putaway to locations |
-| **Outbound** | Shipping with FEFO (First Expired First Out) logic |
-| **Wave Picking** | Wave-based batch picking orchestration |
-| **Picklist** | Picking work assignments per outbound order |
-| **Bin Transfer** | Stock movement between locations/bins within warehouse |
-| **Stock** | Real-time stock view per batch/location with expiry monitoring |
-| **Stock Ledger** | Complete transaction history (audit trail) |
-| **Stock Take** | Cycle counting with per-product counters |
-| **Location Master** | Warehouse location/rack management |
+| **Dashboard** | Visual operations summary + interactive aisle map |
+| **Inbound** | Multi-status receiving, putaway to locations |
+| **Outbound** | FEFO-based shipping allocation |
+| **Wave Picking** | Batch picking orchestration |
+| **Picklist** | Per-order picking assignments |
+| **Bin Transfer** | Inter-location stock movement |
+
+</td>
+<td width="50%" valign="top">
+
+### Stock & Reporting
+
+| Module | Description |
+|--------|-------------|
+| **Stock** | Real-time view per batch/location |
+| **Stock Ledger** | Full transaction audit trail |
+| **Stock Take** | Cycle counting per product |
+| **Location Master** | Warehouse rack management |
 | **Reports** | Operational reports + Excel export |
-| **Activity Log** | System-wide user activity log |
-| **Master Data** | Products, Suppliers, Customers, Locations |
+| **Activity Log** | System-wide audit log |
+
+</td>
+</tr>
+</table>
 
 ### Additional Features
 
-- Excel export from all modules (Inbound, Outbound, Stock, Ledger, Reports, etc.)
-- Bulk data import via Excel (Inbound, Outbound, Stock)
-- Print Inbound Receipt, Outbound DO, Picklist, Delivery Order, Putaway Sheet
-- REST API endpoints for external system integration (`inbound_api.php`, `outbound_api.php`, `stocktake_api.php`, `api_locations.php`)
+<details>
+<summary><strong>Excel Import & Export</strong></summary>
+
+- Export Excel from all modules (Inbound, Outbound, Stock, Ledger, Reports)
+- Bulk data import via Excel for Inbound, Outbound, and Stock modules
+- Powered by PhpSpreadsheet ^5.5
+
+</details>
+
+<details>
+<summary><strong>Document Printing</strong></summary>
+
+- Inbound Receipt
+- Outbound Delivery Order
+- Picklist
+- Delivery Order (Surat Jalan)
+- Putaway Sheet
+- Label Printing via LabelPrinter service
+
+</details>
+
+<details>
+<summary><strong>REST API Integration</strong></summary>
+
+| Endpoint | Handler | Purpose |
+|----------|---------|---------|
+| `/api/inbound` | `inbound_api.php` | Inbound CRUD + receive |
+| `/api/outbound` | `outbound_api.php` | Outbound CRUD + ship |
+| `/api/stocktake` | `stocktake_api.php` | Cycle count submit |
+| `/api/locations` | `api_locations.php` | Location lookup |
+
+</details>
+
+---
+
+## Tech Stack
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+#### Backend
+- **PHP 8.2+** with strict typing
+- **MySQL 5.7+ / MariaDB 10.3+**
+- **PDO** singleton pattern
+- Prepared statements (SQL injection safe)
+
+#### Frontend
+- **React 18** with TypeScript
+- **Vite 5** for blazing fast builds
+- **Tailwind CSS 3** for styling
+- **React Three Fiber** for 3D visualization
+
+</td>
+<td width="50%" valign="top">
+
+#### Libraries
+- **PhpSpreadsheet ^5.5** — Excel import/export
+- **PHPMailer ^7.0** — Email notifications
+- **Three.js R152** — 3D warehouse visualization
+- **JsBarcode** — Barcode generation
+- **QRCode.react** — QR code generation
+- **Lucide React** — Icon system
+
+#### Testing
+- **PHPUnit 11** — Backend tests
+- **Vitest** — Frontend unit tests
+- **Testing Library** — Component testing
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -46,93 +146,129 @@ A web-based warehouse management system for Shell CKB warehouse operations, buil
 
 ### Prerequisites
 
-- PHP 8.2+ with PDO MySQL, GD, Zip, OpenSSL extensions
-- MySQL 5.7+ or MariaDB 10.3+
-- Node.js 18+ (for frontend development)
-- Composer
+| Requirement | Version |
+|-------------|---------|
+| PHP | 8.2+ (PDO MySQL, GD, Zip, OpenSSL) |
+| MySQL / MariaDB | 5.7+ / 10.3+ |
+| Node.js | 18+ |
+| Composer | Latest |
 
 ### Installation
 
 ```bash
-# Clone the repository
+# 1. Clone the repository
 git clone https://github.com/mxxham/k-one.git
 cd k-one
 
-# Install PHP dependencies
+# 2. Install PHP dependencies
 composer install
 
-# Install frontend dependencies
+# 3. Install frontend dependencies
 cd frontend
 npm install
+cd ..
 
-# Import database schema
+# 4. Import database schema
 mysql -u root -p k_one < database.sql
 
-# Run database migrations (in order)
+# 5. Run database migrations (in order)
 mysql -u root -p k_one < migrations/revision_001.sql
-# ... continue with subsequent migrations
+# Continue with subsequent revisions and hotfixes
 ```
 
-### Running the Application
+### Running
 
 ```bash
-# Start frontend dev server
+# Frontend dev server (hot reload)
 cd frontend
 npm run dev
 
-# Build for production
+# Production build
 npm run build
-
-# Access in browser
-# http://localhost/k-one
 ```
 
-### Default Login
+Then open `http://localhost/k-one` in your browser.
 
-- **Username:** `admin`
-- **Password:** `admin123`
+### Default Credentials
 
-> **Security:** Change the default password immediately after first login. Do not use these credentials in production.
+> [!WARNING]
+> **Change the default password immediately after first login.**
+> Do not use these credentials in production.
+
+| Username | Password |
+|----------|----------|
+| `admin` | `admin123` |
 
 ---
 
-## Database Migrations
+## User Roles
+
+<table>
+<tr>
+<th>Role</th>
+<th>Access Level</th>
+<th>Capabilities</th>
+</tr>
+<tr>
+<td><code>admin</code></td>
+<td>Full</td>
+<td>All features + user management + data reset</td>
+</tr>
+<tr>
+<td><code>operator</code></td>
+<td>Standard</td>
+<td>Create/edit orders, view all reports</td>
+</tr>
+<tr>
+<td><code>viewer</code></td>
+<td>Read-only</td>
+<td>View data only</td>
+</tr>
+</table>
+
+---
+
+## Architecture
+
+<details>
+<summary><strong>Database Migrations</strong></summary>
 
 The `migrations/` folder contains incremental SQL for schema updates:
 
 ```
 migrations/
-├── revision_001.sql          # Initial schema
+├── revision_001.sql              # Initial schema
 ├── revision_002.sql
 ├── revision_003.sql
 ├── revision_004_location_pallet.sql
-├── hotfix_001 – hotfix_023   # Operational data fixes
-└── seed_locations.sql        # Warehouse location seeds
+├── hotfix_001 – hotfix_023       # Operational data fixes
+└── seed_locations.sql            # Warehouse location seeds
 ```
 
-Run sequentially in order.
+> [!NOTE]
+> Run migrations sequentially in order. Never edit existing migrations — add new sequential files.
 
----
+</details>
 
-## Project Structure
+<details>
+<summary><strong>Project Structure</strong></summary>
 
 ```
 k-one/
 ├── api/                        # REST API endpoints
 │   ├── index.php               # API router
 │   ├── registry.php            # Route registry
-│   └── handlers/               # API handlers (waves, users, etc.)
+│   └── handlers/               # API handlers
 ├── classes/                    # Core business logic (service layer)
 │   ├── Auth.php                # Authentication & RBAC
 │   ├── Inbound.php             # Inbound receiving + putaway
 │   ├── Outbound.php            # Outbound shipping (FEFO)
 │   ├── Stock.php               # Stock management
-│   ├── Picklist.php            # Picklist management
 │   ├── Wave.php                # Wave picking orchestration
 │   ├── PickingService.php      # Pick execution logic
 │   ├── FefoAllocator.php       # FEFO allocation engine
 │   ├── BinTransfer.php         # Bin-to-bin transfers
-│   ├── StockTake.php           # Cycle counting / stock opname
+│   ├── StockTake.php           # Cycle counting
 │   ├── CycleCount.php          # Cycle counting logic
 │   ├── AbcAnalysis.php         # ABC analysis
 │   ├── Replenishment.php       # Replenishment logic
@@ -143,7 +279,7 @@ k-one/
 │   ├── DispatchService.php     # Dispatch orchestration
 │   ├── StagingService.php      # Staging area management
 │   ├── ConsolidationService.php # Order consolidation
-│   ├── TaskAssignmentService.php # Task assignment logic
+│   ├── TaskAssignmentService.php # Task assignment
 │   ├── OrderService.php        # Order management
 │   ├── Asn.php                 # Advanced Shipping Notice
 │   ├── DiscrepancyService.php  # Discrepancy handling
@@ -154,8 +290,8 @@ k-one/
 │   ├── LabelPrinter.php        # Label printing
 │   ├── Report.php              # Report generation
 │   ├── database.php            # PDO singleton helper
-│   ├── header.php              # Navigation & layout header
-│   └── footer.php              # Scripts & layout footer
+│   ├── header.php              # Navigation & layout
+│   └── footer.php              # Scripts & layout
 ├── config/
 │   └── database.php            # DB, SMTP, app constants
 ├── frontend/                   # Vite + TypeScript + React + Tailwind
@@ -180,34 +316,33 @@ k-one/
 ├── customers.php               # Customer master
 ├── users.php                   # User management
 ├── activity_log.php            # Activity log
-├── import_inbound.php          # Inbound import via Excel
-├── import_outbound.php         # Outbound import via Excel
-├── import_stock.php            # Stock import via Excel
-├── print_inbound.php           # Print inbound receipt
-├── print_outbound.php          # Print delivery order
-├── print_picklist.php          # Print picklist
-├── putaway_sheet.php           # Print putaway sheet
-├── surat_jalan.php             # Delivery order
 ├── inbound_api.php             # API endpoint inbound
 ├── outbound_api.php            # API endpoint outbound
 ├── stocktake_api.php           # API endpoint stock take
 ├── api_locations.php           # API endpoint locations
-├── reset_operational_data.php  # Reset operational data (admin only)
-├── login.php / logout.php
-├── index.php                   # Entry point (redirects to dashboard)
 ├── database.sql                # Full database schema
 └── composer.json
 ```
 
----
+</details>
 
-## User Roles
+<details>
+<summary><strong>Service Layer Architecture</strong></summary>
 
-| Role | Access |
-|------|--------|
-| `admin` | Full access: all features + user management + data reset |
-| `operator` | Create & edit all operational orders, view all reports |
-| `viewer` | Read-only: can only view data |
+The application follows a service-layer architecture:
+
+```
+Page Controllers (*.php) → Service Classes (classes/) → Database (PDO singleton)
+```
+
+| Layer | Responsibility |
+|-------|----------------|
+| **Page Controllers** | Handle HTTP requests, auth checks, call services |
+| **Service Classes** | Business logic, validation, data manipulation |
+| **Database Layer** | PDO singleton, prepared statements, query execution |
+| **Activity Logger** | Audit trail for all operations |
+
+</details>
 
 ---
 
@@ -218,20 +353,42 @@ k-one/
 ```bash
 cd frontend
 npm install          # Install dependencies
-npm run dev          # Start dev server
+npm run dev          # Start dev server (hot reload)
 npm run build        # Production build
-npm test             # Run Vitest tests
+npm test             # Run Vitest unit tests
 ```
 
 ### Backend
 
 ```bash
-composer install     # Install PHP dependencies
-./vendor/bin/phpunit # Run PHPUnit tests
+composer install                    # Install PHP dependencies
+./vendor/bin/phpunit                # Run PHPUnit tests
+./vendor/bin/phpunit --coverage     # Run with coverage report
 ```
+
+### Database
+
+```bash
+# Import full schema
+mysql -u root -p k_one < database.sql
+
+# Run incremental migrations
+mysql -u root -p k_one < migrations/revision_001.sql
+```
+
+> [!TIP]
+> Always backup your database before running migrations in production.
 
 ---
 
-**Version:** 2.0.0  
-**Built for:** Shell CKB  
-**Stack:** PHP 8.2+, React 18, TypeScript, Vite, MySQL/MariaDB, Tailwind CSS, PhpSpreadsheet, PHPMailer, Three.js
+## License
+
+This project is licensed under the **MIT License**.
+
+---
+
+<div align="center">
+
+**Version:** 2.0.0 · **Built for:** Shell CKB · **By:** [mxxham](https://github.com/mxxham)
+
+</div>
