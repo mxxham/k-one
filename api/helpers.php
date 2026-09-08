@@ -68,6 +68,7 @@ function search_products_json($q, $skuOnly = false) {
                 LEFT JOIN stock s ON s.product_id = p.id AND s.stock_status = 'Available'
                 WHERE p.is_active = 1
                 AND p.product_code LIKE ?
+                AND p.product_code REGEXP '^[0-9]+$'
                 GROUP BY p.id
                 ORDER BY p.product_name
                 LIMIT 30";
