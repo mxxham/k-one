@@ -438,11 +438,15 @@ class PickfaceSplitter
                AND s.quantity > 0
                AND lm.location_code REGEXP '[A-Z]{2}[0-9]{2}A01$'
                AND lm.is_active = 1
+               AND NOT EXISTS (
+                   SELECT 1 FROM sku_pickface_config c
+                   WHERE c.pickface_bin_id = lm.id AND c.sku_id != ?
+               )
              GROUP BY lm.id, lm.location_code, lm.row_name, lm.aisle, lm.zone
              ORDER BY total_qty DESC
              LIMIT 1"
         );
-        $binStmt->execute([$skuId]);
+        $binStmt->execute([$skuId, $skuId]);
         $bin = $binStmt->fetch();
 
         if (!$bin) {

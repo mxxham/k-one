@@ -775,6 +775,29 @@ class Putaway {
         )";
     }
 
+    /**
+     * Check if a pickface bin is assigned to a different SKU than the one being placed.
+     * Returns the config row if assigned to a different SKU, null if free or same SKU.
+     */
+    private static function _isPickfaceAssigned(int $productId, string $locationCode): ?array
+    {
+        $db = db();
+        $locStmt = $db->prepare("SELECT id FROM location_master WHERE location_code = ? LIMIT 1");
+        $locStmt->execute([strtoupper(trim($locationCode))]);
+        $locId = (int)$locStmt->fetchColumn();
+        if (!$locId) return null;
+
+        $confStmt = $db->prepare(
+            "SELECT c.id, c.sku_id, lm.location_code AS bin_code
+             FROM sku_pickface_config c
+             JOIN location_master lm ON lm.id = c.pickface_bin_id
+             WHERE c.pickface_bin_id = ? AND c.sku_id != ?
+             LIMIT 1"
+        );
+        $confStmt->execute([$locId, $productId]);
+        return $confStmt->fetch() ?: null;
+    }
+
     private static function _blockedLocations(): array {
         $db = db();
         return $db->query("SELECT location_code, aisle_prefix, reason, scope_type FROM putaway_location_blocks WHERE is_active = 1")->fetchAll();
@@ -1112,6 +1135,13 @@ class Putaway {
         }
         if ($requiresEquip && $h($level) >= 4 && (int)($loc['equipment_accessible'] ?? 0) !== 1) {
             $reasons[] = "UOM $uomType memerlukan heavy equipment — level $level (D/E) hanya boleh dipakai jika lokasi ditandai 'akses alat berat'.";
+        }
+        // Pickface assignment check: reject placing different SKU in an assigned pickface bin
+        if ($level === 'A') {
+            $conflict = self::_isPickfaceAssigned($productId, $code);
+            if ($conflict) {
+                $reasons[] = "Lokasi '$code' adalah pickface yang ditetapkan untuk SKU lain (ID: {$conflict['sku_id']}). Produk tidak boleh ditempatkan di sini.";
+            }
         }
         if ((float)($loc['max_weight_kg'] ?? 0) > 0 && (float)($limits['max_weight_kg'] ?? 0) > (float)$loc['max_weight_kg']) {
             $reasons[] = "Berat pallet ({$limits['max_weight_kg']} kg) melebihi kapasitas lokasi ({$loc['max_weight_kg']} kg).";

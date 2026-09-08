@@ -1,6 +1,0 @@
-WARNING: migration 025-performance-indexes.sql error (continuing): SQLSTATE[42000]: Syntax error or access violation: 1072 Key column 'lpn_code' doesn't exist in table
-PHPUnit 11.5.56 by Sebastian Bergmann and contributors.
-
-Runtime:       PHP 8.2.12
-Configuration: D:\K-one\phpunit.xml
-
