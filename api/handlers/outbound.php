@@ -47,7 +47,7 @@ function handle_outbound($action) {
 
         case 'search_products':
             api_require_auth();
-            json_out(['results' => search_products_json(query('q'))]);
+            json_out(['results' => search_products_json(query('q'), true)]);
             break;
 
         case 'check_stock':

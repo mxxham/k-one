@@ -56,22 +56,37 @@ function paginationMeta(int $total, int $page, int $perPage): array {
 }
 
 /** Product search used by inbound/outbound forms */
-function search_products_json($q) {
+function search_products_json($q, $skuOnly = false) {
     $q = trim($q ?? '');
     $db = db();
-    $sql = "SELECT p.id, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
-                   p.max_sku_qty, p.max_trans_qty, p.liters_per_unit,
-                   COALESCE(SUM(s.quantity),0) as stock_qty
-            FROM products p
-            LEFT JOIN stock s ON s.product_id = p.id AND s.stock_status = 'Available'
-            WHERE p.is_active = 1
-            AND (p.product_code LIKE ? OR p.product_name LIKE ?)
-            GROUP BY p.id
-            ORDER BY p.product_name
-            LIMIT 30";
     $like = '%' . $q . '%';
-    $stmt = $db->prepare($sql);
-    $stmt->execute([$like, $like]);
+    if ($skuOnly) {
+        $sql = "SELECT p.id, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
+                       p.max_sku_qty, p.max_trans_qty, p.liters_per_unit,
+                       COALESCE(SUM(s.quantity),0) as stock_qty
+                FROM products p
+                LEFT JOIN stock s ON s.product_id = p.id AND s.stock_status = 'Available'
+                WHERE p.is_active = 1
+                AND p.product_code LIKE ?
+                GROUP BY p.id
+                ORDER BY p.product_name
+                LIMIT 30";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([$like]);
+    } else {
+        $sql = "SELECT p.id, p.product_code, p.product_name, p.uom_type, p.uom_per_pallet,
+                       p.max_sku_qty, p.max_trans_qty, p.liters_per_unit,
+                       COALESCE(SUM(s.quantity),0) as stock_qty
+                FROM products p
+                LEFT JOIN stock s ON s.product_id = p.id AND s.stock_status = 'Available'
+                WHERE p.is_active = 1
+                AND (p.product_code LIKE ? OR p.product_name LIKE ?)
+                GROUP BY p.id
+                ORDER BY p.product_name
+                LIMIT 30";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([$like, $like]);
+    }
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     return array_map(function ($r) {
         return [
