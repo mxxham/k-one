@@ -255,6 +255,11 @@ set_permission('picking', 'confirm_pick', 'write');
 set_permission('picking', 'pending_picks', 'any');
 set_module_departments('picking', ['outbound']);
 
+// checker (checker.php): pending_lines any, confirm_line write; ['outbound']
+set_permission('checker', 'pending_lines', 'any');
+set_permission('checker', 'confirm_line', 'write');
+set_module_departments('checker', ['outbound']);
+
 // staging (outbound-module): scan_staging write, staged_items any; ['outbound']
 set_permission('staging', 'scan_staging', 'write');
 set_permission('staging', 'staged_items', 'any');

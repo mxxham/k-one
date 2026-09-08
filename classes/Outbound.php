@@ -1114,6 +1114,11 @@ public static function generateNumber($db = null): string {
             $outbound = self::getById($outboundId);
             $items    = self::getItems($outboundId);
 
+            // Gate: all picklist items must be checked before shipping
+            if (!$outbound['all_lines_checked']) {
+                throw new Exception("Semua item harus dicek sebelum order dapat dikirim.");
+            }
+
             $stmt = $db->prepare("UPDATE outbound_orders SET
                     status = 'Shipped',
                     shipped_by = ?

@@ -263,7 +263,7 @@ class Wave {
                 throw new ApiException('Wave must be in Planning to release (current: ' . $w['status'] . ')', 409);
             }
             $db->prepare("UPDATE waves SET status = 'Active' WHERE id = ?")->execute([$waveId]);
-            $db->prepare("UPDATE picklists SET status = 'Confirmed', updated_at = NOW() WHERE wave_id = ? AND status = 'Draft'")->execute([$waveId]);
+            $db->prepare("UPDATE picklists SET status = 'Confirmed', confirmed_at = NOW() WHERE wave_id = ? AND status = 'Draft'")->execute([$waveId]);
             $db->commit();
             return ['wave_id' => $waveId, 'status' => 'Active'];
         } catch (\Throwable $e) {
