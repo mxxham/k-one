@@ -29,50 +29,50 @@ export default function LpnLabel({ label, onPrint }: { label: LpnLabelData; onPr
 
   return (
     <div>
-      <div className="lpn-print-area bg-white text-black rounded-xl border-2 border-gray-900 w-full max-w-[900px] mx-auto overflow-hidden print:rounded-none">
-        <div className="flex items-center justify-between bg-gray-900 text-white px-4 py-1.5">
-          <span className="text-[10px] font-bold tracking-[0.2em] whitespace-nowrap">PT. K-ONE</span>
-          <span className="text-[8px] font-semibold tracking-[0.15em] text-gray-300 whitespace-nowrap">
+      <div className="lpn-print-area bg-white text-black rounded-xl border-2 border-gray-900 w-full max-w-[1000px] mx-auto overflow-hidden print:rounded-none">
+        <div className="flex items-center justify-between bg-gray-900 text-white px-6 py-2">
+          <span className="text-base font-bold tracking-[0.2em] whitespace-nowrap">PT. K-ONE</span>
+          <span className="text-sm font-semibold tracking-[0.15em] text-gray-300 whitespace-nowrap">
             LABEL PALLET / LPN
           </span>
         </div>
 
-        <div className="flex" style={{ minHeight: 300 }}>
-          <div className="flex flex-col items-center justify-center shrink-0 w-[25%] border-r-2 border-dashed border-gray-300 px-4 py-4">
-            <div className="p-1.5 border border-gray-200 rounded-md bg-white">
+        <div className="flex" style={{ minHeight: 400 }}>
+          <div className="flex flex-col items-center justify-center shrink-0 w-[25%] border-r-2 border-dashed border-gray-300 px-6 py-6">
+            <div className="p-2 border border-gray-200 rounded-md bg-white">
               <QRCodeSVG
                 value={label.lpn_code}
-                size={140}
+                size={200}
                 level="M"
                 includeMargin={false}
               />
             </div>
-            <div className="text-[10px] font-mono font-bold tracking-[0.08em] mt-2 text-center leading-tight break-all">
+            <div className="text-base font-mono font-bold tracking-[0.08em] mt-3 text-center leading-tight break-all">
               {label.lpn_code}
             </div>
           </div>
 
-          <div className="flex-1 min-w-0 flex flex-col px-5 py-3">
-            <div className="flex-1 flex flex-col justify-center pb-3 mb-3 border-b-2 border-gray-900">
-              <div className="text-[9px] font-bold text-gray-500 tracking-[0.16em] uppercase mb-1">LOKASI</div>
-              <div className="text-6xl font-black text-gray-900 leading-none break-words">
+          <div className="flex-1 min-w-0 flex flex-col px-6 py-5">
+            <div className="flex-1 flex flex-col justify-center pb-4 mb-4 border-b-2 border-gray-900">
+              <div className="text-sm font-bold text-gray-500 tracking-[0.16em] uppercase mb-1">LOKASI</div>
+              <div className="text-[96px] font-black text-gray-900 leading-none break-words">
                 {label.suggested_location ?? '—'}
               </div>
             </div>
 
-            <div className="flex gap-4 items-start">
+            <div className="flex gap-6 items-start">
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-black leading-snug break-words">
+                <div className="text-[24px] font-black leading-snug break-words">
                   {label.product_name || label.product_code || '—'}
                 </div>
                 {label.product_name && label.product_code && (
-                  <div className="text-[9px] font-mono text-gray-500 break-all mt-0.5 leading-tight">
+                  <div className="text-[18px] font-mono text-gray-500 break-all mt-1 leading-tight">
                     {label.product_code}
                   </div>
                 )}
               </div>
 
-              <div className="flex gap-3 flex-shrink-0">
+              <div className="flex gap-4 flex-shrink-0">
                 <CompactField label="Batch" value={label.batch_number} />
                 <CompactField label="Exp" value={label.expiry_date} />
                 <CompactField label="Qty" value={`${fmtNum(label.quantity)} ${label.uom || ''}`.trim()} />
@@ -82,7 +82,7 @@ export default function LpnLabel({ label, onPrint }: { label: LpnLabelData; onPr
             </div>
 
             {label.order_number && (
-              <div className="mt-2 pt-2 border-t border-dashed border-gray-300 flex items-center justify-between gap-2 text-[8px]">
+              <div className="mt-3 pt-3 border-t border-dashed border-gray-300 flex items-center justify-between gap-2 text-sm">
                 <span className="text-gray-400 font-semibold tracking-[0.15em] whitespace-nowrap">ORDER</span>
                 <span className="font-mono font-semibold text-gray-700 break-all text-right">
                   {label.order_number}
@@ -114,10 +114,10 @@ export default function LpnLabel({ label, onPrint }: { label: LpnLabelData; onPr
 function CompactField({ label: fieldLabel, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[7px] font-semibold text-gray-400 tracking-[0.12em] uppercase leading-none mb-0.5">
+      <div className="text-sm font-semibold text-gray-400 tracking-[0.12em] uppercase leading-none mb-1">
         {fieldLabel}
       </div>
-      <div className="text-[10px] font-semibold text-gray-900 break-words leading-snug">
+      <div className="text-xl font-semibold text-gray-900 break-words leading-snug">
         {value ?? '—'}
       </div>
     </div>

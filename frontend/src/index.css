@@ -53,8 +53,8 @@ textarea:focus {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
-    width: 287mm !important;
-    height: 93mm !important;
+    width: 277mm !important;
+    height: 190mm !important;
     border: none !important;
   }
 }
@@ -101,6 +101,9 @@ textarea:focus {
   .lpn-card {
     page-break-inside: avoid;
     break-inside: avoid;
+    width: 277mm !important;
+    height: 190mm !important;
+    margin: 0 auto;
   }
 }
 
