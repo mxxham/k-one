@@ -30,31 +30,38 @@ textarea:focus {
   transform: translateY(-3px);
 }
 
-/* LPN label printing: window.print() outputs only the .lpn-print-area block. */
 @media print {
+  @page {
+    size: A4 landscape;
+    margin: 5mm;
+  }
+
   body * {
     visibility: hidden;
   }
+
   .lpn-print-area,
   .lpn-print-area * {
     visibility: visible;
   }
-  .lpn-print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 320px;
-    border: none !important;
-  }
+
   .no-print {
     display: none !important;
   }
+
+  .lpn-print-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 287mm !important;
+    height: 93mm !important;
+    border: none !important;
+  }
 }
 
-/* LPN sheet printing — 200mm x 100mm labels, 2 per A4 page. */
 @media print {
   @page {
-    size: A4;
+    size: A4 landscape;
     margin: 5mm;
   }
 
@@ -75,7 +82,7 @@ textarea:focus {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
-    width: 200mm !important;
+    width: 287mm !important;
   }
 
   .lpn-page {

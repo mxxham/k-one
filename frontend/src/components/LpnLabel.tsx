@@ -27,79 +27,69 @@ export default function LpnLabel({ label, onPrint }: { label: LpnLabelData; onPr
     window.print();
   };
 
-  const Field = ({ label: fieldLabel, value }: { label: string; value: React.ReactNode }) => (
-    <div className="min-w-0">
-      <div className="text-[7px] font-semibold text-gray-400 tracking-[0.12em] uppercase leading-none mb-1">
-        {fieldLabel}
-      </div>
-      <div className="text-[10px] font-semibold text-gray-900 break-words leading-snug">
-        {value ?? '—'}
-      </div>
-    </div>
-  );
-
   return (
     <div>
-      <div className="lpn-print-area bg-white text-black rounded-xl border-2 border-gray-900 w-[380px] mx-auto overflow-hidden print:rounded-none">
-        {/* HEADER STRIP */}
-        <div className="flex items-center justify-between gap-3 bg-gray-900 text-white px-3 py-1.5">
-          <span className="text-[9px] font-bold tracking-[0.2em] whitespace-nowrap">PT. K-ONE</span>
-          <span className="text-[7px] font-semibold tracking-[0.15em] text-gray-300 whitespace-nowrap">
+      <div className="lpn-print-area bg-white text-black rounded-xl border-2 border-gray-900 w-full max-w-[900px] mx-auto overflow-hidden print:rounded-none">
+        <div className="flex items-center justify-between bg-gray-900 text-white px-4 py-1.5">
+          <span className="text-[10px] font-bold tracking-[0.2em] whitespace-nowrap">PT. K-ONE</span>
+          <span className="text-[8px] font-semibold tracking-[0.15em] text-gray-300 whitespace-nowrap">
             LABEL PALLET / LPN
           </span>
         </div>
 
-        <div className="px-3 py-3">
-          <div className="flex gap-3 items-stretch">
-            {/* LEFT: QR Code (bigger, own column) */}
-            <div className="flex flex-col items-center justify-center shrink-0 w-[140px] border-r border-dashed border-gray-300 pr-3">
-              <div className="p-1.5 border border-gray-200 rounded-md bg-white">
-                <QRCodeSVG
-                  value={label.lpn_code}
-                  size={124}
-                  level="M"
-                  includeMargin={false}
-                />
-              </div>
-              <div className="text-[8px] font-mono font-bold tracking-[0.08em] mt-2 text-center leading-tight break-all">
-                {label.lpn_code}
+        <div className="flex" style={{ minHeight: 300 }}>
+          <div className="flex flex-col items-center justify-center shrink-0 w-[25%] border-r-2 border-dashed border-gray-300 px-4 py-4">
+            <div className="p-1.5 border border-gray-200 rounded-md bg-white">
+              <QRCodeSVG
+                value={label.lpn_code}
+                size={140}
+                level="M"
+                includeMargin={false}
+              />
+            </div>
+            <div className="text-[10px] font-mono font-bold tracking-[0.08em] mt-2 text-center leading-tight break-all">
+              {label.lpn_code}
+            </div>
+          </div>
+
+          <div className="flex-1 min-w-0 flex flex-col px-5 py-3">
+            <div className="flex-1 flex flex-col justify-center pb-3 mb-3 border-b-2 border-gray-900">
+              <div className="text-[9px] font-bold text-gray-500 tracking-[0.16em] uppercase mb-1">LOKASI</div>
+              <div className="text-6xl font-black text-gray-900 leading-none break-words">
+                {label.suggested_location ?? '—'}
               </div>
             </div>
 
-            {/* RIGHT: Info */}
-            <div className="flex-1 min-w-0 flex flex-col justify-center">
-              {/* Product block */}
-              <div className="pb-2 mb-2 border-b border-dashed border-gray-300">
-                <div className="text-[10.5px] font-black leading-snug break-words">
+            <div className="flex gap-4 items-start">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-black leading-snug break-words">
                   {label.product_name || label.product_code || '—'}
                 </div>
                 {label.product_name && label.product_code && (
-                  <div className="text-[8px] font-mono text-gray-500 break-all mt-0.5 leading-tight">
+                  <div className="text-[9px] font-mono text-gray-500 break-all mt-0.5 leading-tight">
                     {label.product_code}
                   </div>
                 )}
               </div>
 
-              {/* Field grid */}
-              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-                <Field label="Batch" value={label.batch_number} />
-                <Field label="Exp" value={label.expiry_date} />
-                <Field label="Qty" value={`${fmtNum(label.quantity)} ${label.uom || ''}`.trim()} />
-                <Field label="Pallet" value={`#${label.pallet_seq}`} />
-                <Field label="Lokasi" value={label.suggested_location} />
-                <Field label="Task" value={label.task_number} />
+              <div className="flex gap-3 flex-shrink-0">
+                <CompactField label="Batch" value={label.batch_number} />
+                <CompactField label="Exp" value={label.expiry_date} />
+                <CompactField label="Qty" value={`${fmtNum(label.quantity)} ${label.uom || ''}`.trim()} />
+                <CompactField label="Pallet" value={`#${label.pallet_seq}`} />
+                <CompactField label="Task" value={label.task_number} />
               </div>
             </div>
-          </div>
 
-          {label.order_number && (
-            <div className="mt-2.5 pt-2 border-t border-dashed border-gray-300 flex items-center justify-between gap-2 text-[8px]">
-              <span className="text-gray-400 font-semibold tracking-[0.15em] whitespace-nowrap">ORDER</span>
-              <span className="font-mono font-semibold text-gray-700 break-all text-right">
-                {label.order_number}
-              </span>
-            </div>
-          )}
+            {label.order_number && (
+              <div className="mt-2 pt-2 border-t border-dashed border-gray-300 flex items-center justify-between gap-2 text-[8px]">
+                <span className="text-gray-400 font-semibold tracking-[0.15em] whitespace-nowrap">ORDER</span>
+                <span className="font-mono font-semibold text-gray-700 break-all text-right">
+                  {label.order_number}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -116,6 +106,19 @@ export default function LpnLabel({ label, onPrint }: { label: LpnLabelData; onPr
         >
           <Printer className="w-4 h-4" /> Cetak Ulang
         </button>
+      </div>
+    </div>
+  );
+}
+
+function CompactField({ label: fieldLabel, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[7px] font-semibold text-gray-400 tracking-[0.12em] uppercase leading-none mb-0.5">
+        {fieldLabel}
+      </div>
+      <div className="text-[10px] font-semibold text-gray-900 break-words leading-snug">
+        {value ?? '—'}
       </div>
     </div>
   );
