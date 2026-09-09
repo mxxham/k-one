@@ -70,18 +70,18 @@ function PreviewCard({ label }: { label: LpnLabelData }) {
           <div className="text-base font-mono font-bold tracking-wide mt-3 text-center break-all">{label.lpn_code}</div>
         </div>
         <div className="flex-1 min-w-0 flex flex-col px-6 py-5">
-          <div className="flex-1 flex flex-col justify-center pb-4 mb-4 border-b-2 border-gray-900">
+          <div className="flex-1 flex flex-col justify-center pb-6 mb-6 border-b-2 border-gray-900">
             <div className="text-[80px] font-black leading-none break-words">
               {label.product_name || label.product_code || '—'}
             </div>
             {label.product_name && label.product_code && (
-              <div className="text-[72px] font-mono text-gray-500 break-all mt-1 leading-tight">{label.product_code}</div>
+              <div className="text-[15px] font-mono text-gray-500 break-all mt-1 leading-tight">{label.product_code}</div>
             )}
           </div>
           <div className="flex gap-6 items-start">
             <div className="flex-1 min-w-0">
               <div className="text-sm font-bold text-gray-500 tracking-[0.16em] uppercase mb-1">LOKASI</div>
-              <div className="text-[96px] font-black text-gray-900 leading-none break-words">
+              <div className="text-[64px] font-black text-gray-900 leading-none whitespace-nowrap overflow-hidden text-ellipsis">
                 {label.suggested_location ?? '—'}
               </div>
             </div>
@@ -118,7 +118,7 @@ function PreviewField({ label: fieldLabel, value }: { label: string; value: Reac
 function renderLabel(l: LpnLabelData): string {
   const product = l.product_name || l.product_code || '—';
   const code = l.product_name && l.product_code
-    ? `<div style="font-size:72px;font-family:monospace;color:#6b7280;word-break:break-all;margin-top:4px;line-height:1.1">${l.product_code}</div>`
+    ? `<div style="font-size:15px;font-family:monospace;color:#6b7280;word-break:break-all;margin-top:4px;line-height:1.1">${l.product_code}</div>`
     : '';
   const order = l.order_number
     ? `<div style="padding-top:8px;border-top:1px dashed #d1d5db;display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:14px;color:#9ca3af;font-weight:600;letter-spacing:0.14em;white-space:nowrap">ORDER</span><span style="font-size:16px;font-family:monospace;font-weight:600;color:#374151;word-break:break-all;text-align:right">${l.order_number}</span></div>`
@@ -140,13 +140,13 @@ function renderLabel(l: LpnLabelData): string {
         <div style="font-size:16px;font-family:monospace;font-weight:700;letter-spacing:0.08em;margin-top:10px;text-align:center;line-height:1.3;word-break:break-all">${l.lpn_code}</div>
       </div>
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;padding:12px 20px">
-        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-bottom:10px;margin-bottom:10px;border-bottom:3px solid #111">
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-bottom:16px;margin-bottom:16px;border-bottom:3px solid #111">
           <div style="font-size:80px;font-weight:900;color:#111;line-height:0.95;word-break:break-word">${product}</div>${code}
         </div>
         <div style="display:flex;gap:16px;align-items:flex-start">
           <div style="flex:1;min-width:0">
             <div style="font-size:14px;font-weight:700;color:#6b7280;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:4px">LOKASI</div>
-            <div style="font-size:96px;font-weight:900;color:#111;line-height:0.95;word-break:break-word">${l.suggested_location ?? '—'}</div>
+            <div style="font-size:64px;font-weight:900;color:#111;line-height:0.95;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.suggested_location ?? '—'}</div>
           </div>
           <div style="display:flex;gap:14px;flex-shrink:0;align-items:flex-start">
             ${f('Qty', `${fmtNum(l.quantity)} ${l.uom || ''}`.trim())}${f('Pallet', `#${l.pallet_seq}`)}${f('Batch', l.batch_number)}${f('Exp', l.expiry_date)}${f('Task', l.task_number)}

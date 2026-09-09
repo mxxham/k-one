@@ -53,12 +53,12 @@ export default function LpnLabel({ label, onPrint }: { label: LpnLabelData; onPr
           </div>
 
           <div className="flex-1 min-w-0 flex flex-col px-6 py-5">
-            <div className="flex-1 flex flex-col justify-center pb-4 mb-4 border-b-2 border-gray-900">
+            <div className="flex-1 flex flex-col justify-center pb-6 mb-6 border-b-2 border-gray-900">
               <div className="text-[80px] font-black leading-none break-words">
                 {label.product_name || label.product_code || '—'}
               </div>
               {label.product_name && label.product_code && (
-                <div className="text-[72px] font-mono text-gray-500 break-all mt-1 leading-tight">
+                <div className="text-[15px] font-mono text-gray-500 break-all mt-1 leading-tight">
                   {label.product_code}
                 </div>
               )}
@@ -67,7 +67,7 @@ export default function LpnLabel({ label, onPrint }: { label: LpnLabelData; onPr
             <div className="flex gap-6 items-start">
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-bold text-gray-500 tracking-[0.16em] uppercase mb-1">LOKASI</div>
-                <div className="text-[96px] font-black text-gray-900 leading-none break-words">
+                <div className="text-[64px] font-black text-gray-900 leading-none break-words">
                   {label.suggested_location ?? '—'}
                 </div>
               </div>
