@@ -53,8 +53,8 @@ export default function LpnLabel({ label, onPrint }: { label: LpnLabelData; onPr
           </div>
 
           <div className="flex-1 min-w-0 flex flex-col px-6 py-5">
-            <div className="flex-1 flex flex-col justify-center pb-6 mb-6 border-b-2 border-gray-900">
-              <div className="text-[80px] font-black leading-none break-words">
+            <div className="flex-1 flex flex-col justify-start pt-2 pb-6 mb-6 border-b-2 border-gray-900">
+              <div className="text-[40px] font-black leading-none break-words">
                 {label.product_name || label.product_code || '—'}
               </div>
               {label.product_name && label.product_code && (

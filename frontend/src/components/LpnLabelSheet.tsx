@@ -70,8 +70,8 @@ function PreviewCard({ label }: { label: LpnLabelData }) {
           <div className="text-base font-mono font-bold tracking-wide mt-3 text-center break-all">{label.lpn_code}</div>
         </div>
         <div className="flex-1 min-w-0 flex flex-col px-6 py-5">
-          <div className="flex-1 flex flex-col justify-center pb-6 mb-6 border-b-2 border-gray-900">
-            <div className="text-[80px] font-black leading-none break-words">
+          <div className="flex-1 flex flex-col justify-start pt-2 pb-6 mb-6 border-b-2 border-gray-900">
+            <div className="text-[40px] font-black leading-none break-words">
               {label.product_name || label.product_code || '—'}
             </div>
             {label.product_name && label.product_code && (
@@ -140,8 +140,8 @@ function renderLabel(l: LpnLabelData): string {
         <div style="font-size:16px;font-family:monospace;font-weight:700;letter-spacing:0.08em;margin-top:10px;text-align:center;line-height:1.3;word-break:break-all">${l.lpn_code}</div>
       </div>
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;padding:12px 20px">
-        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-bottom:16px;margin-bottom:16px;border-bottom:3px solid #111">
-          <div style="font-size:80px;font-weight:900;color:#111;line-height:0.95;word-break:break-word">${product}</div>${code}
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-start;padding-top:8px;padding-bottom:16px;margin-bottom:16px;border-bottom:3px solid #111">
+          <div style="font-size:40px;font-weight:900;color:#111;line-height:0.95;word-break:break-word">${product}</div>${code}
         </div>
         <div style="display:flex;gap:16px;align-items:flex-start">
           <div style="flex:1;min-width:0">
