@@ -82,7 +82,7 @@ function PreviewCard({ label }: { label: LpnLabelData }) {
                 {label.product_name || label.product_code || '—'}
               </div>
               {label.product_name && label.product_code && (
-                <div className="text-[18px] font-mono text-gray-500 break-all mt-1">{label.product_code}</div>
+                <div className="text-[30px] font-mono text-gray-500 break-all mt-1">{label.product_code}</div>
               )}
             </div>
             <div className="flex gap-4 flex-shrink-0">
@@ -106,10 +106,11 @@ function PreviewCard({ label }: { label: LpnLabelData }) {
 }
 
 function PreviewField({ label: fieldLabel, value }: { label: string; value: React.ReactNode }) {
+  const isQty = fieldLabel === 'Qty';
   return (
     <div>
       <div className="font-semibold text-gray-400 tracking-wide uppercase leading-none mb-1 text-sm">{fieldLabel}</div>
-      <div className="font-semibold text-gray-900 break-words leading-snug text-xl">{value ?? '—'}</div>
+      <div className={`font-semibold text-gray-900 break-words leading-snug ${isQty ? 'text-[40px]' : 'text-xl'}`}>{value ?? '—'}</div>
     </div>
   );
 }
@@ -117,13 +118,16 @@ function PreviewField({ label: fieldLabel, value }: { label: string; value: Reac
 function renderLabel(l: LpnLabelData): string {
   const product = l.product_name || l.product_code || '—';
   const code = l.product_name && l.product_code
-    ? `<div style="font-size:18px;font-family:monospace;color:#6b7280;word-break:break-all;margin-top:4px;line-height:1.3">${l.product_code}</div>`
+    ? `<div style="font-size:30px;font-family:monospace;color:#6b7280;word-break:break-all;margin-top:4px;line-height:1.3">${l.product_code}</div>`
     : '';
   const order = l.order_number
     ? `<div style="padding-top:8px;border-top:1px dashed #d1d5db;display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:14px;color:#9ca3af;font-weight:600;letter-spacing:0.14em;white-space:nowrap">ORDER</span><span style="font-size:16px;font-family:monospace;font-weight:600;color:#374151;word-break:break-all;text-align:right">${l.order_number}</span></div>`
     : '';
-  const f = (k: string, v: React.ReactNode) =>
-    `<div style="flex-shrink:0"><div style="font-size:14px;font-weight:600;color:#9ca3af;letter-spacing:0.14em;text-transform:uppercase;line-height:1;margin-bottom:4px">${k}</div><div style="font-size:20px;font-weight:600;color:#111827;word-break:break-word;line-height:1.2">${v ?? '—'}</div></div>`;
+  const f = (k: string, v: React.ReactNode) => {
+    const isQty = k === 'Qty';
+    const valSize = isQty ? '40px' : '20px';
+    return `<div style="flex-shrink:0"><div style="font-size:14px;font-weight:600;color:#9ca3af;letter-spacing:0.14em;text-transform:uppercase;line-height:1;margin-bottom:4px">${k}</div><div style="font-size:${valSize};font-weight:600;color:#111827;word-break:break-word;line-height:1.2">${v ?? '—'}</div></div>`;
+  };
 
   return `<div class="lpn-card" style="background:white;color:black;border-radius:8px;border:3px solid #111;overflow:hidden;width:277mm;height:190mm;box-sizing:border-box;margin-bottom:4mm">
     <div style="display:flex;align-items:center;justify-content:space-between;background:#111;color:white;padding:8px 20px">

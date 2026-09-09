@@ -66,7 +66,7 @@ export default function LpnLabel({ label, onPrint }: { label: LpnLabelData; onPr
                   {label.product_name || label.product_code || '—'}
                 </div>
                 {label.product_name && label.product_code && (
-                  <div className="text-[18px] font-mono text-gray-500 break-all mt-1 leading-tight">
+                  <div className="text-[30px] font-mono text-gray-500 break-all mt-1 leading-tight">
                     {label.product_code}
                   </div>
                 )}
@@ -112,12 +112,13 @@ export default function LpnLabel({ label, onPrint }: { label: LpnLabelData; onPr
 }
 
 function CompactField({ label: fieldLabel, value }: { label: string; value: React.ReactNode }) {
+  const isQty = fieldLabel === 'Qty';
   return (
     <div>
       <div className="text-sm font-semibold text-gray-400 tracking-[0.12em] uppercase leading-none mb-1">
         {fieldLabel}
       </div>
-      <div className="text-xl font-semibold text-gray-900 break-words leading-snug">
+      <div className={`font-semibold text-gray-900 break-words leading-snug ${isQty ? 'text-[40px]' : 'text-xl'}`}>
         {value ?? '—'}
       </div>
     </div>
