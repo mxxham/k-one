@@ -30,6 +30,7 @@ textarea:focus {
   transform: translateY(-3px);
 }
 
+/* ── Print rules (consolidated) ─────────────────────────────── */
 @media print {
   @page {
     size: A4 landscape;
@@ -40,15 +41,15 @@ textarea:focus {
     visibility: hidden;
   }
 
-  .lpn-print-area,
-  .lpn-print-area * {
-    visibility: visible;
-  }
-
   .no-print {
     display: none !important;
   }
 
+  /* Single LPN label (LpnLabel.tsx) */
+  .lpn-print-area,
+  .lpn-print-area * {
+    visibility: visible;
+  }
   .lpn-print-area {
     position: absolute !important;
     left: 0 !important;
@@ -56,28 +57,14 @@ textarea:focus {
     width: 277mm !important;
     height: 190mm !important;
     border: none !important;
-  }
-}
-
-@media print {
-  @page {
-    size: A4 landscape;
-    margin: 5mm;
+    border-radius: 0 !important;
   }
 
-  body * {
-    visibility: hidden;
-  }
-
+  /* Multi-page LPN sheet (LpnLabelSheet.tsx) */
   .lpn-sheet-print-area,
   .lpn-sheet-print-area * {
     visibility: visible;
   }
-
-  .no-print {
-    display: none !important;
-  }
-
   .lpn-sheet-print-area {
     position: absolute !important;
     left: 0 !important;
@@ -90,9 +77,8 @@ textarea:focus {
 
   .lpn-page {
     page-break-after: always;
-    break-after: page;
+    break-after: after;
   }
-
   .lpn-page:last-child {
     page-break-after: auto;
     break-after: auto;
@@ -105,12 +91,8 @@ textarea:focus {
     height: 190mm !important;
     margin: 0 auto;
   }
-}
 
-/* Rack-walk bin labels (S44): window.print() outputs the whole .bin-print-area
-   grid — one small label per bin, laid out so a printed run matches walking
-   the racks. Uses CSS columns for automatic multi-page pagination. */
-@media print {
+  /* Rack-walk bin labels (S44) */
   .bin-print-area,
   .bin-print-area * {
     visibility: visible;
@@ -131,8 +113,6 @@ textarea:focus {
     break-inside: avoid;
     page-break-inside: avoid;
   }
-
-  /* Force page break every 48 labels (4 cols × 12 rows ≈ 48 labels per A4 page) */
   .bin-label:nth-of-type(48n) {
     page-break-after: always;
     break-after: page;
