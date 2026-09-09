@@ -62,23 +62,20 @@ export default function LpnLabel({ label, onPrint }: { label: LpnLabelData; onPr
                   {label.product_code}
                 </div>
               )}
-            </div>
-
-            <div className="flex gap-6 items-start">
-              <div className="flex-1 min-w-0">
+              <div className="mt-2">
                 <div className="text-sm font-bold text-gray-500 tracking-[0.16em] uppercase mb-1">LOKASI</div>
                 <div className="text-[64px] font-black text-gray-900 leading-none break-words">
                   {label.suggested_location ?? '—'}
                 </div>
               </div>
+            </div>
 
-              <div className="flex gap-4 flex-shrink-0">
-                <CompactField label="Qty" value={`${fmtNum(label.quantity)} ${label.uom || ''}`.trim()} />
-                <CompactField label="Pallet" value={`#${label.pallet_seq}`} />
-                <CompactField label="Batch" value={label.batch_number} />
-                <CompactField label="Exp" value={label.expiry_date} />
-                <CompactField label="Task" value={label.task_number} />
-              </div>
+            <div className="flex gap-4 flex-shrink-0">
+              <CompactField label="Qty" value={`${fmtNum(label.quantity)} ${label.uom || ''}`.trim()} />
+              <CompactField label="Pallet" value={`#${label.pallet_seq}`} />
+              <CompactField label="Batch" value={label.batch_number} />
+              <CompactField label="Exp" value={label.expiry_date} />
+              <CompactField label="Task" value={label.task_number} />
             </div>
 
             {label.order_number && (

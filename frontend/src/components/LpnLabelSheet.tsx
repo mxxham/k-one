@@ -77,21 +77,20 @@ function PreviewCard({ label }: { label: LpnLabelData }) {
             {label.product_name && label.product_code && (
               <div className="text-[15px] font-mono text-gray-500 break-all mt-1 leading-tight">{label.product_code}</div>
             )}
-          </div>
-          <div className="flex gap-6 items-start">
-            <div className="flex-1 min-w-0">
+            <div className="mt-2">
               <div className="text-sm font-bold text-gray-500 tracking-[0.16em] uppercase mb-1">LOKASI</div>
               <div className="text-[64px] font-black text-gray-900 leading-none whitespace-nowrap overflow-hidden text-ellipsis">
                 {label.suggested_location ?? '—'}
               </div>
             </div>
-            <div className="flex gap-4 flex-shrink-0">
-              <PreviewField label="Qty" value={`${fmtNum(label.quantity)} ${label.uom || ''}`.trim()} />
-              <PreviewField label="Pallet" value={`#${label.pallet_seq}`} />
-              <PreviewField label="Batch" value={label.batch_number} />
-              <PreviewField label="Exp" value={label.expiry_date} />
-              <PreviewField label="Task" value={label.task_number} />
-            </div>
+          </div>
+
+          <div className="flex gap-4 flex-shrink-0">
+            <PreviewField label="Qty" value={`${fmtNum(label.quantity)} ${label.uom || ''}`.trim()} />
+            <PreviewField label="Pallet" value={`#${label.pallet_seq}`} />
+            <PreviewField label="Batch" value={label.batch_number} />
+            <PreviewField label="Exp" value={label.expiry_date} />
+            <PreviewField label="Task" value={label.task_number} />
           </div>
           {label.order_number && (
             <div className="mt-3 pt-3 border-t border-dashed border-gray-300 flex justify-between text-sm">
@@ -142,15 +141,13 @@ function renderLabel(l: LpnLabelData): string {
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;padding:12px 20px">
         <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-start;padding-top:8px;padding-bottom:16px;margin-bottom:16px;border-bottom:3px solid #111">
           <div style="font-size:40px;font-weight:900;color:#111;line-height:0.95;word-break:break-word">${product}</div>${code}
-        </div>
-        <div style="display:flex;gap:16px;align-items:flex-start">
-          <div style="flex:1;min-width:0">
+          <div style="margin-top:8px">
             <div style="font-size:14px;font-weight:700;color:#6b7280;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:4px">LOKASI</div>
             <div style="font-size:64px;font-weight:900;color:#111;line-height:0.95;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.suggested_location ?? '—'}</div>
           </div>
-          <div style="display:flex;gap:14px;flex-shrink:0;align-items:flex-start">
-            ${f('Qty', `${fmtNum(l.quantity)} ${l.uom || ''}`.trim())}${f('Pallet', `#${l.pallet_seq}`)}${f('Batch', l.batch_number)}${f('Exp', l.expiry_date)}${f('Task', l.task_number)}
-          </div>
+        </div>
+        <div style="display:flex;gap:16px;flex-shrink:0;align-items:flex-start">
+          ${f('Qty', `${fmtNum(l.quantity)} ${l.uom || ''}`.trim())}${f('Pallet', `#${l.pallet_seq}`)}${f('Batch', l.batch_number)}${f('Exp', l.expiry_date)}${f('Task', l.task_number)}
         </div>${order}
       </div>
     </div>
