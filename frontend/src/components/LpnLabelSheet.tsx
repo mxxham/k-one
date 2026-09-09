@@ -59,33 +59,33 @@ export default function LpnLabelSheet({ labels, onPrint }: { labels: LpnLabelDat
 
 function PreviewCard({ label }: { label: LpnLabelData }) {
   return (
-    <div className="bg-white text-black rounded-xl border-2 border-gray-900 overflow-hidden w-full">
-      <div className="flex items-center justify-between bg-gray-900 text-white px-4 py-1.5">
-        <span className="text-xs font-bold tracking-[0.22em]">PT. K-ONE</span>
-        <span className="text-[10px] font-semibold tracking-[0.15em] text-gray-300">LABEL PALLET / LPN</span>
+    <div className="bg-white text-black rounded-xl border-2 border-gray-900 overflow-hidden w-full max-w-[900px] mx-auto">
+      <div className="flex items-center justify-between bg-gray-900 text-white px-4 py-2">
+        <span className="text-sm font-bold tracking-[0.22em]">PT. K-ONE</span>
+        <span className="text-xs font-semibold tracking-[0.15em] text-gray-300">LABEL PALLET / LPN</span>
       </div>
-      <div className="flex" style={{ minHeight: 280 }}>
-        <div className="flex flex-col items-center justify-center shrink-0 w-[25%] border-r-2 border-dashed border-gray-300 px-3 py-4">
-          <QRCodeSVG value={label.lpn_code} size={120} level="M" includeMargin={false} />
-          <div className="text-[9px] font-mono font-bold tracking-wide mt-2 text-center break-all">{label.lpn_code}</div>
+      <div className="flex" style={{ minHeight: 320 }}>
+        <div className="flex flex-col items-center justify-center shrink-0 w-[25%] border-r-2 border-dashed border-gray-300 px-4 py-4">
+          <QRCodeSVG value={label.lpn_code} size={140} level="M" includeMargin={false} />
+          <div className="text-[10px] font-mono font-bold tracking-wide mt-2 text-center break-all">{label.lpn_code}</div>
         </div>
-        <div className="flex-1 min-w-0 flex flex-col px-4 py-3">
-          <div className="flex-1 flex flex-col justify-center pb-2 mb-2 border-b-2 border-gray-900">
-            <div className="text-[8px] font-bold text-gray-500 tracking-[0.16em] uppercase mb-0.5">LOKASI</div>
-            <div className="text-5xl font-black text-gray-900 leading-none break-words">
+        <div className="flex-1 min-w-0 flex flex-col px-5 py-4">
+          <div className="flex-1 flex flex-col justify-center pb-3 mb-3 border-b-2 border-gray-900">
+            <div className="text-[10px] font-bold text-gray-500 tracking-[0.16em] uppercase mb-1">LOKASI</div>
+            <div className="text-6xl font-black text-gray-900 leading-none break-words">
               {label.suggested_location ?? '—'}
             </div>
           </div>
-          <div className="flex gap-3 items-start">
+          <div className="flex gap-4 items-start">
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-black leading-snug break-words">
+              <div className="text-base font-black leading-snug break-words">
                 {label.product_name || label.product_code || '—'}
               </div>
               {label.product_name && label.product_code && (
-                <div className="text-[9px] font-mono text-gray-500 break-all mt-0.5">{label.product_code}</div>
+                <div className="text-[10px] font-mono text-gray-500 break-all mt-0.5">{label.product_code}</div>
               )}
             </div>
-            <div className="flex gap-2.5 flex-shrink-0">
+            <div className="flex gap-3 flex-shrink-0">
               <PreviewField label="Batch" value={label.batch_number} />
               <PreviewField label="Exp" value={label.expiry_date} />
               <PreviewField label="Qty" value={`${fmtNum(label.quantity)} ${label.uom || ''}`.trim()} />
@@ -94,7 +94,7 @@ function PreviewCard({ label }: { label: LpnLabelData }) {
             </div>
           </div>
           {label.order_number && (
-            <div className="mt-1.5 pt-1.5 border-t border-dashed border-gray-300 flex justify-between text-[9px]">
+            <div className="mt-2 pt-2 border-t border-dashed border-gray-300 flex justify-between text-[10px]">
               <span className="text-gray-400 font-semibold tracking-wide">ORDER</span>
               <span className="font-mono font-semibold text-gray-700 break-all">{label.order_number}</span>
             </div>
@@ -108,8 +108,8 @@ function PreviewCard({ label }: { label: LpnLabelData }) {
 function PreviewField({ label: fieldLabel, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <div className="font-semibold text-gray-400 tracking-wide uppercase leading-none mb-0.5 text-[8px]">{fieldLabel}</div>
-      <div className="font-semibold text-gray-900 break-words leading-snug text-[11px]">{value ?? '—'}</div>
+      <div className="font-semibold text-gray-400 tracking-wide uppercase leading-none mb-1 text-[10px]">{fieldLabel}</div>
+      <div className="font-semibold text-gray-900 break-words leading-snug text-sm">{value ?? '—'}</div>
     </div>
   );
 }
@@ -123,7 +123,7 @@ function renderLabel(l: LpnLabelData): string {
     ? `<div style="padding-top:4px;border-top:1px dashed #d1d5db;display:flex;align-items:center;justify-content:space-between;gap:6px"><span style="font-size:8px;color:#9ca3af;font-weight:600;letter-spacing:0.14em;white-space:nowrap">ORDER</span><span style="font-size:10px;font-family:monospace;font-weight:600;color:#374151;word-break:break-all;text-align:right">${l.order_number}</span></div>`
     : '';
   const f = (k: string, v: React.ReactNode) =>
-    `<div style="flex-shrink:0"><div style="font-size:8px;font-weight:600;color:#9ca3af;letter-spacing:0.14em;text-transform:uppercase;line-height:1;margin-bottom:2px">${k}</div><div style="font-size:12px;font-weight:600;color:#111827;word-break:break-word;line-height:1.2">${v ?? '—'}</div></div>`;
+    `<div style="flex-shrink:0"><div style="font-size:10px;font-weight:600;color:#9ca3af;letter-spacing:0.14em;text-transform:uppercase;line-height:1;margin-bottom:3px">${k}</div><div style="font-size:16px;font-weight:600;color:#111827;word-break:break-word;line-height:1.2">${v ?? '—'}</div></div>`;
 
   return `<div class="lpn-card" style="background:white;color:black;border-radius:8px;border:3px solid #111;overflow:hidden;width:277mm;height:93mm;box-sizing:border-box;margin-bottom:4mm">
     <div style="display:flex;align-items:center;justify-content:space-between;background:#111;color:white;padding:5px 16px">
