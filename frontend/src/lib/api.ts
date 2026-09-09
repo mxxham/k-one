@@ -99,6 +99,9 @@ export interface OutboundOrderDetail {
   shipped_date?: string;
   created_by_name?: string;
   notes?: string;
+  checked_count?: number;
+  total_items?: number;
+  all_lines_checked?: boolean;
 }
 
 export interface OutboundStats {

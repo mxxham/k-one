@@ -5,7 +5,8 @@ function handle_checker($action) {
     switch ($action) {
         case 'pending_lines':
             api_require_auth();
-            json_out(['lines' => Checker::pendingLines()]);
+            $picklistId = query('picklist_id') ? (int)query('picklist_id') : null;
+            json_out(['lines' => Checker::pendingLines($picklistId)]);
             break;
 
         case 'confirm_line':

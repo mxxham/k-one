@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, XCircle, ClipboardCheck } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, EmptyState } from '@/components/Card';
@@ -13,8 +14,10 @@ import { fmtNum } from '@/lib/format';
 interface PendingLine {
   id: number;
   outbound_item_id: number;
+  picklist_id?: number;
   outbound_id: number;
   order_number: string;
+  picklist_number?: string;
   product_id: number;
   product_code: string;
   product_name: string;
@@ -38,6 +41,8 @@ export default function CheckerPage() {
   const toast = useToast();
   const { user } = useAuth();
   const role = user?.role;
+  const [searchParams] = useSearchParams();
+  const picklistFilter = searchParams.get('picklist_id') ? Number(searchParams.get('picklist_id')) : null;
 
   const [lines, setLines] = useState<PendingLine[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,14 +58,16 @@ export default function CheckerPage() {
   const loadLines = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await api('checker', 'pending_lines');
+      const params: Record<string, string> = {};
+      if (picklistFilter) params.picklist_id = String(picklistFilter);
+      const res = await api('checker', 'pending_lines', { params });
       setLines((res.lines || []) as PendingLine[]);
     } catch (err: any) {
       toast('error', err.message || 'Gagal memuat item');
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, picklistFilter]);
 
   useEffect(() => {
     loadLines();
@@ -168,8 +175,19 @@ export default function CheckerPage() {
                         LPN: <span className="font-semibold font-mono">{line.lpn_code || '—'}</span>
                       </span>
                     </div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      Lokasi: <span className="font-semibold">{line.location || '—'}</span>
+                    <div className="flex justify-between items-center text-xs mt-0.5">
+                      <span className="text-gray-500">
+                        Lokasi: <span className="font-semibold">{line.location || '—'}</span>
+                      </span>
+                      {line.picklist_id && (
+                        <Link
+                          to={`/picklist/${line.picklist_id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-brand-600 font-semibold hover:underline"
+                        >
+                          {line.picklist_number || `Picklist #${line.picklist_id}`}
+                        </Link>
+                      )}
                     </div>
                   </button>
                 </li>

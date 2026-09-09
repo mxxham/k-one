@@ -2,20 +2,27 @@
 
 class Checker
 {
-    public static function pendingLines(): array
+    public static function pendingLines(?int $picklistId = null): array
     {
         $db = db();
-        $stmt = $db->query(
-            "SELECT pi.id, pi.outbound_item_id, oo.id AS outbound_id, oo.order_number, pi.product_id,
-                    p.product_code, p.product_name, pi.lpn_code, pi.location,
-                    pi.quantity AS qty, pi.check_status
-             FROM picklist_items pi
-             JOIN outbound_items oi ON oi.id = pi.outbound_item_id
-             JOIN outbound_orders oo ON oo.id = oi.outbound_order_id
-             JOIN products p ON p.id = pi.product_id
-             WHERE pi.check_status = 'Pending'
-             ORDER BY pi.id ASC"
-        );
+        $sql = "SELECT pi.id, pi.outbound_item_id, pi.picklist_id, oo.id AS outbound_id, oo.order_number,
+                       pl.picklist_number, pi.product_id,
+                       p.product_code, p.product_name, pi.lpn_code, pi.location,
+                       pi.quantity AS qty, pi.check_status
+                FROM picklist_items pi
+                JOIN outbound_items oi ON oi.id = pi.outbound_item_id
+                JOIN outbound_orders oo ON oo.id = oi.outbound_order_id
+                JOIN products p ON p.id = pi.product_id
+                JOIN picklists pl ON pl.id = pi.picklist_id
+                WHERE pi.check_status = 'Pending'";
+        $params = [];
+        if ($picklistId !== null) {
+            $sql .= " AND pi.picklist_id = ?";
+            $params[] = $picklistId;
+        }
+        $sql .= " ORDER BY pi.id ASC";
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 

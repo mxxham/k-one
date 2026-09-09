@@ -30,6 +30,7 @@ interface PicklistItem {
   pallet?: string | number | null;
   picked_quantity?: number;
   status?: string;
+  check_status?: string;
   picked_at?: string;
   picker_id?: string;
   notes?: string;
@@ -307,6 +308,10 @@ export default function PicklistDetail() {
 
   const status = picklist.status || '';
 
+  const checkedCount = items.filter((it) => it.check_status === 'Checked' || it.check_status === 'Discrepancy').length;
+  const pendingCheckCount = items.filter((it) => !it.check_status || it.check_status === 'Pending').length;
+  const totalCheckItems = items.length;
+
   const actions = (
     <>
       <button
@@ -326,9 +331,10 @@ export default function PicklistDetail() {
       )}
       {canWrite && (status === 'Confirmed' || status === 'Picking') && (
         <button
-          disabled={busy}
+          disabled={busy || pendingCheckCount > 0}
+          title={pendingCheckCount > 0 ? `${pendingCheckCount} item belum dicek oleh Checker` : undefined}
           onClick={() => handleStatusAction('complete', 'Picklist diselesaikan')}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white text-brand-700 hover:bg-brand-50 text-sm font-semibold disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white text-brand-700 hover:bg-brand-50 text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
         >
           <PackageCheck className="w-4 h-4" /> Complete
         </button>
@@ -414,6 +420,25 @@ export default function PicklistDetail() {
         </div>
       </Card>
 
+      {items.length > 0 && (status === 'Confirmed' || status === 'Picking') && (
+        <div className={`flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-semibold ${pendingCheckCount > 0 ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
+          <span>
+            Checker: {checkedCount} of {totalCheckItems} item sudah dicek
+            {pendingCheckCount > 0 && (
+              <span className="ml-2 text-amber-600">({pendingCheckCount} belum dicek)</span>
+            )}
+          </span>
+          {pendingCheckCount > 0 && canWrite && (
+            <Link
+              to={`/checker?picklist_id=${picklist.id}`}
+              className="text-xs font-bold underline hover:no-underline"
+            >
+              Buka Checker →
+            </Link>
+          )}
+        </div>
+      )}
+
       <Card title="Items">
         {canWrite && (
           <div className="px-4 pt-3">
@@ -470,6 +495,7 @@ export default function PicklistDetail() {
                   <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">Pallet</th>
                   <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">Picked Qty</th>
                   <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">Status</th>
+                  <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">Checker</th>
                   <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">Picked At</th>
                   <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">Picker</th>
                   <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-brand-700">Notes</th>
@@ -519,6 +545,21 @@ export default function PicklistDetail() {
                           <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
                             <Clock className="w-3 h-3" />
                             Awaiting Replenishment
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 border-t border-gray-100">
+                        {item.check_status === 'Checked' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300">
+                            Checked ✓
+                          </span>
+                        ) : item.check_status === 'Discrepancy' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700 border border-amber-300">
+                            Discrepancy
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-500 border border-gray-200">
+                            Pending
                           </span>
                         )}
                       </td>

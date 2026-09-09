@@ -648,6 +648,21 @@ class Picklist {
 
     public static function complete($picklistId) {
         $db = db();
+
+        $stmt = $db->prepare(
+            "SELECT COUNT(*) AS total, SUM(check_status = 'Pending') AS pending
+             FROM picklist_items WHERE picklist_id = ?"
+        );
+        $stmt->execute([$picklistId]);
+        $row = $stmt->fetch();
+
+        if (!$row || (int)$row['total'] === 0) {
+            throw new \Exception("Picklist tidak memiliki item.");
+        }
+        if ((int)$row['pending'] > 0) {
+            throw new \Exception("Semua item harus dicek oleh Checker sebelum picklist dapat diselesaikan. ({$row['pending']} item belum dicek)");
+        }
+
         return $db->prepare("UPDATE picklists SET status='Completed', completed_at=NOW() WHERE id=?")
                   ->execute([$picklistId]);
     }

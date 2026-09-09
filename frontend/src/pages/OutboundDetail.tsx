@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, FormEvent, ReactNode } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Plus, PackagePlus, Trash2, Printer, FileText, ClipboardList, Copy } from 'lucide-react';
 import { api, webBase, OutboundOrderDetail } from '@/lib/api';
 import { WebBtn } from '@/components/WebBtn';
@@ -407,6 +407,22 @@ export default function OutboundDetail() {
           </>
         }
       />
+
+      {order && (status === 'Picking' || status === 'Picked' || status === 'Shipped') && order.total_items != null && order.total_items > 0 && (
+        <div className={`flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-semibold ${order.all_lines_checked ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+          <span>
+            Checker: {order.checked_count ?? 0} dari {order.total_items} item sudah dicek
+            {!order.all_lines_checked && (
+              <span className="ml-2 text-amber-600">({order.total_items - (order.checked_count ?? 0)} belum dicek)</span>
+            )}
+          </span>
+          {!order.all_lines_checked && (
+            <Link to="/checker" className="text-xs font-bold underline hover:no-underline">
+              Buka Checker →
+            </Link>
+          )}
+        </div>
+      )}
 
       <Card title="Info Order">
         <Grid cols={3}>

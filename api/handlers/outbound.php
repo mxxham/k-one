@@ -31,6 +31,12 @@ function handle_outbound($action) {
                 $it['picked_locations'] = Outbound::getItemPickedLocations($it['id']);
             }
             unset($it);
+            // Check status counts for gate display
+            $checkedCount = Outbound::countCheckedItems($id);
+            $totalCount = Outbound::countTotalItems($id);
+            $order['checked_count'] = $checkedCount;
+            $order['total_items'] = $totalCount;
+            $order['all_lines_checked'] = ($totalCount > 0 && $checkedCount === $totalCount);
             json_out([
                 'order' => $order,
                 'items' => $items,

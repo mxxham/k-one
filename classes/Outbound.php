@@ -1105,6 +1105,25 @@ public static function generateNumber($db = null): string {
 
     
 
+    public static function countCheckedItems(int $outboundId, $db = null): int {
+        $db = $db ?? db();
+        $stmt = $db->prepare("SELECT COUNT(*) FROM picklist_items pi
+            JOIN picklists pl ON pl.id = pi.picklist_id
+            WHERE pl.outbound_order_id = ?
+            AND pi.check_status IN ('Checked','Discrepancy')");
+        $stmt->execute([$outboundId]);
+        return (int)$stmt->fetchColumn();
+    }
+
+    public static function countTotalItems(int $outboundId, $db = null): int {
+        $db = $db ?? db();
+        $stmt = $db->prepare("SELECT COUNT(*) FROM picklist_items pi
+            JOIN picklists pl ON pl.id = pi.picklist_id
+            WHERE pl.outbound_order_id = ?");
+        $stmt->execute([$outboundId]);
+        return (int)$stmt->fetchColumn();
+    }
+
     public static function ship($outboundId, $db = null) {
         $db = $db ?? db();
         $ownTx = !$db->inTransaction();

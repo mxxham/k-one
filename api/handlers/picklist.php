@@ -48,7 +48,11 @@ function handle_picklist($action) {
             api_require_write();
             $data = body();
             $id = (int)($data['id'] ?? query('id'));
-            Picklist::confirm($id);
+            try {
+                Picklist::confirm($id);
+            } catch (\Throwable $e) {
+                json_err($e->getMessage(), 409);
+            }
             ActivityLogger::log('CONFIRM_PICKLIST', 'picklist', 'Picklist', $id, null, 'Konfirmasi picklist ID ' . $id);
             json_out(['id' => $id]);
             break;
@@ -57,7 +61,11 @@ function handle_picklist($action) {
             api_require_write();
             $data = body();
             $id = (int)($data['id'] ?? query('id'));
-            Picklist::complete($id);
+            try {
+                Picklist::complete($id);
+            } catch (\Throwable $e) {
+                json_err($e->getMessage(), 409);
+            }
             ActivityLogger::log('COMPLETE_PICKLIST', 'picklist', 'Picklist', $id, null, 'Selesaikan picklist ID ' . $id);
             json_out(['id' => $id]);
             break;
@@ -66,7 +74,11 @@ function handle_picklist($action) {
             api_require_write();
             $data = body();
             $id = (int)($data['id'] ?? query('id'));
-            Picklist::delete($id);
+            try {
+                Picklist::delete($id);
+            } catch (\Throwable $e) {
+                json_err($e->getMessage(), 409);
+            }
             ActivityLogger::log('DELETE_PICKLIST', 'picklist', 'Picklist', $id, null, 'Hapus picklist ID ' . $id);
             json_out(['id' => $id]);
             break;
@@ -75,7 +87,11 @@ function handle_picklist($action) {
             api_require_write();
             $data = body();
             $itemId = (int)($data['item_id'] ?? 0);
-            Picklist::updateItem($itemId, $data);
+            try {
+                Picklist::updateItem($itemId, $data);
+            } catch (\Throwable $e) {
+                json_err($e->getMessage(), 409);
+            }
             json_out(['item_id' => $itemId]);
             break;
 
