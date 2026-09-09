@@ -75,7 +75,7 @@ function PreviewCard({ label }: { label: LpnLabelData }) {
               {label.product_name || label.product_code || '—'}
             </div>
             {label.product_name && label.product_code && (
-              <div className="text-[30px] font-mono text-gray-500 break-all mt-1 leading-tight">{label.product_code}</div>
+              <div className="text-[40px] font-black break-all mt-1 leading-none">{label.product_code}</div>
             )}
             <div className="mt-2">
               <div className="text-sm font-bold text-gray-500 tracking-[0.16em] uppercase mb-1">LOKASI</div>
@@ -117,7 +117,7 @@ function PreviewField({ label: fieldLabel, value }: { label: string; value: Reac
 function renderLabel(l: LpnLabelData): string {
   const product = l.product_name || l.product_code || '—';
   const code = l.product_name && l.product_code
-    ? `<div style="font-size:30px;font-family:monospace;color:#6b7280;word-break:break-all;margin-top:4px;line-height:1.1">${l.product_code}</div>`
+    ? `<div style="font-size:40px;font-weight:900;color:#111;word-break:break-all;margin-top:4px;line-height:0.95">${l.product_code}</div>`
     : '';
   const order = l.order_number
     ? `<div style="padding-top:8px;border-top:1px dashed #d1d5db;display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:14px;color:#9ca3af;font-weight:600;letter-spacing:0.14em;white-space:nowrap">ORDER</span><span style="font-size:16px;font-family:monospace;font-weight:600;color:#374151;word-break:break-all;text-align:right">${l.order_number}</span></div>`

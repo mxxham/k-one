@@ -58,7 +58,7 @@ export default function LpnLabel({ label, onPrint }: { label: LpnLabelData; onPr
                 {label.product_name || label.product_code || '—'}
               </div>
               {label.product_name && label.product_code && (
-                <div className="text-[30px] font-mono text-gray-500 break-all mt-1 leading-tight">
+                <div className="text-[40px] font-black break-all mt-1 leading-none">
                   {label.product_code}
                 </div>
               )}
