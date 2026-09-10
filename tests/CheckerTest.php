@@ -75,7 +75,9 @@ class CheckerTest extends TestCase
         string $status = 'Picked',
         ?int $pickerId = null,
         string $lpn = 'LPN-CKR-001',
-        string $productCode = 'SKU-CKR-001'
+        string $productCode = 'SKU-CKR-001',
+        float $quantity = 10,
+        ?string $batchNumber = 'BATCH-CKR'
     ): array {
         // outbound_orders
         $this->db->exec("INSERT INTO outbound_orders
@@ -96,11 +98,12 @@ class CheckerTest extends TestCase
 
         // picklist_items
         $pickerSql = $pickerId !== null ? $pickerId : $this->operatorUserId;
+        $batchVal = $batchNumber !== null ? "'{$batchNumber}'" : 'NULL';
         $this->db->prepare("INSERT INTO picklist_items
-            (outbound_item_id, picklist_id, product_id, batch_no, quantity, uom, pallet,
+            (outbound_item_id, picklist_id, product_id, batch_no, batch_number, quantity, uom, pallet,
              picked_by, status, lpn_code, location)
-            VALUES (?, ?, 99901, 'BATCH-CKR', 10, 'Pcs', 1, ?, 'Picked', ?, 'A01-01-01')")
-            ->execute([$outboundItemId, $picklistId, $pickerSql, $lpn]);
+            VALUES (?, ?, 99901, {$batchVal}, {$batchVal}, ?, 'Pcs', 1, ?, 'Picked', ?, 'A01-01-01')")
+            ->execute([$outboundItemId, $picklistId, $quantity, $pickerSql, $lpn]);
         $picklistItemId = (int) $this->db->lastInsertId();
 
         return [
@@ -131,7 +134,10 @@ class CheckerTest extends TestCase
 
         $_SESSION['user_id'] = $this->testUserId;
         $_SESSION['role'] = 'operator';
-        $result = Checker::confirmLine($f['picklist_item_id'], 'LPN-MATCH', 'SKU-CKR-001');
+        $result = Checker::confirmLine(
+            $f['picklist_item_id'], 'A01-01-01', 'LPN-MATCH', 'SKU-CKR-001', 10.0,
+            'BATCH-CKR'
+        );
         self::assertTrue($result);
 
         $row = $this->db->query(
@@ -150,7 +156,10 @@ class CheckerTest extends TestCase
 
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('Alasan override wajib diisi');
-        Checker::confirmLine($f['picklist_item_id'], 'LPN-WRONG', 'SKU-CKR-001');
+        Checker::confirmLine(
+            $f['picklist_item_id'], 'A01-01-01', 'LPN-WRONG', 'SKU-CKR-001', 10.0,
+            null, null, null
+        );
     }
 
     public function testConfirmLineMismatchWithOverrideByNonSupervisorThrows(): void
@@ -162,7 +171,10 @@ class CheckerTest extends TestCase
 
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('izin supervisor');
-        Checker::confirmLine($f['picklist_item_id'], 'LPN-WRONG', 'SKU-CKR-001', 'Wrong LPN');
+        Checker::confirmLine(
+            $f['picklist_item_id'], 'A01-01-01', 'LPN-WRONG', 'SKU-CKR-001', 10.0,
+            null, null, 'Wrong LPN'
+        );
     }
 
     public function testConfirmLineMismatchWithOverrideBySupervisorSucceeds(): void
@@ -171,7 +183,10 @@ class CheckerTest extends TestCase
 
         $_SESSION['user_id'] = $this->testUserId;
         $_SESSION['role'] = 'supervisor';
-        $result = Checker::confirmLine($f['picklist_item_id'], 'LPN-WRONG', 'SKU-WRONG', 'Swapped during staging');
+        $result = Checker::confirmLine(
+            $f['picklist_item_id'], 'A01-01-01', 'LPN-WRONG', 'SKU-WRONG', 10.0,
+            null, null, 'Swapped during staging'
+        );
         self::assertTrue($result);
 
         $row = $this->db->query(
@@ -181,11 +196,14 @@ class CheckerTest extends TestCase
         self::assertSame('Swapped during staging', $row['check_override_reason']);
 
         $scans = $this->db->query(
-            "SELECT result FROM check_scans WHERE context_id = {$f['picklist_item_id']} ORDER BY scan_type"
+            "SELECT scan_type, result FROM check_scans WHERE context_id = {$f['picklist_item_id']} ORDER BY scan_type"
         )->fetchAll();
-        self::assertCount(2, $scans);
-        self::assertSame('MISMATCH', $scans[0]['result']);
-        self::assertSame('MISMATCH', $scans[1]['result']);
+        self::assertCount(4, $scans);
+        $scanMap = array_column($scans, 'result', 'scan_type');
+        self::assertSame('MISMATCH', $scanMap['LPN']);
+        self::assertSame('MISMATCH', $scanMap['SKU']);
+        self::assertSame('MATCH', $scanMap['LOCATION']);
+        self::assertSame('MATCH', $scanMap['QTY']);
     }
 
     public function testConfirmLineMismatchWithOverrideByAdminSucceeds(): void
@@ -194,7 +212,10 @@ class CheckerTest extends TestCase
 
         $_SESSION['user_id'] = $this->adminUserId;
         $_SESSION['role'] = 'admin';
-        $result = Checker::confirmLine($f['picklist_item_id'], 'LPN-WRONG', 'SKU-CKR-001', 'Admin override');
+        $result = Checker::confirmLine(
+            $f['picklist_item_id'], 'A01-01-01', 'LPN-WRONG', 'SKU-CKR-001', 10.0,
+            null, null, 'Admin override'
+        );
         self::assertTrue($result);
 
         $row = $this->db->query(
@@ -213,7 +234,10 @@ class CheckerTest extends TestCase
 
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('Checker tidak boleh sama dengan picker');
-        Checker::confirmLine($f['picklist_item_id'], 'LPN-001', 'SKU-001');
+        Checker::confirmLine(
+            $f['picklist_item_id'], 'A01-01-01', 'LPN-001', 'SKU-001', 10.0,
+            null, null, null
+        );
     }
 
     public function testAllLinesCheckedFlipsOrderFlag(): void
@@ -222,7 +246,10 @@ class CheckerTest extends TestCase
 
         $_SESSION['user_id'] = $this->testUserId;
         $_SESSION['role'] = 'operator';
-        Checker::confirmLine($f['picklist_item_id'], 'LPN-ALL', 'SKU-CKR-001');
+        Checker::confirmLine(
+            $f['picklist_item_id'], 'A01-01-01', 'LPN-ALL', 'SKU-CKR-001', 10.0,
+            null, null, null
+        );
 
         $flag = $this->db->query(
             "SELECT all_lines_checked FROM outbound_orders WHERE id = {$f['outbound_id']}"
@@ -246,11 +273,17 @@ class CheckerTest extends TestCase
 
         $_SESSION['user_id'] = $this->testUserId;
         $_SESSION['role'] = 'operator';
-        Checker::confirmLine($f['picklist_item_id'], 'LPN-DUP', 'SKU-CKR-001');
+        Checker::confirmLine(
+            $f['picklist_item_id'], 'A01-01-01', 'LPN-DUP', 'SKU-CKR-001', 10.0,
+            null, null, null
+        );
 
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('sudah dicek');
-        Checker::confirmLine($f['picklist_item_id'], 'LPN-DUP', 'SKU-CKR-001');
+        Checker::confirmLine(
+            $f['picklist_item_id'], 'A01-01-01', 'LPN-DUP', 'SKU-CKR-001', 10.0,
+            null, null, null
+        );
     }
 
     public function testOrderNotInPickingOrPickedStateThrows(): void
@@ -262,6 +295,45 @@ class CheckerTest extends TestCase
 
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('belum siap untuk dicek');
-        Checker::confirmLine($f['picklist_item_id'], 'LPN-001', 'SKU-CKR-001');
+        Checker::confirmLine(
+            $f['picklist_item_id'], 'A01-01-01', 'LPN-001', 'SKU-CKR-001', 10.0,
+            null, null, null
+        );
+    }
+
+    // ────────────────────────────────────────
+    // NEW: Lot / Qty mismatch tests
+    // ────────────────────────────────────────
+
+    public function testLotMismatchTriggersDiscrepancyWithFailedCheckNamed(): void
+    {
+        $f = $this->createFullFixture('Picked', $this->operatorUserId, 'LPN-LOT', 'SKU-CKR-001', 10, 'BATCH-REAL');
+
+        $_SESSION['user_id'] = $this->testUserId;
+        $_SESSION['role'] = 'operator';
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('LOT');
+        // Location/LPN/SKU/Qty match, but Lot is wrong
+        Checker::confirmLine(
+            $f['picklist_item_id'], 'A01-01-01', 'LPN-LOT', 'SKU-CKR-001', 10.0,
+            'BATCH-WRONG', null, null
+        );
+    }
+
+    public function testQtyMismatchOfOneUnitIsRealMismatch(): void
+    {
+        $f = $this->createFullFixture('Picked', $this->operatorUserId, 'LPN-QTY', 'SKU-CKR-001', 10, 'BATCH-QTY');
+
+        $_SESSION['user_id'] = $this->testUserId;
+        $_SESSION['role'] = 'operator';
+
+        // Qty is 10 in fixture, scan 9 → must fail
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('QTY');
+        Checker::confirmLine(
+            $f['picklist_item_id'], 'A01-01-01', 'LPN-QTY', 'SKU-CKR-001', 9.0,
+            'BATCH-QTY', null, null
+        );
     }
 }

@@ -15,8 +15,12 @@ function handle_checker($action) {
             try {
                 Checker::confirmLine(
                     (int)($data['id'] ?? 0),
+                    (string)($data['scanned_location'] ?? ''),
                     (string)($data['scanned_lpn'] ?? ''),
                     (string)($data['scanned_sku'] ?? ''),
+                    (float)($data['scanned_qty'] ?? 0),
+                    $data['scanned_batch'] ?? null,
+                    $data['scanned_expiry'] ?? null,
                     $data['override_reason'] ?? null
                 );
             } catch (Throwable $e) {

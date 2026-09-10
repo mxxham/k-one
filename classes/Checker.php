@@ -26,8 +26,16 @@ class Checker
         return $stmt->fetchAll();
     }
 
-    public static function confirmLine(int $itemId, string $scannedLpn, string $scannedSku, ?string $overrideReason = null): bool
-    {
+    public static function confirmLine(
+        int $itemId,
+        string $scannedLocation,
+        string $scannedLpn,
+        string $scannedSku,
+        float $scannedQty,
+        ?string $scannedBatch = null,
+        ?string $scannedExpiry = null,
+        ?string $overrideReason = null
+    ): bool {
         $db = db();
         $userId = $_SESSION['user_id'] ?? null;
         $ownTx = !$db->inTransaction();
@@ -35,11 +43,13 @@ class Checker
             if ($ownTx) $db->beginTransaction();
 
             $stmt = $db->prepare(
-                "SELECT pi.*, p.product_code, oo.id AS outbound_id, oo.status AS order_status
+                "SELECT pi.*, p.product_code, oo.id AS outbound_id, oo.status AS order_status,
+                        s.expiry_date
                  FROM picklist_items pi
                  JOIN outbound_items oi ON oi.id = pi.outbound_item_id
                  JOIN products p ON p.id = pi.product_id
                  JOIN outbound_orders oo ON oo.id = oi.outbound_order_id
+                 LEFT JOIN stock s ON s.id = pi.stock_location_id
                  WHERE pi.id = ?"
             );
             $stmt->execute([$itemId]);
@@ -50,26 +60,49 @@ class Checker
             if (!in_array($item['order_status'], ['Picking', 'Picked'], true)) {
                 throw new Exception("Order belum siap untuk dicek.");
             }
-
-            // Segregation of duties: checker cannot be the picker.
             if (!empty($item['picked_by']) && (int)$item['picked_by'] === (int)$userId) {
                 throw new Exception("Checker tidak boleh sama dengan picker.");
             }
 
-            $lpnScan = strtoupper(trim($scannedLpn));
-            $skuScan = strtoupper(trim($scannedSku));
-            $lpnMismatch = ($lpnScan !== strtoupper($item['lpn_code'] ?? ''));
-            $skuMismatch = ($skuScan !== strtoupper($item['product_code'] ?? ''));
-            $anyMismatch = $lpnMismatch || $skuMismatch;
+            // --- Six checks, each independently logged ---
+            $checks = [];
 
-            self::_logScan('picking', $itemId, 'LPN', $item['lpn_code'], $lpnScan, $lpnMismatch ? 'MISMATCH' : 'MATCH', $userId);
-            self::_logScan('picking', $itemId, 'SKU', $item['product_code'], $skuScan, $skuMismatch ? 'MISMATCH' : 'MATCH', $userId);
+            $locScan = strtoupper(trim($scannedLocation));
+            $checks['LOCATION'] = ($locScan === strtoupper($item['location'] ?? ''));
+            self::_logScan('picking', $itemId, 'LOCATION', $item['location'], $locScan, $checks['LOCATION'] ? 'MATCH' : 'MISMATCH', $userId);
+
+            $lpnScan = strtoupper(trim($scannedLpn));
+            $checks['LPN'] = ($lpnScan === strtoupper($item['lpn_code'] ?? ''));
+            self::_logScan('picking', $itemId, 'LPN', $item['lpn_code'], $lpnScan, $checks['LPN'] ? 'MATCH' : 'MISMATCH', $userId);
+
+            $skuScan = strtoupper(trim($scannedSku));
+            $checks['SKU'] = ($skuScan === strtoupper($item['product_code'] ?? ''));
+            self::_logScan('picking', $itemId, 'SKU', $item['product_code'], $skuScan, $checks['SKU'] ? 'MATCH' : 'MISMATCH', $userId);
+
+            // Qty: exact match required — a checker isn't a re-count/adjustment tool
+            $checks['QTY'] = (abs($scannedQty - (float)$item['quantity']) < 0.001);
+            self::_logScan('picking', $itemId, 'QTY', (string)$item['quantity'], (string)$scannedQty, $checks['QTY'] ? 'MATCH' : 'MISMATCH', $userId);
+
+            // Lot/batch — optional check, only runs if a batch was actually scanned/entered
+            if ($scannedBatch !== null && trim($scannedBatch) !== '') {
+                $batchScan = strtoupper(trim($scannedBatch));
+                $checks['LOT'] = ($batchScan === strtoupper($item['batch_number'] ?? ''));
+                self::_logScan('picking', $itemId, 'LOT', $item['batch_number'] ?? '', $batchScan, $checks['LOT'] ? 'MATCH' : 'MISMATCH', $userId);
+            }
+
+            // Expiry — optional check, same pattern
+            if ($scannedExpiry !== null && trim($scannedExpiry) !== '') {
+                $checks['EXPIRY'] = ($scannedExpiry === $item['expiry_date']);
+                self::_logScan('picking', $itemId, 'EXPIRY', $item['expiry_date'] ?? '', $scannedExpiry, $checks['EXPIRY'] ? 'MATCH' : 'MISMATCH', $userId);
+            }
+
+            $anyMismatch = in_array(false, $checks, true);
 
             if ($anyMismatch) {
                 if (trim($overrideReason ?? '') === '') {
-                    throw new Exception("Data tidak sesuai. Alasan override wajib diisi.");
+                    $failed = implode(', ', array_keys(array_filter($checks, fn($v) => $v === false)));
+                    throw new Exception("Data tidak sesuai ({$failed}). Alasan override wajib diisi.");
                 }
-                // Override requires supervisor/admin.
                 $role = $_SESSION['role'] ?? '';
                 if (!in_array($role, ['supervisor', 'admin'], true)) {
                     throw new Exception("Override memerlukan izin supervisor.");
@@ -89,7 +122,6 @@ class Checker
             ]);
 
             self::_refreshOrderCheckStatus((int)$item['outbound_id'], $db);
-
             if ($ownTx) $db->commit();
             return true;
         } catch (Throwable $e) {
