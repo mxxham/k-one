@@ -133,6 +133,7 @@ function import_stock_commit(array $rows, string $mode): array {
         $skipped  = 0;
         $autoCreated = 0;
         $autoLocations = 0;
+        $importErrors = [];
         $refPrefix = 'IST-' . date('Ymd') . '-';
         $productCache = [];
         $locationCache = [];
@@ -234,6 +235,29 @@ function import_stock_commit(array $rows, string $mode): array {
 
             if ($mode === 'skip' && $existing) { $skipped++; continue; }
 
+            // Pickface collision check: reject stock targeting a bin claimed by another SKU's pickface
+            if (!empty($row['location'])) {
+                $conflictStmt = $db->prepare(
+                    "SELECT sku_id, 'outbound' AS bin_type FROM sku_pickface_config
+                     WHERE pickface_bin_id = (SELECT id FROM location_master WHERE location_code = ?) AND sku_id != ?
+                     UNION ALL
+                     SELECT sku_id, 'inbound' AS bin_type FROM sku_pickface_config
+                     WHERE inbound_pickface_bin_id = (SELECT id FROM location_master WHERE location_code = ?) AND sku_id != ?"
+                );
+                $conflictStmt->execute([$row['location'], $row['product_id'], $row['location'], $row['product_id']]);
+                $conflict = $conflictStmt->fetch();
+
+                if ($conflict) {
+                    $importErrors[] = [
+                        'product_id' => $row['product_id'],
+                        'location'   => $row['location'],
+                        'error'      => "Bin {$row['location']} is already the {$conflict['bin_type']} pickface for SKU #{$conflict['sku_id']} — this row was skipped, not imported.",
+                    ];
+                    $skipped++;
+                    continue;
+                }
+            }
+
             $stmtStockInsert->execute([
                 $row['product_id'],
                 $row['batch_number'] ?: null,
@@ -266,7 +290,7 @@ function import_stock_commit(array $rows, string $mode): array {
         }
 
         if ($ownsTransaction) $db->commit();
-        return ['imported' => $imported, 'skipped' => $skipped, 'auto_created' => $autoCreated, 'auto_locations' => $autoLocations];
+        return ['imported' => $imported, 'skipped' => $skipped, 'auto_created' => $autoCreated, 'auto_locations' => $autoLocations, 'import_errors' => $importErrors];
     } catch (\Throwable $e) {
         if ($ownsTransaction && $db->inTransaction()) $db->rollBack();
         throw $e;
