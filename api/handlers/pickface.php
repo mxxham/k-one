@@ -77,6 +77,7 @@ function handle_pickface($action) {
             $binId    = isset($data['pickface_bin_id']) && $data['pickface_bin_id'] !== '' && $data['pickface_bin_id'] !== null ? (int)$data['pickface_bin_id'] : null;
             $minQty   = (int)($data['pickface_min'] ?? 1);
             $maxQty   = (int)($data['pickface_max'] ?? 0);
+            $force    = !empty($data['force_override']);
 
             if (!$skuId) json_err('sku_id is required.', 400);
             if ($minQty < 0) json_err('pickface_min must be >= 0.', 400);
@@ -97,6 +98,27 @@ function handle_pickface($action) {
                 $u = $db->prepare("SELECT id FROM sku_pickface_config WHERE pickface_bin_id = ? AND sku_id != ?");
                 $u->execute([$binId, $skuId]);
                 if ($u->fetch()) json_err('This bin is already assigned to another SKU.', 409);
+
+                // Check foreign stock: bin holds a different SKU's real stock
+                $fs = $db->prepare(
+                    "SELECT s.product_id, SUM(s.quantity) AS qty
+                     FROM stock s
+                     JOIN location_master lm ON lm.location_code = s.location
+                     WHERE lm.id = ?
+                       AND s.product_id != ?
+                       AND s.quantity > 0
+                       AND s.stock_status = 'Available'
+                     GROUP BY s.product_id"
+                );
+                $fs->execute([$binId, $skuId]);
+                $foreign = $fs->fetch();
+                if ($foreign && !$force) {
+                    json_err(
+                        "Bin ini menyimpan stok SKU #{$foreign['product_id']} (qty={$foreign['qty']}). "
+                        . "Kirim force_override: true untuk tetap menugaskan.",
+                        409
+                    );
+                }
 
                 // Check SKU already has a config (since uk_sku_pickface is on sku_id)
                 $e = $db->prepare("SELECT id FROM sku_pickface_config WHERE sku_id = ?");
@@ -121,6 +143,7 @@ function handle_pickface($action) {
             $binId = isset($data['pickface_bin_id']) && $data['pickface_bin_id'] !== '' && $data['pickface_bin_id'] !== null ? (int)$data['pickface_bin_id'] : null;
             $minQty = (int)($data['pickface_min'] ?? 1);
             $maxQty = (int)($data['pickface_max'] ?? 0);
+            $force  = !empty($data['force_override']);
 
             if ($id <= 0) json_err('Invalid config ID.', 400);
             if ($minQty < 0) json_err('pickface_min must be >= 0.', 400);
@@ -129,7 +152,10 @@ function handle_pickface($action) {
             // Fetch existing config
             $existing = $db->prepare("SELECT sku_id, pickface_bin_id FROM sku_pickface_config WHERE id = ?");
             $existing->execute([$id]);
-            if (!$existing->fetch()) json_err('Pickface config not found.', 404);
+            $cfg = $existing->fetch();
+            if (!$cfg) json_err('Pickface config not found.', 404);
+
+            $currentSkuId = (int)$cfg['sku_id'];
 
             // If bin is being set, validate it's an active A-level pickface bin
             if ($binId !== null) {
@@ -141,6 +167,27 @@ function handle_pickface($action) {
                 $u = $db->prepare("SELECT id FROM sku_pickface_config WHERE pickface_bin_id = ? AND id != ?");
                 $u->execute([$binId, $id]);
                 if ($u->fetch()) json_err('This bin is already assigned to another SKU.', 409);
+
+                // Check foreign stock: bin holds a different SKU's real stock
+                $fs = $db->prepare(
+                    "SELECT s.product_id, SUM(s.quantity) AS qty
+                     FROM stock s
+                     JOIN location_master lm ON lm.location_code = s.location
+                     WHERE lm.id = ?
+                       AND s.product_id != ?
+                       AND s.quantity > 0
+                       AND s.stock_status = 'Available'
+                     GROUP BY s.product_id"
+                );
+                $fs->execute([$binId, $currentSkuId]);
+                $foreign = $fs->fetch();
+                if ($foreign && !$force) {
+                    json_err(
+                        "Bin ini menyimpan stok SKU #{$foreign['product_id']} (qty={$foreign['qty']}). "
+                        . "Kirim force_override: true untuk tetap menugaskan.",
+                        409
+                    );
+                }
             }
 
             $stmt = $db->prepare("UPDATE sku_pickface_config SET pickface_bin_id = ?, pickface_min = ?, pickface_max = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
