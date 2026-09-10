@@ -68,6 +68,9 @@ const TABS = [
   { key: 'outbound', label: 'Outbound', icon: PackageOpen, action: 'outbound', needsRange: true },
   { key: 'stock', label: 'Stock', icon: Boxes, action: 'stock', needsRange: false },
   { key: 'ledger', label: 'Ledger', icon: BookOpen, action: 'ledger', needsRange: true },
+  { key: 'inbound_summary', label: 'Inbound Summary', icon: Truck, action: 'inbound_summary', needsRange: true, isReport: true },
+  { key: 'outbound_summary', label: 'Outbound Summary', icon: PackageOpen, action: 'outbound_summary', needsRange: true, isReport: true },
+  { key: 'turnover', label: 'Turnover', icon: RefreshCw, action: 'turnover', needsRange: true, isReport: true },
 ];
 
 const DAILY_STOCK_COLS: Col[] = [
@@ -144,6 +147,56 @@ const LOW_STOCK_COLS: Col[] = [
   { key: 'reorder_level', label: 'Min. Stok', render: (r) => (r.reorder_level != null ? fmtNum(r.reorder_level, 0) : '—') },
 ];
 
+const INBOUND_SUMMARY_COLS: Col[] = [
+  { key: 'product_code', label: 'Kode' },
+  { key: 'product_name', label: 'Produk' },
+  { key: 'uom_type', label: 'UOM' },
+  { key: 'order_count', label: 'Orders', render: (r) => fmtNum(r.order_count, 0) },
+  { key: 'total_qty', label: 'Total Qty', render: (r) => fmtNum(r.total_qty, 0) },
+  { key: 'total_pallets', label: 'Pallets', render: (r) => fmtNum(r.total_pallets, 0) },
+  { key: 'receipt_days', label: 'Receipt Days', render: (r) => fmtNum(r.receipt_days, 0) },
+];
+
+const OUTBOUND_SUMMARY_COLS: Col[] = [
+  { key: 'product_code', label: 'Kode' },
+  { key: 'product_name', label: 'Produk' },
+  { key: 'uom_type', label: 'UOM' },
+  { key: 'order_count', label: 'Orders', render: (r) => fmtNum(r.order_count, 0) },
+  { key: 'total_qty', label: 'Total Qty', render: (r) => fmtNum(r.total_qty, 0) },
+  { key: 'total_pallets', label: 'Pallets', render: (r) => fmtNum(r.total_pallets, 0) },
+  { key: 'customer_count', label: 'Customers', render: (r) => fmtNum(r.customer_count, 0) },
+];
+
+const TURNOVER_COLS: Col[] = [
+  { key: 'product_code', label: 'Kode' },
+  { key: 'product_name', label: 'Produk' },
+  { key: 'uom_type', label: 'UOM' },
+  { key: 'total_outbound', label: 'Outbound', render: (r) => fmtNum(r.total_outbound, 0) },
+  { key: 'total_inbound', label: 'Inbound', render: (r) => fmtNum(r.total_inbound, 0) },
+  { key: 'current_stock', label: 'Current Stock', render: (r) => fmtNum(r.current_stock, 0) },
+  {
+    key: 'turnover_rate', label: 'Turnover Rate', render: (r) => {
+      const rate = Number(r.turnover_rate);
+      const cls = rate > 2 ? 'text-emerald-600 font-bold' : rate >= 1 ? 'text-amber-600 font-semibold' : 'text-red-500 font-semibold';
+      return <span className={cls}>{rate.toFixed(2)}</span>;
+    },
+  },
+  {
+    key: 'days_of_stock', label: 'Days of Stock', render: (r) => {
+      if (r.days_of_stock == null) return '—';
+      const days = Number(r.days_of_stock);
+      const cls = days > 90 ? 'text-emerald-600' : days >= 30 ? 'text-amber-600' : 'text-red-500 font-semibold';
+      return <span className={cls}>{days.toFixed(1)}</span>;
+    },
+  },
+  {
+    key: 'net_movement', label: 'Net', render: (r) => {
+      const net = Number(r.net_movement);
+      return <span className={net >= 0 ? 'text-emerald-600 font-semibold' : 'text-red-500 font-semibold'}>{net >= 0 ? '+' : ''}{fmtNum(net, 0)}</span>;
+    },
+  },
+];
+
 const TAB_COLS: Record<string, Col[]> = {
   products: [
     { key: 'product_code', label: 'Kode' },
@@ -191,7 +244,56 @@ const TAB_COLS: Record<string, Col[]> = {
     { key: 'uom', label: 'UOM' },
     { key: 'location', label: 'Lokasi' },
   ],
+  inbound_summary: INBOUND_SUMMARY_COLS,
+  outbound_summary: OUTBOUND_SUMMARY_COLS,
+  turnover: TURNOVER_COLS,
 };
+
+function ReportSummaryView({ activeTab, reportData, fromDate, toDate }: { activeTab: string; reportData: ReportData; fromDate: string; toDate: string }) {
+  const summary = reportData.summary as any || {};
+
+  const kpiCards = activeTab === 'inbound_summary' ? [
+    { label: 'Total Orders', value: summary.total_orders, grad: 'from-brand-600 to-brand-400' },
+    { label: 'Products', value: summary.total_products, grad: 'from-emerald-600 to-emerald-400' },
+    { label: 'Qty Received', value: summary.total_qty_received, grad: 'from-blue-600 to-blue-400' },
+    { label: 'Pallets', value: summary.total_pallets, grad: 'from-orange-500 to-amber-400' },
+  ] : activeTab === 'outbound_summary' ? [
+    { label: 'Total Orders', value: summary.total_orders, grad: 'from-brand-600 to-brand-400' },
+    { label: 'Products', value: summary.total_products, grad: 'from-emerald-600 to-emerald-400' },
+    { label: 'Qty Shipped', value: summary.total_qty_shipped, grad: 'from-blue-600 to-blue-400' },
+    { label: 'Customers', value: summary.total_customers, grad: 'from-purple-600 to-purple-400' },
+  ] : [
+    { label: 'Products', value: summary.products_analyzed, grad: 'from-brand-600 to-brand-400' },
+    { label: 'Total Outbound', value: summary.total_outbound, grad: 'from-red-500 to-red-400' },
+    { label: 'Total Inbound', value: summary.total_inbound, grad: 'from-emerald-600 to-emerald-400' },
+    { label: 'Avg Turnover', value: summary.avg_turnover_rate?.toFixed?.(2) ?? summary.avg_turnover_rate, grad: 'from-orange-500 to-amber-400' },
+  ];
+
+  const tableData = activeTab === 'turnover'
+    ? (reportData.items as any[] || [])
+    : (reportData.product_breakdown as any[] || []);
+
+  const tabLabel = TABS.find((t) => t.key === activeTab)?.label;
+
+  return (
+    <>
+      <div className="text-xs text-gray-500 font-medium mb-4">
+        Periode: {fmtDate(fromDate)} — {fmtDate(toDate)}
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+        {kpiCards.map((k) => (
+          <div key={k.label} className={`rounded-xl bg-gradient-to-br ${k.grad} p-4 text-white shadow-sm`}>
+            <div className="text-2xl font-extrabold mt-2">{k.value != null ? fmtNum(k.value, 0) : '—'}</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">{k.label}</div>
+          </div>
+        ))}
+      </div>
+      <Card title={`${tabLabel} — By Product`}>
+        <MiniTable cols={TAB_COLS[activeTab] || []} rows={tableData} empty="Tidak ada data untuk periode ini" />
+      </Card>
+    </>
+  );
+}
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState('daily');
@@ -214,6 +316,9 @@ export default function ReportsPage() {
         if (cfg.daily) {
           params.date = fromDate;
           params.date_to = toDate;
+        } else if ((cfg as any).isReport) {
+          params.date_from = fromDate;
+          params.date_to = toDate;
         } else {
           params.start_date = fromDate;
           params.end_date = toDate;
@@ -221,7 +326,7 @@ export default function ReportsPage() {
       }
       const res = await api('report', cfg.action, { params });
       if (reqId.current !== id) return;
-      if (cfg.daily) setReportData(res.report);
+      if (cfg.daily || (cfg as any).isReport) setReportData(res.report);
       else setTabData((Array.isArray(res.rows) ? res.rows : res) as any[]);
       toast('success', 'Data berhasil dimuat');
     } catch (e: any) {
@@ -245,7 +350,10 @@ export default function ReportsPage() {
     { label: 'Qty Keluar', value: ls.qty_out, icon: PackageMinus, grad: 'from-red-500 to-red-400' },
   ];
 
-  const legacyType = ({ daily: 'daily', stock: 'stock' } as Record<string, string | undefined>)[activeTab];
+  const legacyType = ({
+    daily: 'daily', stock: 'stock', expiring: 'expiring',
+    inbound_summary: 'inbound_summary', outbound_summary: 'outbound_summary', turnover: 'turnover',
+  } as Record<string, string | undefined>)[activeTab];
 
   return (
     <div>
@@ -257,12 +365,17 @@ export default function ReportsPage() {
             {legacyType && (
               <>
                 <WebBtn
-                  href={`${webBase()}/print_report.php?type=${legacyType}${activeTab === 'daily' ? `&date=${fromDate}&date_to=${toDate}` : ''}`}
+                  href={`${webBase()}/print_report.php?type=${legacyType}${['daily', 'inbound_summary', 'outbound_summary', 'turnover'].includes(activeTab) ? `&date=${fromDate}&date_to=${toDate}` : ''}`}
                   label="Print / PDF"
                   icon={<Printer className="w-4 h-4" />}
                 />
                 <WebBtn
-                  href={apiHref('export', 'report', { type: legacyType, date: activeTab === 'daily' ? fromDate : undefined, date_to: activeTab === 'daily' ? toDate : undefined })}
+                  href={apiHref('export', 'report', {
+                    type: legacyType,
+                    date_from: ['inbound_summary', 'outbound_summary', 'turnover'].includes(activeTab) ? fromDate : undefined,
+                    date_to: ['daily', 'inbound_summary', 'outbound_summary', 'turnover'].includes(activeTab) ? toDate : undefined,
+                    date: activeTab === 'daily' ? fromDate : undefined,
+                  })}
                   label="Export Excel"
                   icon={<FileSpreadsheet className="w-4 h-4" />}
                 />
@@ -352,7 +465,9 @@ export default function ReportsPage() {
               </Card>
             </div>
           </>
-        ) : (
+      ) : ['inbound_summary', 'outbound_summary', 'turnover'].includes(activeTab) && reportData ? (
+        <ReportSummaryView activeTab={activeTab} reportData={reportData} fromDate={fromDate} toDate={toDate} />
+      ) : (
           <EmptyState message="Klik tombol Daily Report untuk membuat laporan" />
         )
       ) : (

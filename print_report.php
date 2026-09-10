@@ -16,21 +16,30 @@ $date       = $_GET['date']    ?? date('Y-m-d');
 $dateTo     = $_GET['date_to'] ?? $date;
 if ($dateTo < $date) $dateTo = $date;
 
-$report   = ($reportType === 'daily')    ? Report::getDailyReport($date, $dateTo) : null;
-$stock    = ($reportType === 'stock')    ? Stock::getAll()               : null;
-$expiring = ($reportType === 'expiring') ? Stock::getExpiringSoon(365)   : null;
+$report          = ($reportType === 'daily')            ? Report::getDailyReport($date, $dateTo)                : null;
+$stock           = ($reportType === 'stock')            ? Stock::getAll()                                       : null;
+$expiring        = ($reportType === 'expiring')         ? Stock::getExpiringSoon(365)                           : null;
+$inboundSummary  = ($reportType === 'inbound_summary')  ? Report::getInboundReceiptSummary($date, $dateTo)      : null;
+$outboundSummary = ($reportType === 'outbound_summary') ? Report::getOutboundShipmentSummary($date, $dateTo)    : null;
+$turnover        = ($reportType === 'turnover')         ? Report::getInventoryTurnover($date, $dateTo)          : null;
 
 $reportTitles = [
-    'daily'    => 'Daily Report — ' . date('d F Y', strtotime($date)),
-    'stock'    => 'Stock Summary Report',
-    'expiring' => 'Expiring Items Report (Next 365 Days)',
+    'daily'            => 'Daily Report — ' . date('d F Y', strtotime($date)),
+    'stock'            => 'Stock Summary Report',
+    'expiring'         => 'Expiring Items Report (Next 365 Days)',
+    'inbound_summary'  => 'Inbound Receipt Summary — ' . date('d M Y', strtotime($date)) . ' to ' . date('d M Y', strtotime($dateTo)),
+    'outbound_summary' => 'Outbound Shipment Summary — ' . date('d M Y', strtotime($date)) . ' to ' . date('d M Y', strtotime($dateTo)),
+    'turnover'         => 'Inventory Turnover Report — ' . date('d M Y', strtotime($date)) . ' to ' . date('d M Y', strtotime($dateTo)),
 ];
 $reportTitle = $reportTitles[$reportType] ?? 'Report';
 
 $themeColors = [
-    'daily'    => ['#026766', '#e3f2fd', '#014f4e'],
-    'stock'    => ['#013d3c', '#e8f5e9', '#026766'],
-    'expiring' => ['#014f4e', '#fce4ec', '#014f4e'],
+    'daily'            => ['#026766', '#e3f2fd', '#014f4e'],
+    'stock'            => ['#013d3c', '#e8f5e9', '#026766'],
+    'expiring'         => ['#014f4e', '#fce4ec', '#014f4e'],
+    'inbound_summary'  => ['#026766', '#e8f5e9', '#014f4e'],
+    'outbound_summary' => ['#013d3c', '#e3f2fd', '#026766'],
+    'turnover'         => ['#026766', '#fff3e0', '#e65100'],
 ];
 [$accent, $lightBg, $darkAccent] = $themeColors[$reportType] ?? $themeColors['daily'];
 ?>
@@ -140,11 +149,13 @@ $themeColors = [
     <div class="hdr-right">
       <div class="report-type">
         <?= match($reportType) {
-          'daily'    => 'DAILY REPORT',
-          'stock'    => 'STOCK SUMMARY',
-          'expiring' => 'EXPIRY REPORT',
-          'movement' => 'MOVEMENT LOG',
-          default    => 'REPORT'
+          'daily'            => 'DAILY REPORT',
+          'stock'            => 'STOCK SUMMARY',
+          'expiring'         => 'EXPIRY REPORT',
+          'inbound_summary'  => 'INBOUND RECEIPT SUMMARY',
+          'outbound_summary' => 'OUTBOUND SHIPMENT SUMMARY',
+          'turnover'         => 'INVENTORY TURNOVER',
+          default            => 'REPORT'
         } ?>
       </div>
       <div class="report-sub">K-one Management</div>
@@ -389,52 +400,303 @@ $themeColors = [
     </table>
 
   <?php  ?>
-  <?php elseif ($reportType === 'movement' && $movement !== null): ?>
+  <?php elseif ($reportType === 'inbound_summary' && $inboundSummary !== null): ?>
 
-    <?php
-    $qIn  = array_sum(array_map(fn($i) => $i['transaction_type']==='IN' ? ($i['quantity_in']??$i['quantity_drums']??0) : 0, $movement));
-    $qOut = array_sum(array_map(fn($i) => $i['transaction_type']==='OUT' ? ($i['quantity_in']??$i['quantity_drums']??0) : 0, $movement));
-    ?>
+    <?php $s = $inboundSummary['summary'] ?? []; ?>
     <div class="summary-row">
-      <div class="sum-card sc-in"><div class="num"><?= number_format($qIn) ?></div><div class="lbl">Total IN</div></div>
-      <div class="sum-card sc-out"><div class="num"><?= number_format($qOut) ?></div><div class="lbl">Total OUT</div></div>
-      <div class="sum-card sc-trx"><div class="num"><?= count($movement) ?></div><div class="lbl">Transaksi</div></div>
-      <div class="sum-card sc-exp"><div class="num"><?= number_format($qIn - $qOut) ?></div><div class="lbl">Net Movement</div></div>
+      <div class="sum-card sc-trx">
+        <div class="num"><?= number_format($s['total_orders'] ?? 0) ?></div>
+        <div class="lbl">Total Orders</div>
+      </div>
+      <div class="sum-card sc-in">
+        <div class="num"><?= number_format($s['total_products'] ?? 0) ?></div>
+        <div class="lbl">Total Products</div>
+      </div>
+      <div class="sum-card sc-out">
+        <div class="num"><?= number_format($s['total_qty_received'] ?? 0) ?></div>
+        <div class="lbl">Total Qty Received</div>
+      </div>
+      <div class="sum-card sc-exp">
+        <div class="num"><?= number_format($s['total_pallets'] ?? 0) ?></div>
+        <div class="lbl">Total Pallets</div>
+      </div>
     </div>
 
-    <div class="sec-title">Log Pergerakan Stok</div>
+    <div class="sec-title">Receipt by Date</div>
     <table>
       <thead><tr>
-        <th>Waktu</th>
-        <th>Product</th>
-        <th class="c">Tipe</th>
-        <th>Referensi</th>
-        <th class="r">Qty</th>
-        <th class="r">Balance</th>
+        <th>Date</th>
+        <th class="r">Orders</th>
+        <th class="r">Total Qty</th>
+        <th class="r">Total Pallets</th>
       </tr></thead>
       <tbody>
-        <?php foreach ($movement as $item):
-          $isIn = $item['transaction_type'] === 'IN';
-          $qty  = $item['quantity_in'] ?? $item['quantity_drums'] ?? 0;
-        ?>
+        <?php foreach ($inboundSummary['daily_breakdown'] ?? [] as $row): ?>
         <tr>
-          <td class="mono"><?= date('H:i', strtotime($item['created_at'])) ?></td>
-          <td>
-            <div style="font-weight:500;font-size:8.5pt"><?= htmlspecialchars($item['product_code'] ?? '') ?></div>
-          </td>
-          <td class="c"><span class="<?= $isIn ? 'tx-in' : 'tx-out' ?>"><?= $item['transaction_type'] ?></span></td>
-          <td class="mono"><?= htmlspecialchars($item['reference_number'] ?? '—') ?></td>
-          <td class="r" style="color:<?= $isIn ? '#026766' : '#014f4e' ?>">
-            <?= $isIn ? '+' : '–' ?><?= number_format($qty) ?>
-          </td>
-          <td class="r"><?= number_format($item['balance'] ?? $item['balance_drums'] ?? 0) ?></td>
+          <td><?= date('d M Y', strtotime($row['receipt_date'])) ?></td>
+          <td class="r"><?= number_format($row['order_count']) ?></td>
+          <td class="r"><?= number_format($row['total_qty']) ?></td>
+          <td class="r"><?= (int)ceil($row['total_pallets']) ?></td>
         </tr>
         <?php endforeach; ?>
       </tbody>
       <tfoot><tr>
-        <td colspan="4"><strong>TOTAL MOVEMENT</strong></td>
-        <td class="r">+<?= number_format($qIn) ?> / –<?= number_format($qOut) ?></td>
-        <td></td>
+        <td><strong>TOTAL</strong></td>
+        <td class="r"><?= number_format(array_sum(array_column($inboundSummary['daily_breakdown'] ?? [], 'order_count'))) ?></td>
+        <td class="r"><?= number_format(array_sum(array_column($inboundSummary['daily_breakdown'] ?? [], 'total_qty'))) ?></td>
+        <td class="r"><?= (int)ceil(array_sum(array_column($inboundSummary['daily_breakdown'] ?? [], 'total_pallets'))) ?></td>
+      </tr></tfoot>
+    </table>
+
+    <div class="sec-title">By Product</div>
+    <table>
+      <thead><tr>
+        <th>Product Code</th>
+        <th>Product Name</th>
+        <th class="c">UOM</th>
+        <th class="r">Orders</th>
+        <th class="r">Total Qty</th>
+        <th class="r">Pallets</th>
+        <th class="r">Days</th>
+      </tr></thead>
+      <tbody>
+        <?php foreach ($inboundSummary['product_breakdown'] ?? [] as $row): ?>
+        <tr>
+          <td class="mono"><?= htmlspecialchars($row['product_code']) ?></td>
+          <td style="font-weight:500"><?= htmlspecialchars($row['product_name']) ?></td>
+          <td class="c">
+            <?php $u = $row['uom_type'] ?? 'Drum'; ?>
+            <span class="uom-badge uom-<?= strtolower($u) ?>"><?= $u ?></span>
+          </td>
+          <td class="r"><?= number_format($row['order_count']) ?></td>
+          <td class="r"><?= number_format($row['total_qty']) ?></td>
+          <td class="r"><?= (int)ceil($row['total_pallets']) ?></td>
+          <td class="r"><?= $row['receipt_days'] ?></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+
+    <div class="sec-title">By Status</div>
+    <table>
+      <thead><tr>
+        <th>Status</th>
+        <th class="r">Orders</th>
+        <th class="r">Qty</th>
+      </tr></thead>
+      <tbody>
+        <?php foreach ($inboundSummary['status_breakdown'] ?? [] as $row): ?>
+        <tr>
+          <td>
+            <?php $sc = str_contains($row['status'], 'Complet') ? 'act-completed' : (str_contains($row['status'], 'Dues') ? 'act-dues' : 'act-default'); ?>
+            <span class="act-badge <?= $sc ?>"><?= htmlspecialchars($row['status']) ?></span>
+          </td>
+          <td class="r"><?= number_format($row['order_count']) ?></td>
+          <td class="r"><?= number_format($row['total_qty']) ?></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+
+  <?php  ?>
+  <?php elseif ($reportType === 'outbound_summary' && $outboundSummary !== null): ?>
+
+    <?php $s = $outboundSummary['summary'] ?? []; ?>
+    <div class="summary-row">
+      <div class="sum-card sc-trx">
+        <div class="num"><?= number_format($s['total_orders'] ?? 0) ?></div>
+        <div class="lbl">Total Orders</div>
+      </div>
+      <div class="sum-card sc-in">
+        <div class="num"><?= number_format($s['total_products'] ?? 0) ?></div>
+        <div class="lbl">Total Products</div>
+      </div>
+      <div class="sum-card sc-out">
+        <div class="num"><?= number_format($s['total_qty_shipped'] ?? 0) ?></div>
+        <div class="lbl">Total Qty Shipped</div>
+      </div>
+      <div class="sum-card sc-exp">
+        <div class="num"><?= number_format($s['total_pallets'] ?? 0) ?></div>
+        <div class="lbl">Total Pallets</div>
+      </div>
+    </div>
+
+    <div class="sec-title">Shipments by Date</div>
+    <table>
+      <thead><tr>
+        <th>Date</th>
+        <th class="r">Orders</th>
+        <th class="r">Total Qty</th>
+        <th class="r">Total Pallets</th>
+        <th class="r">Customers</th>
+      </tr></thead>
+      <tbody>
+        <?php foreach ($outboundSummary['daily_breakdown'] ?? [] as $row): ?>
+        <tr>
+          <td><?= date('d M Y', strtotime($row['ship_date'])) ?></td>
+          <td class="r"><?= number_format($row['order_count']) ?></td>
+          <td class="r"><?= number_format($row['total_qty']) ?></td>
+          <td class="r"><?= (int)ceil($row['total_pallets']) ?></td>
+          <td class="r"><?= number_format($row['customer_count']) ?></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+      <tfoot><tr>
+        <td><strong>TOTAL</strong></td>
+        <td class="r"><?= number_format(array_sum(array_column($outboundSummary['daily_breakdown'] ?? [], 'order_count'))) ?></td>
+        <td class="r"><?= number_format(array_sum(array_column($outboundSummary['daily_breakdown'] ?? [], 'total_qty'))) ?></td>
+        <td class="r"><?= (int)ceil(array_sum(array_column($outboundSummary['daily_breakdown'] ?? [], 'total_pallets'))) ?></td>
+        <td class="r"><?= number_format(array_sum(array_column($outboundSummary['daily_breakdown'] ?? [], 'customer_count'))) ?></td>
+      </tr></tfoot>
+    </table>
+
+    <div class="sec-title">By Product</div>
+    <table>
+      <thead><tr>
+        <th>Product Code</th>
+        <th>Product Name</th>
+        <th class="c">UOM</th>
+        <th class="r">Orders</th>
+        <th class="r">Total Qty</th>
+        <th class="r">Pallets</th>
+        <th class="r">Customers</th>
+      </tr></thead>
+      <tbody>
+        <?php foreach ($outboundSummary['product_breakdown'] ?? [] as $row): ?>
+        <tr>
+          <td class="mono"><?= htmlspecialchars($row['product_code']) ?></td>
+          <td style="font-weight:500"><?= htmlspecialchars($row['product_name']) ?></td>
+          <td class="c">
+            <?php $u = $row['uom_type'] ?? 'Drum'; ?>
+            <span class="uom-badge uom-<?= strtolower($u) ?>"><?= $u ?></span>
+          </td>
+          <td class="r"><?= number_format($row['order_count']) ?></td>
+          <td class="r"><?= number_format($row['total_qty']) ?></td>
+          <td class="r"><?= (int)ceil($row['total_pallets']) ?></td>
+          <td class="r"><?= number_format($row['customer_count']) ?></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+
+    <div class="sec-title">By Customer</div>
+    <table>
+      <thead><tr>
+        <th>Customer Code</th>
+        <th>Customer Name</th>
+        <th class="r">Orders</th>
+        <th class="r">Qty</th>
+        <th class="r">Pallets</th>
+      </tr></thead>
+      <tbody>
+        <?php foreach ($outboundSummary['customer_breakdown'] ?? [] as $row): ?>
+        <tr>
+          <td class="mono"><?= htmlspecialchars($row['customer_code']) ?></td>
+          <td style="font-weight:500"><?= htmlspecialchars($row['customer_name']) ?></td>
+          <td class="r"><?= number_format($row['order_count']) ?></td>
+          <td class="r"><?= number_format($row['total_qty']) ?></td>
+          <td class="r"><?= (int)ceil($row['total_pallets']) ?></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+      <tfoot><tr>
+        <td colspan="2"><strong>TOTAL</strong></td>
+        <td class="r"><?= number_format(array_sum(array_column($outboundSummary['customer_breakdown'] ?? [], 'order_count'))) ?></td>
+        <td class="r"><?= number_format(array_sum(array_column($outboundSummary['customer_breakdown'] ?? [], 'total_qty'))) ?></td>
+        <td class="r"><?= (int)ceil(array_sum(array_column($outboundSummary['customer_breakdown'] ?? [], 'total_pallets'))) ?></td>
+      </tr></tfoot>
+    </table>
+
+    <div class="sec-title">By Status</div>
+    <table>
+      <thead><tr>
+        <th>Status</th>
+        <th class="r">Orders</th>
+        <th class="r">Qty</th>
+      </tr></thead>
+      <tbody>
+        <?php foreach ($outboundSummary['status_breakdown'] ?? [] as $row): ?>
+        <tr>
+          <td>
+            <?php $sc = str_contains($row['status'], 'Ship') ? 'act-completed' : (str_contains($row['status'], 'Dues') ? 'act-dues' : 'act-default'); ?>
+            <span class="act-badge <?= $sc ?>"><?= htmlspecialchars($row['status']) ?></span>
+          </td>
+          <td class="r"><?= number_format($row['order_count']) ?></td>
+          <td class="r"><?= number_format($row['total_qty']) ?></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+
+  <?php  ?>
+  <?php elseif ($reportType === 'turnover' && $turnover !== null): ?>
+
+    <?php $s = $turnover['summary'] ?? []; ?>
+    <div class="summary-row">
+      <div class="sum-card sc-trx">
+        <div class="num"><?= number_format($s['products_analyzed'] ?? 0) ?></div>
+        <div class="lbl">Products Analyzed</div>
+      </div>
+      <div class="sum-card sc-out">
+        <div class="num"><?= number_format($s['total_outbound'] ?? 0) ?></div>
+        <div class="lbl">Total Outbound</div>
+      </div>
+      <div class="sum-card sc-in">
+        <div class="num"><?= number_format($s['total_inbound'] ?? 0) ?></div>
+        <div class="lbl">Total Inbound</div>
+      </div>
+      <div class="sum-card sc-exp">
+        <div class="num"><?= number_format($s['avg_turnover_rate'] ?? 0, 2) ?></div>
+        <div class="lbl">Avg Turnover Rate</div>
+      </div>
+    </div>
+
+    <div class="sec-title">Product Turnover Details</div>
+    <table>
+      <thead><tr>
+        <th>Product Code</th>
+        <th>Product Name</th>
+        <th class="c">UOM</th>
+        <th class="r">Outbound</th>
+        <th class="r">Inbound</th>
+        <th class="r">Current Stock</th>
+        <th class="r">Turnover Rate</th>
+        <th class="r">Days of Stock</th>
+        <th class="r">Net Movement</th>
+      </tr></thead>
+      <tbody>
+        <?php foreach ($turnover['items'] ?? [] as $row):
+          $tr = $row['turnover_rate'] ?? 0;
+          $ds = $row['days_of_stock'] ?? 0;
+          $nm = $row['net_movement'] ?? 0;
+          $trClass = $tr > 2.0 ? 'color:#026766;font-weight:700' : ($tr >= 1.0 ? 'color:#e65100;font-weight:700' : 'color:#880e4f;font-weight:700');
+          $dsClass = $ds < 30 ? 'color:#880e4f;font-weight:700' : ($ds <= 90 ? 'color:#e65100;font-weight:700' : 'color:#026766;font-weight:700');
+          $nmStyle = $nm >= 0 ? 'color:#026766;font-weight:700' : 'color:#880e4f;font-weight:700';
+        ?>
+        <tr>
+          <td class="mono"><?= htmlspecialchars($row['product_code']) ?></td>
+          <td style="font-weight:500"><?= htmlspecialchars($row['product_name']) ?></td>
+          <td class="c">
+            <?php $u = $row['uom_type'] ?? 'Drum'; ?>
+            <span class="uom-badge uom-<?= strtolower($u) ?>"><?= $u ?></span>
+          </td>
+          <td class="r"><?= number_format($row['total_outbound']) ?></td>
+          <td class="r"><?= number_format($row['total_inbound']) ?></td>
+          <td class="r"><?= number_format($row['current_stock']) ?></td>
+          <td class="r"><span style="<?= $trClass ?>"><?= number_format($tr, 2) ?></span></td>
+          <td class="r"><span style="<?= $dsClass ?>"><?= $ds ?> days</span></td>
+          <td class="r"><span style="<?= $nmStyle ?>"><?= $nm >= 0 ? '+' : '' ?><?= number_format($nm) ?></span></td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+      <tfoot><tr>
+        <td colspan="3"><strong>TOTAL</strong></td>
+        <td class="r"><?= number_format(array_sum(array_column($turnover['items'] ?? [], 'total_outbound'))) ?></td>
+        <td class="r"><?= number_format(array_sum(array_column($turnover['items'] ?? [], 'total_inbound'))) ?></td>
+        <td class="r"><?= number_format(array_sum(array_column($turnover['items'] ?? [], 'current_stock'))) ?></td>
+        <td class="r"></td>
+        <td class="r"></td>
+        <td class="r"><span style="<?= array_sum(array_column($turnover['items'] ?? [], 'net_movement')) >= 0 ? 'color:#026766;font-weight:700' : 'color:#880e4f;font-weight:700' ?>"><?= array_sum(array_column($turnover['items'] ?? [], 'net_movement')) >= 0 ? '+' : '' ?><?= number_format(array_sum(array_column($turnover['items'] ?? [], 'net_movement'))) ?></span></td>
       </tr></tfoot>
     </table>
 

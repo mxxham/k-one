@@ -50,6 +50,30 @@ function handle_report($action) {
             json_out(['rows' => $rows]);
             break;
 
+        case 'inbound_summary':
+            api_require_auth();
+            $dateFrom = query('date_from') ?: date('Y-m-d');
+            $dateTo = query('date_to') ?: date('Y-m-d');
+            $report = Report::getInboundReceiptSummary($dateFrom, $dateTo);
+            json_out(['report' => $report]);
+            break;
+
+        case 'outbound_summary':
+            api_require_auth();
+            $dateFrom = query('date_from') ?: date('Y-m-d');
+            $dateTo = query('date_to') ?: date('Y-m-d');
+            $report = Report::getOutboundShipmentSummary($dateFrom, $dateTo);
+            json_out(['report' => $report]);
+            break;
+
+        case 'turnover':
+            api_require_auth();
+            $dateFrom = query('date_from') ?: date('Y-m-d');
+            $dateTo = query('date_to') ?: date('Y-m-d');
+            $report = Report::getInventoryTurnover($dateFrom, $dateTo);
+            json_out(['report' => $report]);
+            break;
+
         default:
             json_err('Invalid action: ' . $action, 404);
     }
