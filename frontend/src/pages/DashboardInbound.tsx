@@ -104,30 +104,45 @@ export default function DashboardInbound() {
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
-            <div className="rounded-xl bg-gradient-to-br from-brand-500 to-brand-300 p-4 text-white shadow-sm">
-              <ClipboardList className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi.this_month || 0, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Inbound Bulan Ini</div>
+            <div className="relative overflow-hidden rounded-xl border border-gray-200 shadow-sm p-4 bg-gradient-to-br from-brand-50 to-brand-100">
+              <div className="absolute inset-0 bg-gradient-to-br from-brand-500/10 to-brand-300/5" />
+              <div className="relative">
+                <ClipboardList className="w-5 h-5 text-brand-600" />
+                <div className="text-2xl font-extrabold mt-2 text-brand-700">{fmtNum(kpi.this_month || 0, 0)}</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-brand-600/80 mt-0.5">Inbound Bulan Ini</div>
+              </div>
             </div>
-            <div className="rounded-xl bg-gradient-to-br from-sky-600 to-sky-400 p-4 text-white shadow-sm">
-              <ArrowDownToLine className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{fmtNum(duesIn, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Dues In</div>
+            <div className="relative overflow-hidden rounded-xl border border-gray-200 shadow-sm p-4 bg-gradient-to-br from-sky-50 to-sky-100">
+              <div className="absolute inset-0 bg-gradient-to-br from-sky-600/10 to-sky-400/5" />
+              <div className="relative">
+                <ArrowDownToLine className="w-5 h-5 text-sky-600" />
+                <div className="text-2xl font-extrabold mt-2 text-sky-700">{fmtNum(duesIn, 0)}</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-600/80 mt-0.5">Dues In</div>
+              </div>
             </div>
-            <div className="rounded-xl bg-gradient-to-br from-orange-500 to-orange-300 p-4 text-white shadow-sm">
-              <PackageOpen className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{fmtNum(receiving, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Receiving</div>
+            <div className="relative overflow-hidden rounded-xl border border-gray-200 shadow-sm p-4 bg-gradient-to-br from-orange-50 to-orange-100">
+              <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 to-orange-300/5" />
+              <div className="relative">
+                <PackageOpen className="w-5 h-5 text-orange-600" />
+                <div className="text-2xl font-extrabold mt-2 text-orange-700">{fmtNum(receiving, 0)}</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-orange-600/80 mt-0.5">Receiving</div>
+              </div>
             </div>
-            <div className="rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-400 p-4 text-white shadow-sm">
-              <Truck className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{fmtNum(doneToday, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Selesai Diterima</div>
+            <div className="relative overflow-hidden rounded-xl border border-gray-200 shadow-sm p-4 bg-gradient-to-br from-emerald-50 to-emerald-100">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-600/10 to-emerald-400/5" />
+              <div className="relative">
+                <Truck className="w-5 h-5 text-emerald-600" />
+                <div className="text-2xl font-extrabold mt-2 text-emerald-700">{fmtNum(doneToday, 0)}</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600/80 mt-0.5">Selesai Diterima</div>
+              </div>
             </div>
-            <div className="rounded-xl bg-gradient-to-br from-violet-600 to-indigo-400 p-4 text-white shadow-sm">
-              <CalendarClock className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{asnLoading ? '…' : fmtNum(asnCount, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">ASN Pending</div>
+            <div className="relative overflow-hidden rounded-xl border border-gray-200 shadow-sm p-4 bg-gradient-to-br from-violet-50 to-indigo-100">
+              <div className="absolute inset-0 bg-gradient-to-br from-violet-600/10 to-indigo-400/5" />
+              <div className="relative">
+                <CalendarClock className="w-5 h-5 text-violet-600" />
+                <div className="text-2xl font-extrabold mt-2 text-violet-700">{asnLoading ? '…' : fmtNum(asnCount, 0)}</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-violet-600/80 mt-0.5">ASN Pending</div>
+              </div>
             </div>
           </div>
 
@@ -144,8 +159,8 @@ export default function DashboardInbound() {
             ) : (
               <div className="overflow-x-auto -mx-5 px-5">
                 <table className="w-full text-sm">
-                  <thead className="bg-brand-50">
-                    <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
+                  <thead className="bg-gray-50/80">
+                    <tr className="text-left text-[11px] uppercase tracking-wider text-gray-600">
                       <th className={TH}>Order</th>
                       <th className={TH}>Status</th>
                       <th className={TH}>Cross-Dock</th>
@@ -158,7 +173,7 @@ export default function DashboardInbound() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {pending.map((o: any) => (
-                      <tr key={o.id} className="hover:bg-brand-50 transition-colors">
+                      <tr key={o.id} className="hover:bg-gray-50 transition-colors">
                         <td className={TD}>
                           <Link to={`/inbound/${o.id}`} className="font-semibold text-brand-600 hover:underline">
                             {o.order_number}
@@ -204,8 +219,8 @@ export default function DashboardInbound() {
             ) : (
               <div className="overflow-x-auto -mx-5 px-5">
                 <table className="w-full text-sm">
-                  <thead className="bg-brand-50">
-                    <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
+                  <thead className="bg-gray-50/80">
+                    <tr className="text-left text-[11px] uppercase tracking-wider text-gray-600">
                       <th className={TH}>ASN No</th>
                       <th className={TH}>Supplier</th>
                       <th className={TH}>Kedatangan Diharapkan</th>
@@ -214,7 +229,7 @@ export default function DashboardInbound() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {asnRows.map((a: any) => (
-                      <tr key={a.id} className="hover:bg-brand-50 transition-colors">
+                      <tr key={a.id} className="hover:bg-gray-50 transition-colors">
                         <td className={TD}>
                           <Link to={`/asn/${a.id}`} className="font-semibold text-brand-600 hover:underline">
                             {a.asn_number}

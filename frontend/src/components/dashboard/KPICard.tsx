@@ -18,42 +18,60 @@ export default function KPICard({ label, value, subtitle, icon: Icon, gradient, 
   };
 
   const getTrendColor = () => {
-    if (trend === undefined || trend === 0) return 'text-white/60';
-    // For most metrics, up is good. For expired/aging, down is good.
-    // We'll keep it simple: green for positive, red for negative
-    return trend > 0 ? 'text-emerald-200' : 'text-red-200';
+    if (trend === undefined || trend === 0) return 'text-brand-700/50';
+    return trend > 0 ? 'text-emerald-600' : 'text-red-500';
+  };
+
+  const getTrendBg = () => {
+    if (trend === undefined || trend === 0) return 'bg-brand-100/60';
+    return trend > 0 ? 'bg-emerald-50' : 'bg-red-50';
   };
 
   const TrendIcon = getTrendIcon();
   const trendColor = getTrendColor();
+  const trendBg = getTrendBg();
 
   return (
-    <div className={`rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-sm relative overflow-hidden`}>
-      {/* Background decoration */}
-      <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
-      
+    <div
+      className={`group rounded-xl bg-gradient-to-br ${gradient} p-5 relative overflow-hidden
+        transition-all duration-300 ease-out
+        hover:scale-[1.01] hover:shadow-lg`}
+    >
+      {/* White overlay — softens any gradient for a lighter, more premium feel */}
+      <div className="absolute inset-0 bg-white/70" />
+
+      {/* Subtle decorative accent using the gradient's color family */}
+      <div className="absolute -right-8 -top-8 w-28 h-28 rounded-full blur-2xl bg-white/40 transition-all duration-500 group-hover:scale-110" />
+      <div className="absolute -left-4 -bottom-4 w-20 h-20 rounded-full blur-xl bg-white/30" />
+
       <div className="relative">
-        <div className="flex items-center justify-between mb-2">
-          <Icon className="w-4 h-4 opacity-80" />
+        {/* Top row: icon + trend */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="w-8 h-8 rounded-lg bg-brand-100 flex items-center justify-center ring-1 ring-brand-200/60">
+            <Icon className="w-4 h-4 text-brand-600" strokeWidth={2} />
+          </div>
           {trend !== undefined && (
-            <div className={`flex items-center gap-0.5 text-xs font-bold ${trendColor}`}>
+            <div className={`flex items-center gap-1 text-xs font-semibold ${trendColor} ${trendBg} px-2 py-0.5 rounded-full`}>
               <TrendIcon className="w-3 h-3" />
               <span>{Math.abs(trend).toFixed(1)}%</span>
             </div>
           )}
         </div>
 
-        <div className="text-2xl font-extrabold">
+        {/* Value */}
+        <div className="text-[1.625rem] leading-tight font-extrabold text-brand-900 tracking-tight">
           {typeof value === 'number' ? fmtNum(value, 0) : value}
-          {unit && <span className="text-base font-semibold ml-1 opacity-80">{unit}</span>}
+          {unit && <span className="text-sm font-semibold ml-1 text-brand-500">{unit}</span>}
         </div>
 
-        <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">
+        {/* Label */}
+        <div className="text-xs font-semibold uppercase tracking-wider text-brand-500 mt-1">
           {label}
         </div>
 
+        {/* Subtitle */}
         {subtitle && (
-          <div className="text-xs opacity-75 mt-2">{subtitle}</div>
+          <div className="text-xs text-brand-400 mt-2">{subtitle}</div>
         )}
       </div>
     </div>

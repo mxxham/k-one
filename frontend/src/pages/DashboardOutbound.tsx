@@ -109,30 +109,35 @@ export default function DashboardOutbound() {
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
-            <div className="rounded-xl bg-gradient-to-br from-brand-500 to-brand-300 p-4 text-white shadow-sm">
-              <ShoppingCart className="w-5 h-5 opacity-80" />
+            <div className="relative rounded-xl bg-gradient-to-br from-brand-500 to-brand-300 p-4 text-white shadow-sm overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent" />
+              <div className="relative"><ShoppingCart className="w-5 h-5 opacity-80" />
               <div className="text-2xl font-extrabold mt-2">{fmtNum(kpi.this_month || 0, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Outbound Bulan Ini</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider opacity-85 mt-0.5">Outbound Bulan Ini</div></div>
             </div>
-            <div className="rounded-xl bg-gradient-to-br from-amber-500 to-amber-300 p-4 text-white shadow-sm">
-              <PackageOpen className="w-5 h-5 opacity-80" />
+            <div className="relative rounded-xl bg-gradient-to-br from-amber-500 to-amber-300 p-4 text-white shadow-sm overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent" />
+              <div className="relative"><PackageOpen className="w-5 h-5 opacity-80" />
               <div className="text-2xl font-extrabold mt-2">{fmtNum(pendingCount, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Order Open / Picking</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider opacity-85 mt-0.5">Order Open / Picking</div></div>
             </div>
-            <div className="rounded-xl bg-gradient-to-br from-cyan-600 to-cyan-400 p-4 text-white shadow-sm">
-              <ClipboardCheck className="w-5 h-5 opacity-80" />
+            <div className="relative rounded-xl bg-gradient-to-br from-cyan-600 to-cyan-400 p-4 text-white shadow-sm overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent" />
+              <div className="relative"><ClipboardCheck className="w-5 h-5 opacity-80" />
               <div className="text-2xl font-extrabold mt-2">{fmtNum(pickStats?.pending || 0, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Picklist Aktif</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider opacity-85 mt-0.5">Picklist Aktif</div></div>
             </div>
-            <div className="rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-400 p-4 text-white shadow-sm">
-              <Truck className="w-5 h-5 opacity-80" />
+            <div className="relative rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-400 p-4 text-white shadow-sm overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent" />
+              <div className="relative"><Truck className="w-5 h-5 opacity-80" />
               <div className="text-2xl font-extrabold mt-2">{fmtNum(pickStats?.completed || 0, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Picklist Selesai</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider opacity-85 mt-0.5">Picklist Selesai</div></div>
             </div>
-            <div className="rounded-xl bg-gradient-to-br from-indigo-600 to-violet-400 p-4 text-white shadow-sm">
-              <Layers className="w-5 h-5 opacity-80" />
+            <div className="relative rounded-xl bg-gradient-to-br from-indigo-600 to-violet-400 p-4 text-white shadow-sm overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent" />
+              <div className="relative"><Layers className="w-5 h-5 opacity-80" />
               <div className="text-2xl font-extrabold mt-2">{waveLoading ? '…' : fmtNum(waveCount, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Wave Aktif</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider opacity-85 mt-0.5">Wave Aktif</div></div>
             </div>
           </div>
 
@@ -150,8 +155,8 @@ export default function DashboardOutbound() {
               ) : (
                 <div className="overflow-x-auto -mx-5 px-5">
                   <table className="w-full text-sm">
-                    <thead className="bg-brand-50">
-                      <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
+                    <thead className="bg-gray-50/80">
+                      <tr className="text-left text-[11px] uppercase tracking-wider text-gray-500">
                         <th className={TH}>Order</th>
                         <th className={TH}>Status</th>
                         <th className={TH}>Cross-Dock</th>
@@ -163,7 +168,7 @@ export default function DashboardOutbound() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {pending.map((o: any) => (
-                        <tr key={o.id} className="hover:bg-brand-50 transition-colors">
+                        <tr key={o.id} className="hover:bg-gray-50 transition-colors">
                           <td className={TD}>
                             <Link to={`/outbound/${o.id}`} className="font-semibold text-brand-600 hover:underline">
                               {o.order_number}
@@ -204,8 +209,8 @@ export default function DashboardOutbound() {
               ) : (
                 <div className="overflow-x-auto -mx-5 px-5">
                   <table className="w-full text-sm">
-                    <thead className="bg-brand-50">
-                      <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
+                    <thead className="bg-gray-50/80">
+                      <tr className="text-left text-[11px] uppercase tracking-wider text-gray-500">
                         <th className={TH}>Picklist</th>
                         <th className={TH}>Status</th>
                         <th className={TH}>Outbound</th>
@@ -216,7 +221,7 @@ export default function DashboardOutbound() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {picklists.map((pl: any) => (
-                        <tr key={pl.id} className="hover:bg-brand-50 transition-colors">
+                        <tr key={pl.id} className="hover:bg-gray-50 transition-colors">
                           <td className={TD}>
                             <Link to={`/picklist/${pl.id}`} className="font-semibold text-brand-600 hover:underline">
                               {pl.picklist_no || `PL-${pl.id}`}
@@ -255,8 +260,8 @@ export default function DashboardOutbound() {
             ) : (
               <div className="overflow-x-auto -mx-5 px-5">
                 <table className="w-full text-sm">
-                  <thead className="bg-brand-50">
-                    <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
+                  <thead className="bg-gray-50/80">
+                    <tr className="text-left text-[11px] uppercase tracking-wider text-gray-500">
                       <th className={TH}>Wave</th>
                       <th className={TH}>Status</th>
                       <th className={TH}>Carrier</th>
@@ -266,7 +271,7 @@ export default function DashboardOutbound() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {waveRows.map((w: any) => (
-                      <tr key={w.id} className="hover:bg-brand-50 transition-colors">
+                      <tr key={w.id} className="hover:bg-gray-50 transition-colors">
                         <td className={TD}>
                           <Link to={`/waves`} className="font-semibold text-brand-600 hover:underline">
                             {w.wave_number}

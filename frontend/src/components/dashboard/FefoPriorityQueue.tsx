@@ -31,8 +31,8 @@ interface FefoQueueData {
   queue: FefoItem[];
 }
 
-const TH = 'px-3 py-2.5 font-bold whitespace-nowrap text-left';
-const TD = 'px-3 py-2.5 whitespace-nowrap';
+const TH = 'px-4 py-3 font-bold whitespace-nowrap text-left text-[11px] uppercase tracking-wider text-gray-500';
+const TD = 'px-4 py-3 whitespace-nowrap';
 
 function priorityColor(level: string) {
   switch (level) {
@@ -114,26 +114,27 @@ export default function FefoPriorityQueue({ limit = 10 }: { limit?: number }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="bg-gradient-to-br from-brand-600 to-brand-800 p-5 text-white">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
-              <Package className="w-5 h-5" />
+      <div className="bg-gradient-to-br from-brand-50 to-brand-100 p-5">
+        <div className="flex items-start justify-between gap-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-brand-200/70 flex items-center justify-center">
+              <Package className="w-5 h-5 text-brand-700" />
             </div>
             <div>
-              <h2 className="text-lg font-extrabold">FEFO Priority Queue</h2>
-              <p className="text-brand-100 text-xs">First Expired, First Out • Prioritas Picking</p>
+              <h2 className="text-lg font-extrabold text-brand-900">FEFO Priority Queue</h2>
+              <p className="text-brand-500 text-xs mt-0.5">First Expired, First Out • Prioritas Picking</p>
             </div>
           </div>
-            <div className="flex items-center gap-5">
+          <div className="flex items-center gap-6">
             <div className="text-right">
-              <div className="text-2xl font-extrabold">{totalItems}</div>
-              <div className="text-[10px] uppercase tracking-widest opacity-80">Total Batches</div>
+              <div className="text-2xl font-extrabold text-brand-900">{totalItems}</div>
+              <div className="text-[10px] uppercase tracking-widest text-brand-400 font-semibold">Total Batches</div>
             </div>
+            <div className="h-10 w-px bg-brand-200" />
             <div className="text-right">
-              <div className="text-2xl font-extrabold text-red-300">{firstYear ? firstYear.year : '—'}</div>
-              <div className="text-[10px] uppercase tracking-widest opacity-80">First to Expire</div>
-              <div className="text-[11px] font-bold text-red-200 mt-0.5">
+              <div className="text-2xl font-extrabold text-red-600">{firstYear ? firstYear.year : '—'}</div>
+              <div className="text-[10px] uppercase tracking-widest text-brand-400 font-semibold">First to Expire</div>
+              <div className="text-[11px] font-semibold text-red-500 mt-0.5">
                 {firstYear ? `${firstYear.count} batches • ${fmtNum(firstYear.quantity, 0)} units` : ''}
               </div>
             </div>
@@ -142,13 +143,13 @@ export default function FefoPriorityQueue({ limit = 10 }: { limit?: number }) {
 
         {/* Visual Timeline (by expiry year) */}
         <div className="mt-4">
-          <div className="flex items-center h-3 rounded-full overflow-hidden bg-white/10">
+          <div className="flex items-center h-3 rounded-full overflow-hidden bg-brand-200/50 ring-1 ring-brand-200/60">
             {years.map((y, i) => {
               const pct = totalItems > 0 ? (y.count / totalItems) * 100 : 0;
               return pct > 0 ? (
                 <div
                   key={y.year}
-                  className={`h-full ${YEAR_SEGMENT_COLORS[i % YEAR_SEGMENT_COLORS.length]} cursor-pointer hover:opacity-80 transition-opacity`}
+                  className={`h-full ${YEAR_SEGMENT_COLORS[i % YEAR_SEGMENT_COLORS.length]} cursor-pointer transition-all hover:brightness-110 hover:scale-y-125`}
                   style={{ width: `${pct}%` }}
                   title={`${y.year}: ${y.count} batches (${fmtNum(y.quantity, 0)} units) — klik untuk lihat`}
                   onClick={() => navigate(`/stock?year=${y.year}`)}
@@ -156,13 +157,13 @@ export default function FefoPriorityQueue({ limit = 10 }: { limit?: number }) {
               ) : null;
             })}
           </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-[10px] font-semibold uppercase tracking-wider">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5 text-[10px] font-semibold uppercase tracking-wider text-brand-500">
             {years.map((y, i) => (
               <button
                 key={y.year}
                 onClick={() => navigate(`/stock?year=${y.year}`)}
                 title={`Klik untuk melihat stock expire ${y.year}`}
-                className="flex items-center gap-1 cursor-pointer hover:opacity-70 transition-opacity"
+                className="flex items-center gap-1.5 cursor-pointer hover:text-brand-700 transition-colors"
               >
                 <span className={`inline-block w-2 h-2 rounded-full ${YEAR_SEGMENT_COLORS[i % YEAR_SEGMENT_COLORS.length]}`} />
                 {y.year} • {y.count}
@@ -180,8 +181,8 @@ export default function FefoPriorityQueue({ limit = 10 }: { limit?: number }) {
           <>
             <div className="overflow-x-auto -mx-5 px-5">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-y border-gray-200">
-                  <tr className="text-[11px] uppercase tracking-wide text-gray-700">
+                <thead className="bg-gray-50/80 border-b border-gray-200">
+                  <tr>
                     <th className={TH}>Priority</th>
                     <th className={TH}>Product</th>
                     <th className={TH}>Batch</th>
@@ -199,10 +200,10 @@ export default function FefoPriorityQueue({ limit = 10 }: { limit?: number }) {
                       key={item.id}
                       onClick={() => navigate(`/stock?q=${encodeURIComponent(item.product_code)}`)}
                       title={`Lihat ${item.product_name} di halaman Stock`}
-                      className={`hover:bg-${item.priority_level === 'expired' ? 'red' : item.priority_level === 'critical' ? 'orange' : item.priority_level === 'warning' ? 'amber' : 'gray'}-50 transition-colors cursor-pointer`}
+                      className="hover:bg-gray-50 transition-colors cursor-pointer"
                     >
                       <td className={TD}>
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider ${priorityColor(item.priority_level)}`}>
+                        <span className={`inline-flex items-center justify-center gap-1 min-w-[72px] px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wider ${priorityColor(item.priority_level)}`}>
                           {item.priority_level === 'expired' && <AlertTriangle className="w-3 h-3" />}
                           {item.priority_level === 'critical' && <Clock className="w-3 h-3" />}
                           {priorityLabel(item.priority_level)}
@@ -233,7 +234,7 @@ export default function FefoPriorityQueue({ limit = 10 }: { limit?: number }) {
                       </td>
                       <td className={TD}>
                         <button 
-                          className="px-2.5 py-1 text-xs font-semibold rounded-md bg-brand-600 text-white hover:bg-brand-700 transition-colors"
+                          className="px-3 py-1.5 text-xs font-semibold rounded-md bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 transition-colors shadow-sm"
                           onClick={() => {
                             // TODO: Implement quick pick action
                             alert(`Create pick for: ${item.product_name} (${item.batch_number})`);
@@ -256,7 +257,7 @@ export default function FefoPriorityQueue({ limit = 10 }: { limit?: number }) {
                     setExpanded(!expanded);
                     if (!expanded) loadFefoQueue();
                   }}
-                  className="px-4 py-2 text-sm font-semibold text-brand-600 hover:text-brand-700 hover:bg-brand-50 rounded-lg transition-colors"
+                  className="px-4 py-2 text-sm font-semibold text-brand-600 hover:text-brand-700 hover:bg-brand-50 rounded-lg transition-colors border border-brand-200 hover:border-brand-300"
                 >
                   {expanded ? 'Show Less' : `View All ${queue.length} Items`}
                 </button>

@@ -26,19 +26,19 @@ function alertIcon(level: string) {
 
 function alertStyle(level: string) {
   switch (level) {
-    case 'critical': return 'bg-red-50 border-red-300 text-red-800';
-    case 'warning': return 'bg-orange-50 border-orange-300 text-orange-800';
-    case 'info': return 'bg-blue-50 border-blue-300 text-blue-800';
-    default: return 'bg-gray-50 border-gray-300 text-gray-800';
+    case 'critical': return 'bg-red-50/50 border-red-200 text-red-900';
+    case 'warning': return 'bg-amber-50/50 border-amber-200 text-amber-900';
+    case 'info': return 'bg-sky-50/50 border-sky-200 text-sky-900';
+    default: return 'bg-gray-50/50 border-gray-200 text-gray-900';
   }
 }
 
 function alertBadgeStyle(level: string) {
   switch (level) {
-    case 'critical': return 'bg-red-600 text-white';
-    case 'warning': return 'bg-orange-600 text-white';
-    case 'info': return 'bg-blue-600 text-white';
-    default: return 'bg-gray-600 text-white';
+    case 'critical': return 'bg-red-100 text-red-800';
+    case 'warning': return 'bg-amber-100 text-amber-800';
+    case 'info': return 'bg-sky-100 text-sky-800';
+    default: return 'bg-gray-100 text-gray-800';
   }
 }
 
@@ -74,38 +74,38 @@ export default function DashboardAlerts() {
   if (visibleAlerts.length === 0) return null;
 
   return (
-    <div className="space-y-2 mb-5">
+    <div className="space-y-2.5 mb-5">
       {visibleAlerts.map((alert) => {
         const Icon = alertIcon(alert.level);
         const style = alertStyle(alert.level);
         const badgeStyle = alertBadgeStyle(alert.level);
 
         return (
-          <div 
+          <div
             key={alert.type}
-            className={`rounded-lg border px-4 py-3 flex items-center justify-between gap-4 ${style} shadow-sm`}
+            className={`rounded-xl border px-5 py-3.5 flex items-center justify-between gap-4 ${style} shadow-sm`}
           >
-            <div className="flex items-center gap-3 flex-1">
-              <Icon className="w-5 h-5 flex-shrink-0" />
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold ${badgeStyle}`}>
+            <div className="flex items-center gap-3.5 flex-1 min-w-0">
+              <Icon className="w-[18px] h-[18px] flex-shrink-0 opacity-80" />
+              <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+                <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${badgeStyle}`}>
                   {alert.count}
                 </span>
-                <span className="font-semibold text-sm">{alert.message}</span>
+                <span className="font-medium text-sm leading-snug">{alert.message}</span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               {alert.action_link && (
                 <Link
                   to={alert.action_link}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-md bg-white/80 hover:bg-white border border-current/20 transition-colors"
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-white/60 hover:bg-white/90 border border-current/15 transition-all duration-150"
                 >
                   View
                 </Link>
               )}
               <button
                 onClick={() => dismissAlert(alert.type)}
-                className="p-1 rounded hover:bg-black/10 transition-colors"
+                className="p-1 rounded-lg hover:bg-black/5 text-current/40 hover:text-current/70 transition-all duration-150"
                 title="Dismiss"
               >
                 <X className="w-4 h-4" />

@@ -55,7 +55,7 @@ const TD = 'px-3 py-2.5 whitespace-nowrap';
 
 const KpiRow1 = memo(function KpiRow1({ kpi }: { kpi: DashboardStats['kpi'] }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
       <Link to="/stock" className="rounded-xl bg-gradient-to-br from-brand-500 to-brand-300 p-4 text-white shadow-sm block no-underline">
         <div className="flex items-center justify-between">
           <Droplets className="w-5 h-5 opacity-80" />
@@ -100,7 +100,7 @@ const KpiRow1 = memo(function KpiRow1({ kpi }: { kpi: DashboardStats['kpi'] }) {
 
 const KpiRow2 = memo(function KpiRow2({ kpi, pipeline }: { kpi: DashboardStats['kpi']; pipeline: number }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
       <Link to="/inbound" className="rounded-xl bg-gradient-to-br from-sky-600 to-sky-400 p-4 text-white shadow-sm block no-underline">
         <ArrowDownToLine className="w-5 h-5 opacity-80" />
         <div className="text-2xl font-extrabold mt-2">{pipeline}</div>
@@ -133,7 +133,7 @@ const KpiRow2 = memo(function KpiRow2({ kpi, pipeline }: { kpi: DashboardStats['
 
 const WorkQueues = memo(function WorkQueues({ pendingInbound, pendingOutbound }: { pendingInbound: any[]; pendingOutbound: any[] }) {
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
       <Card
         title="Inbound — Dues In / Receiving"
         actions={
@@ -297,7 +297,7 @@ const MonthlyActivityAisles = memo(function MonthlyActivityAisles({
 }) {
   const navigate = useNavigate();
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
       <Card title="Monthly Activity">
         <div className="flex items-center gap-4 text-[11px] text-gray-500 mb-3">
           <span className="inline-flex items-center gap-1.5">
@@ -464,37 +464,39 @@ export default function Dashboard() {
   return (
     <div>
       {/* Hero banner with quick actions */}
-      <div className="rounded-xl p-6 mb-5 text-white bg-gradient-to-br from-[#0d1f1f] via-brand-800 to-brand-600 shadow-lg flex items-center justify-between gap-4 flex-wrap overflow-hidden relative">
-        <div className="absolute -right-10 -top-10 w-44 h-44 rounded-full bg-brand-400/20 blur-2xl pointer-events-none" />
+      <div className="rounded-xl p-4 mb-4 text-white bg-gradient-to-br from-[#0d1f1f] via-brand-700 to-brand-500 shadow-md flex items-center justify-between gap-3 flex-wrap overflow-hidden relative">
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
+        <div className="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-brand-400/15 blur-2xl pointer-events-none" />
+        <div className="absolute -left-6 -bottom-6 w-24 h-24 rounded-full bg-brand-300/10 blur-xl pointer-events-none" />
         <div className="relative">
           <div className="flex items-center gap-2 text-brand-200/90 text-[11px] font-bold uppercase tracking-widest">
-            <Warehouse className="w-4 h-4" /> K-one Warehouse Management System
+            <Warehouse className="w-3.5 h-3.5" /> K-one Warehouse Management System
           </div>
-          <h1 className="text-2xl font-extrabold mt-1.5">{greeting(user?.full_name || 'User')}</h1>
-          <p className="text-white/75 text-sm mt-1 capitalize">
+          <h1 className="text-xl font-extrabold mt-1">{greeting(user?.full_name || 'User')}</h1>
+          <p className="text-white/70 text-xs mt-0.5 capitalize">
             {now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
         </div>
         <div className="relative flex items-center gap-3">
-          <div className="text-right mr-4">
-            <div className="text-4xl font-extrabold tabular-nums leading-none">
+          <div className="text-right mr-3">
+            <div className="text-3xl font-extrabold tabular-nums leading-none">
               {now.toLocaleTimeString('en-GB', { hour12: false })}
             </div>
-            <div className="text-[11px] text-white/70 uppercase tracking-widest mt-1.5">Live Clock</div>
+            <div className="text-[10px] text-white/60 uppercase tracking-widest mt-1">Live Clock</div>
           </div>
           {/* Quick Actions */}
           <Link
             to="/inbound"
-            className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-semibold transition backdrop-blur-sm border border-white/20"
+            className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-semibold transition backdrop-blur-sm border border-white/15"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">New Inbound</span>
           </Link>
           <Link
             to="/outbound"
-            className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-semibold transition backdrop-blur-sm border border-white/20"
+            className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-semibold transition backdrop-blur-sm border border-white/15"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">New Outbound</span>
           </Link>
         </div>
@@ -503,20 +505,20 @@ export default function Dashboard() {
       {loading ? (
         <>
           {/* KPI Cards Row 1 skeleton */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={`kpi1-${i}`} variant="card" lines={2} className="h-28" />
             ))}
           </div>
           {/* KPI Cards Row 2 skeleton */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={`kpi2-${i}`} variant="card" lines={2} className="h-28" />
             ))}
           </div>
         </>
       ) : error ? (
-        <div className="mb-5 px-4 py-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">{error}</div>
+        <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">{error}</div>
       ) : (
         <>
           {/* Critical Alerts Banner */}
@@ -529,8 +531,8 @@ export default function Dashboard() {
           <KpiRow2 kpi={kpi} pipeline={pipeline} />
 
           {/* Quick Actions */}
-          <div className="mb-5">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-brand-700 mb-3">Quick Actions</h2>
+          <div className="mb-4">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-brand-700 mb-3">Quick Actions</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Link
                 to="/inbound"
@@ -563,21 +565,24 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* FEFO Priority Queue */}
-          <div className="mb-5">
-            <FefoPriorityQueue limit={10} />
-          </div>
-
-          {/* Smart Insights */}
-          <div className="mb-5">
-            <SmartInsights />
+          {/* FEFO Priority Queue + Smart Insights */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4">
+            <div className="lg:col-span-3">
+              <FefoPriorityQueue limit={10} />
+            </div>
+            <div className="lg:col-span-2">
+              <SmartInsights />
+            </div>
           </div>
 
           {/* Work queues */}
-          <WorkQueues pendingInbound={pendingInbound} pendingOutbound={pendingOutbound} />
+          <div className="mb-4">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-brand-700 mb-3">Work Queues</h2>
+            <WorkQueues pendingInbound={pendingInbound} pendingOutbound={pendingOutbound} />
+          </div>
 
           {canAdmin && (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
               <Card
                 title="Recent Scan Overrides"
                 actions={
@@ -671,15 +676,20 @@ export default function Dashboard() {
           )}
 
           {/* Stock summary */}
-          <StockSummaryCard stockSummary={stockSummary} />
+          <div className="mb-4">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-brand-700 mb-3">Stock Summary</h2>
+            <StockSummaryCard stockSummary={stockSummary} />
+          </div>
 
           {/* Monthly activity + aisles */}
-          <MonthlyActivityAisles
-            monthly={monthly}
-            maxQty={maxQty}
-            stockByLocation={stockByLocation}
-            onOpenAisle={openAisle}
-          />
+          <div className="mt-4">
+            <MonthlyActivityAisles
+              monthly={monthly}
+              maxQty={maxQty}
+              stockByLocation={stockByLocation}
+              onOpenAisle={openAisle}
+            />
+          </div>
         </>
       )}
 

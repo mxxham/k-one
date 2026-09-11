@@ -130,53 +130,60 @@ export default function DashboardInventory() {
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4 mb-5">
-            <div className="rounded-xl bg-gradient-to-br from-brand-500 to-brand-300 p-4 text-white shadow-sm">
-              <ClipboardCheck className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{fmtNum(stStats?.total || 0, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Total Stock Take</div>
+            <div className="relative rounded-xl bg-gradient-to-br from-brand-500 to-brand-300 p-4 text-white shadow-sm overflow-hidden">
+              <div className="absolute inset-0 bg-white/10" />
+              <div className="relative"><ClipboardCheck className="w-5 h-5 opacity-80" /></div>
+              <div className="relative text-2xl font-extrabold mt-2">{fmtNum(stStats?.total || 0, 0)}</div>
+              <div className="relative text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Total Stock Take</div>
             </div>
-            <div className="rounded-xl bg-gradient-to-br from-purple-600 to-purple-400 p-4 text-white shadow-sm">
-              <ClipboardCheck className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{fmtNum(stStats?.this_month || 0, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Bulan Ini</div>
+            <div className="relative rounded-xl bg-gradient-to-br from-purple-600 to-purple-400 p-4 text-white shadow-sm overflow-hidden">
+              <div className="absolute inset-0 bg-white/10" />
+              <div className="relative"><ClipboardCheck className="w-5 h-5 opacity-80" /></div>
+              <div className="relative text-2xl font-extrabold mt-2">{fmtNum(stStats?.this_month || 0, 0)}</div>
+              <div className="relative text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Bulan Ini</div>
             </div>
-            <div className="rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-400 p-4 text-white shadow-sm">
-              <Timer className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{fmtNum(stStats?.avg_accuracy ?? 100, 0)}%</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Avg Akurasi</div>
+            <div className="relative rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-400 p-4 text-white shadow-sm overflow-hidden">
+              <div className="absolute inset-0 bg-white/10" />
+              <div className="relative"><Timer className="w-5 h-5 opacity-80" /></div>
+              <div className="relative text-2xl font-extrabold mt-2">{fmtNum(stStats?.avg_accuracy ?? 100, 0)}%</div>
+              <div className="relative text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Avg Akurasi</div>
             </div>
-            <div className="rounded-xl bg-gradient-to-br from-orange-500 to-orange-300 p-4 text-white shadow-sm">
-              <ArrowLeftRight className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{fmtNum(transfers.length, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Bin Transfer Pending</div>
+            <div className="relative rounded-xl bg-gradient-to-br from-orange-500 to-orange-300 p-4 text-white shadow-sm overflow-hidden">
+              <div className="absolute inset-0 bg-white/10" />
+              <div className="relative"><ArrowLeftRight className="w-5 h-5 opacity-80" /></div>
+              <div className="relative text-2xl font-extrabold mt-2">{fmtNum(transfers.length, 0)}</div>
+              <div className="relative text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Bin Transfer Pending</div>
             </div>
             <Link
               to="/stock"
-              className="rounded-xl bg-gradient-to-br from-red-500 to-rose-400 p-4 text-white shadow-sm block hover:opacity-90 transition"
+              className="relative rounded-xl bg-gradient-to-br from-red-500 to-rose-400 p-4 text-white shadow-sm block hover:opacity-90 transition overflow-hidden"
             >
-              <ShieldAlert className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{heldLoading ? '…' : fmtNum(heldCount, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Stok Di-Hold / Karantina</div>
+              <div className="absolute inset-0 bg-white/10" />
+              <div className="relative"><ShieldAlert className="w-5 h-5 opacity-80" /></div>
+              <div className="relative text-2xl font-extrabold mt-2">{heldLoading ? '…' : fmtNum(heldCount, 0)}</div>
+              <div className="relative text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Stok Di-Hold / Karantina</div>
             </Link>
             <Link
               to="/replenishment"
-              className="rounded-xl bg-gradient-to-br from-teal-600 to-teal-400 p-4 text-white shadow-sm block hover:opacity-90 transition"
+              className="relative rounded-xl bg-gradient-to-br from-teal-600 to-teal-400 p-4 text-white shadow-sm block hover:opacity-90 transition overflow-hidden"
             >
-              <PackageSearch className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{replLoading ? '…' : fmtNum(replCount, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Replenishment Dibutuhkan</div>
+              <div className="absolute inset-0 bg-white/10" />
+              <div className="relative"><PackageSearch className="w-5 h-5 opacity-80" /></div>
+              <div className="relative text-2xl font-extrabold mt-2">{replLoading ? '…' : fmtNum(replCount, 0)}</div>
+              <div className="relative text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Replenishment Dibutuhkan</div>
             </Link>
             <Link
               to="/cycle-count"
-              className="rounded-xl bg-gradient-to-br from-fuchsia-600 to-pink-400 p-4 text-white shadow-sm block hover:opacity-90 transition"
+              className="relative rounded-xl bg-gradient-to-br from-fuchsia-600 to-pink-400 p-4 text-white shadow-sm block hover:opacity-90 transition overflow-hidden"
             >
-              <CalendarCheck2 className="w-5 h-5 opacity-80" />
-              <div className="text-2xl font-extrabold mt-2">{dueLoading ? '…' : fmtNum(dueCount, 0)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Cycle Count Jatuh Tempo</div>
+              <div className="absolute inset-0 bg-white/10" />
+              <div className="relative"><CalendarCheck2 className="w-5 h-5 opacity-80" /></div>
+              <div className="relative text-2xl font-extrabold mt-2">{dueLoading ? '…' : fmtNum(dueCount, 0)}</div>
+              <div className="relative text-[11px] font-semibold uppercase tracking-wide opacity-85 mt-0.5">Cycle Count Jatuh Tempo</div>
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-5">
             <Card
               title="Stock Take — Berjalan"
               actions={
@@ -190,8 +197,8 @@ export default function DashboardInventory() {
               ) : (
                 <div className="overflow-x-auto -mx-5 px-5">
                   <table className="w-full text-sm">
-                    <thead className="bg-brand-50">
-                      <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
+                    <thead className="bg-gray-50/80">
+                      <tr className="text-left text-[11px] uppercase tracking-wider text-gray-500">
                         <th className={TH}>No</th>
                         <th className={TH}>Status</th>
                         <th className={TH}>Tanggal</th>
@@ -200,7 +207,7 @@ export default function DashboardInventory() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {stockTakes.map((s: any) => (
-                        <tr key={s.id} className="hover:bg-brand-50 transition-colors">
+                        <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                           <td className={TD}>
                             <Link to={`/stocktake/${s.id}`} className="font-semibold text-brand-600 hover:underline">
                               {s.take_number || `ST-${s.id}`}
@@ -232,8 +239,8 @@ export default function DashboardInventory() {
               ) : (
                 <div className="overflow-x-auto -mx-5 px-5">
                   <table className="w-full text-sm">
-                    <thead className="bg-brand-50">
-                      <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
+                    <thead className="bg-gray-50/80">
+                      <tr className="text-left text-[11px] uppercase tracking-wider text-gray-500">
                         <th className={TH}>No</th>
                         <th className={TH}>Status</th>
                         <th className={TH}>Tanggal</th>
@@ -243,7 +250,7 @@ export default function DashboardInventory() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {transfers.map((t: any) => (
-                        <tr key={t.id} className="hover:bg-brand-50 transition-colors">
+                        <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                           <td className={TD}>
                             <Link to={`/bin-transfer`} className="font-semibold text-brand-600 hover:underline">
                               {t.transfer_number || `BT-${t.id}`}
@@ -264,7 +271,7 @@ export default function DashboardInventory() {
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-5">
             <Card
               title="Replenishment — Dibutuhkan"
               actions={
@@ -282,8 +289,8 @@ export default function DashboardInventory() {
               ) : (
                 <div className="overflow-x-auto -mx-5 px-5">
                   <table className="w-full text-sm">
-                    <thead className="bg-brand-50">
-                      <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
+                    <thead className="bg-gray-50/80">
+                      <tr className="text-left text-[11px] uppercase tracking-wider text-gray-500">
                         <th className={TH}>Produk</th>
                         <th className={TH}>Lokasi</th>
                         <th className={TH}>Stok</th>
@@ -293,7 +300,7 @@ export default function DashboardInventory() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {replRows.map((r: any) => (
-                        <tr key={r.target_id ?? `${r.product_id}-${r.location_id}`} className="hover:bg-brand-50 transition-colors">
+                        <tr key={r.target_id ?? `${r.product_id}-${r.location_id}`} className="hover:bg-gray-50 transition-colors">
                           <td className={TD}>
                             <div className="font-semibold text-brand-600">{r.product_code || '—'}</div>
                             <div className="text-xs text-gray-500">{r.product_name || '—'}</div>
@@ -327,8 +334,8 @@ export default function DashboardInventory() {
               ) : (
                 <div className="overflow-x-auto -mx-5 px-5">
                   <table className="w-full text-sm">
-                    <thead className="bg-brand-50">
-                      <tr className="text-left text-[11px] uppercase tracking-wide text-brand-700">
+                    <thead className="bg-gray-50/80">
+                      <tr className="text-left text-[11px] uppercase tracking-wider text-gray-500">
                         <th className={TH}>Jadwal</th>
                         <th className={TH}>Frekuensi</th>
                         <th className={TH}>Berikutnya</th>
@@ -336,7 +343,7 @@ export default function DashboardInventory() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {dueRows.map((c: any) => (
-                        <tr key={c.id} className="hover:bg-brand-50 transition-colors">
+                        <tr key={c.id} className="hover:bg-gray-50 transition-colors">
                           <td className={`${TD} font-semibold text-brand-600`}>{c.schedule_name || '—'}</td>
                           <td className={TD}>{c.frequency || '—'}</td>
                           <td className={TD}>{fmtDate(c.next_run_date)}</td>
