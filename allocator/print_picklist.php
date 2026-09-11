@@ -33,14 +33,14 @@ $totalReplenishments = count($replenishments);
 $totalErrors = count($errors);
 $totalQty = array_sum(array_column($picks, 'quantity'));
 
-// Group picks by order
+// Group picks by NO (shipment sequence) instead of order_no
 $groupedPicks = [];
 foreach ($picks as $pick) {
-    $orderNo = $pick['order_no'] ?? 'Unknown';
-    if (!isset($groupedPicks[$orderNo])) {
-        $groupedPicks[$orderNo] = [];
+    $no = $pick['no'] ?? $pick['order_no'] ?? 'Unknown';
+    if (!isset($groupedPicks[$no])) {
+        $groupedPicks[$no] = [];
     }
-    $groupedPicks[$orderNo][] = $pick;
+    $groupedPicks[$no][] = $pick;
 }
 ?>
 <!DOCTYPE html>
@@ -53,14 +53,8 @@ foreach ($picks as $pick) {
 .picklist-specific .document{padding:28px 32px}
 @media print{.picklist-specific .document{padding:12mm 14mm}}
 
-.doc-header{display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;margin-bottom:16px;border-bottom:2px solid #e2e8f0}
-.logo-area{display:flex;align-items:center;gap:12px}
-.logo-mark{width:44px;height:44px;background:linear-gradient(135deg,#026766,#013d3c);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;font-weight:800;flex-shrink:0}
 .company-name{font-size:18px;font-weight:800;color:#0f172a;letter-spacing:-.5px}
 .company-name span{color:#64748b;font-weight:400}
-.doc-title{font-size:20px;font-weight:800;color:#0f172a;letter-spacing:-.3px}
-.doc-subtitle{font-size:11px;color:#64748b;margin-top:1px}
-.doc-orderno{font-size:12px;font-weight:700;color:#334155;margin-top:4px;font-family:'SF Mono',Consolas,monospace}
 
 .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:16px}
 .info-cell{padding:10px 14px;border-bottom:1px solid #e2e8f0}
@@ -71,53 +65,39 @@ foreach ($picks as $pick) {
 
 .section-title{font-size:11px;font-weight:700;color:#013d3c;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #e2e8f0}
 
-table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:14px}
 thead th{background:#013d3c;color:#fff;padding:8px 10px;font-size:9px;letter-spacing:.4px;text-transform:uppercase;text-align:left}
 thead th:first-child{border-radius:6px 0 0 0}
 thead th:last-child{border-radius:0 6px 0 0}
-thead th.c{text-align:center}
-thead th.r{text-align:right}
 tbody td{padding:8px 10px;line-height:1.5;border-bottom:1px solid #e2e8f0}
-tbody tr:nth-child(even){background:#f8fafc}
-tbody td.c{text-align:center}
-tbody td.r{text-align:right;font-weight:600}
 tfoot td{padding:10px;font-size:11px;color:#0f172a;background:#f1f5f9;font-weight:700}
-tfoot td.r{text-align:right}
 
-.chip{display:inline-block;border-radius:4px;padding:2px 8px;font-family:'SF Mono',Consolas,monospace;font-size:9px;font-weight:600}
 .chip-full{background:#dcfce7;color:#166534;border:1px solid #86efac}
 .chip-pickface{background:#dbeafe;color:#1e40af;border:1px solid #93c5fd}
 .chip-location{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}
 .chip-replenish{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
 
-.check-box{width:15px;height:15px;border:1.5px solid #94a3b8;border-radius:3px;display:inline-block;background:#fff}
-
 .remarks-box{border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:16px;min-height:40px;background:#f8fafc}
 .remarks-lbl{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:4px}
 
-.sig-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0}
 .sig-box{padding-top:0}
-.sig-role{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:4px}
-.sig-space{height:48px}
 .sig-line{border-bottom:1px solid #cbd5e1;margin:0 0 6px}
-.sig-name{font-size:10px;color:#94a3b8;font-style:italic}
 
 .doc-footer{font-size:9px;color:#64748b;display:flex;justify-content:space-between;margin-top:16px;padding-top:8px;border-top:1px solid #e2e8f0}
 
 .order-group{margin-bottom:16px}
 .order-header{font-size:11px;font-weight:700;color:#013d3c;margin-bottom:6px;padding:6px 10px;background:#e6f7f7;border-radius:6px;display:flex;justify-content:space-between;align-items:center}
 .order-header .badge{background:#013d3c;color:#fff;padding:2px 8px;border-radius:4px;font-size:9px}
+
+@media print{#back-to-app{display:none!important}.print-bar{display:none!important}}
 </style>
 </head>
 <body class="picklist-specific">
 
 <div id="back-to-app" style="position:fixed;top:12px;right:12px;z-index:9999">
-  <a href="javascript:window.close()" style="background:#0f172a;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600;font-family:Inter,sans-serif;border:1px solid rgba(255,255,255,.15)">
+  <a href="javascript:window.close()" style="background:#0f172a;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600;font-family:'Plus Jakarta Sans',sans-serif;border:1px solid rgba(255,255,255,.15)">
     Close &amp; Back
   </a>
 </div>
-<style>@media print{#back-to-app{display:none!important}}</style>
-
 <div class="print-bar no-print">
   <div class="print-bar-title">Pick List — Allocator</div>
   <div class="btns">
@@ -173,10 +153,22 @@ tfoot td.r{text-align:right}
   <?php if (!empty($picks)): ?>
   <div class="section-title">Items to Pick (<?= $totalPicks ?> picks)</div>
   
-  <?php foreach ($groupedPicks as $orderNo => $orderPicks): ?>
+  <?php foreach ($groupedPicks as $no => $orderPicks): ?>
+  <?php
+    // Get display info from first pick in this group
+    $firstPick = $orderPicks[0] ?? [];
+    $dest = $firstPick['destination'] ?? '';
+    $destLoc = $firstPick['ship_to_location'] ?? '';
+  ?>
   <div class="order-group">
     <div class="order-header">
-      <span>Order: <?= htmlspecialchars($orderNo) ?></span>
+      <span>Order: <?= htmlspecialchars($no) ?></span>
+      <?php if ($dest): ?>
+        <span style="font-weight:400;font-size:11px;color:#64748b;margin-left:8px"><?= htmlspecialchars($dest) ?></span>
+      <?php endif; ?>
+      <?php if ($destLoc): ?>
+        <span style="font-weight:400;font-size:10px;color:#94a3b8;margin-left:4px">(<?= htmlspecialchars($destLoc) ?>)</span>
+      <?php endif; ?>
       <span class="badge"><?= count($orderPicks) ?> items</span>
     </div>
     <table>
@@ -187,6 +179,7 @@ tfoot td.r{text-align:right}
           <th>Lokasi</th>
           <th class="r" style="width:50px">Qty</th>
           <th>Tipe</th>
+          <th>Bin to Bin</th>
           <th>Batch</th>
           <th>Expiry</th>
           <th class="c" style="width:28px">Pick</th>
@@ -196,7 +189,7 @@ tfoot td.r{text-align:right}
       <?php foreach ($orderPicks as $idx => $pick): ?>
       <tr>
         <td class="c" style="color:#94a3b8;font-size:10px"><?= $idx + 1 ?></td>
-        <td style="font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:600;color:#0f172a"><?= htmlspecialchars($pick['item_code'] ?? '—') ?></td>
+        <td style="font-family:'SF Mono',Consolas,monospace;font-size:13px;font-weight:700;color:#0f172a"><?= htmlspecialchars($pick['item_code'] ?? '—') ?></td>
         <td>
           <?php if ($pick['location'] ?? null): ?>
           <span class="chip chip-location"><?= htmlspecialchars($pick['location']) ?></span>
@@ -213,9 +206,17 @@ tfoot td.r{text-align:right}
           <span class="chip <?= $typeClass ?>"><?= $typeLabel ?></span>
         </td>
         <td>
+          <?php $b2b = $pick['bin_to_bin'] ?? null; ?>
+          <?php if ($b2b): ?>
+          <span class="chip" style="background:#fef3c7;color:#92400e;font-size:9px;padding:2px 6px"><?= htmlspecialchars($b2b) ?></span>
+          <?php else: ?>
+          <span style="color:#cbd5e1;font-size:9px">—</span>
+          <?php endif; ?>
+        </td>
+        <td>
           <?php $bn = $pick['batch_number'] ?? null; ?>
           <?php if ($bn): ?>
-          <span class="chip" style="background:#f1f5f9;color:#334155;border:1px solid #e2e8f0"><?= htmlspecialchars($bn) ?></span>
+          <span class="chip chip-batch"><?= htmlspecialchars($bn) ?></span>
           <?php else: ?>
           <span style="color:#cbd5e1;font-size:9px">—</span>
           <?php endif; ?>
@@ -235,7 +236,7 @@ tfoot td.r{text-align:right}
       <tr>
         <td colspan="3" style="text-align:right;padding-right:10px">TOTAL</td>
         <td class="r"><?= number_format($totalQty, 0) ?></td>
-        <td colspan="4"></td>
+        <td colspan="5"></td>
       </tr>
     </tfoot>
   </table>

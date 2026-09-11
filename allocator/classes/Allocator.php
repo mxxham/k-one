@@ -89,33 +89,33 @@ class Allocator
 
     /**
      * Load current stock from putaway data
+     * When WMS already loaded, putaway only fills in batch/expiry details
      */
     public function loadStock(array $putawayStock): void
     {
         foreach ($putawayStock as $item) {
             $loc = $item['location'];
-            $this->stock[$loc] = [
-                'item_code' => $item['item_code'],
-                'quantity' => $item['quantity'],
-                'batch_number' => $item['batch_number'],
-                'expiry_date' => $item['expiry_date'],
-            ];
-
-            // Categorize by level
-            $level = $loc[4]; // 5th character
-            if ($level === 'A') {
-                $this->pickfaceBins[$item['item_code']][] = $loc;
+            if (isset($this->stock[$loc])) {
+                // WMS already loaded — only add batch/expiry from putaway
+                $this->stock[$loc]['batch_number'] = $item['batch_number'] ?? $this->stock[$loc]['batch_number'] ?? null;
+                $this->stock[$loc]['expiry_date'] = $item['expiry_date'] ?? $this->stock[$loc]['expiry_date'] ?? null;
             } else {
-                $this->bulkBins[$item['item_code']][] = $loc;
-            }
-        }
+                // Putaway-only location (not in WMS)
+                $this->stock[$loc] = [
+                    'item_code' => $item['item_code'],
+                    'quantity' => $item['quantity'],
+                    'batch_number' => $item['batch_number'],
+                    'expiry_date' => $item['expiry_date'],
+                ];
 
-        // Sort bins by FEFO (earliest expiry first)
-        foreach ($this->pickfaceBins as $itemCode => &$bins) {
-            usort($bins, fn($a, $b) => $this->compareFefo($a, $b));
-        }
-        foreach ($this->bulkBins as $itemCode => &$bins) {
-            usort($bins, fn($a, $b) => $this->compareFefo($a, $b));
+                // Categorize by level
+                $level = $loc[4]; // 5th character
+                if ($level === 'A') {
+                    $this->pickfaceBins[$item['item_code']][] = $loc;
+                } else {
+                    $this->bulkBins[$item['item_code']][] = $loc;
+                }
+            }
         }
     }
 
@@ -132,8 +132,8 @@ class Allocator
                 $this->stock[$location] = [
                     'item_code' => $loc['item_code'],
                     'quantity' => $loc['on_hand'],
-                    'batch_number' => null,
-                    'expiry_date' => null,
+                    'batch_number' => $loc['batch_number'] ?? null,
+                    'expiry_date' => $loc['expiry_date'] ?? null,
                 ];
 
                 if ($loc['is_pickface']) {
@@ -141,6 +141,8 @@ class Allocator
                 } else {
                     $this->bulkBins[$loc['item_code']][] = $location;
                 }
+            } else {
+                $this->stock[$location]['quantity'] = $loc['on_hand'];
             }
         }
     }
@@ -157,6 +159,7 @@ class Allocator
             'errors' => [],
             'summary' => [
                 'total_orders' => 0,
+                'total_deliveries' => 0,
                 'total_items' => 0,
                 'full_pallet_picks' => 0,
                 'pickface_picks' => 0,
@@ -164,14 +167,36 @@ class Allocator
             ],
         ];
 
-        // Group by order
+        // Count unique shipments (the real "orders" from warehouse perspective)
+        $shipments = [];
+        $deliveries = [];
+        foreach ($orderLines as $line) {
+            $shipmentNo = $line['shipment_no'] ?? '';
+            $orderNo = $line['order_no'] ?? '';
+            if ($shipmentNo !== '') $shipments[$shipmentNo] = true;
+            if ($orderNo !== '') $deliveries[$orderNo] = true;
+        }
+        $result['summary']['total_orders'] = count($shipments);
+        $result['summary']['total_deliveries'] = count($deliveries);
+
+        // Group by order (for allocation logic — each delivery doc is a picking unit)
         $orders = [];
+        $orderMeta = []; // order_no → no, destination, ship_to_location
         foreach ($orderLines as $line) {
             $orders[$line['order_no']][] = $line;
+            if (!isset($orderMeta[$line['order_no']])) {
+                $orderMeta[$line['order_no']] = [
+                    'no' => $line['no'] ?? '',
+                    'destination' => $line['destination'] ?? '',
+                    'ship_to_location' => $line['ship_to_location'] ?? '',
+                ];
+            }
         }
-        $result['summary']['total_orders'] = count($orders);
 
         foreach ($orders as $orderNo => $lines) {
+            // Track replenishment destinations for this order's items
+            $replenishDest = []; // item_code => to_location
+
             foreach ($lines as $line) {
                 $material = $line['material'];
                 $qty = $line['quantity'];
@@ -216,6 +241,7 @@ class Allocator
                         if ($replenishment) {
                             $result['replenishments'][] = $replenishment;
                             $result['summary']['replenishments']++;
+                            $replenishDest[$material] = $replenishment['to_location'];
                         }
                     }
 
@@ -225,12 +251,53 @@ class Allocator
                     $result['summary']['pickface_picks'] += count($pickfacePicks);
 
                     $totalPicked = array_sum(array_column($pickfacePicks, 'quantity'));
+
+                    // Step 4: If pickface short, try picking remaining from bulk bins directly
                     if ($totalPicked < $remainder) {
-                        $result['errors'][] = "Order {$orderNo}: {$material} shortfall — needed {$remainder}, only {$totalPicked} picked even after replenishment.";
+                        $stillNeeded = $remainder - $totalPicked;
+                        $bulkPicks = $this->pickFromBulkRemainder($material, $stillNeeded, $orderNo);
+                        $result['picks'] = array_merge($result['picks'], $bulkPicks);
+                        $result['summary']['full_pallet_picks'] += count($bulkPicks);
+                        $totalPicked += array_sum(array_column($bulkPicks, 'quantity'));
+                    }
+
+                    if ($totalPicked < $remainder) {
+                        $result['errors'][] = "Order {$orderNo}: {$material} shortfall — needed {$remainder}, only {$totalPicked} picked (stock insufficient).";
                     }
                 }
             }
         }
+
+        // Enrich picks with order metadata
+        foreach ($result['picks'] as &$pick) {
+            $meta = $orderMeta[$pick['order_no']] ?? [];
+            $pick['no'] = $meta['no'] ?? '';
+            $pick['destination'] = $meta['destination'] ?? '';
+            $pick['ship_to_location'] = $meta['ship_to_location'] ?? '';
+        }
+        unset($pick);
+
+        // Enrich picks with bin-to-bin replenishment destination
+        // Only applies to pickface picks when item had replenishment (remainder < full pallet)
+        foreach ($result['picks'] as &$pick) {
+            $itemCode = $pick['item_code'] ?? '';
+            $pickLocation = $pick['location'] ?? '';
+            $pick['bin_to_bin'] = '';
+            // Only for pickface picks — full pallets come directly from bulk
+            if (($pick['type'] ?? '') !== 'pickface') continue;
+            // Find replenishment that fills THIS specific pickface location
+            foreach ($result['replenishments'] as $rep) {
+                if ($rep['item_code'] === $itemCode && $rep['to_location'] === $pickLocation) {
+                    // Verify source is bulk (level B+), not another pickface (level A)
+                    $sourceLevel = substr($rep['from_location'], -2, 1);
+                    if ($sourceLevel !== 'A') {
+                        $pick['bin_to_bin'] = $rep['from_location'] . ' → ' . $rep['to_location'];
+                    }
+                    break;
+                }
+            }
+        }
+        unset($pick);
 
         return $result;
     }
@@ -243,12 +310,15 @@ class Allocator
         $picks = [];
         $bulkBins = $this->bulkBins[$itemCode] ?? [];
 
-        for ($i = 0; $i < $numPallets && $i < count($bulkBins); $i++) {
-            $bin = $bulkBins[$i];
-            $stock = $this->stock[$bin] ?? null;
+        $picked = 0;
+        $binIdx = 0;
+        while ($picked < $numPallets && $binIdx < count($bulkBins)) {
+            $bin = $bulkBins[$binIdx];
+            $binIdx++;
 
+            $stock = $this->stock[$bin] ?? null;
             if (!$stock || $stock['quantity'] < $upp) {
-                continue; // Skip if insufficient stock
+                continue; // Skip depleted/insufficient bin, don't count as picked
             }
 
             $picks[] = [
@@ -263,6 +333,7 @@ class Allocator
 
             // Update stock (bin becomes empty)
             $this->stock[$bin]['quantity'] -= $upp;
+            $picked++;
         }
 
         return $picks;
@@ -296,6 +367,40 @@ class Allocator
             ];
 
             // Update stock
+            $this->stock[$bin]['quantity'] -= $pickQty;
+            $remaining -= $pickQty;
+        }
+
+        return $picks;
+    }
+
+    /**
+     * Pick remainder directly from bulk bins (fallback when pickface empty)
+     */
+    private function pickFromBulkRemainder(string $itemCode, int $qty, string $orderNo): array
+    {
+        $picks = [];
+        $remaining = $qty;
+        $bulkBins = $this->bulkBins[$itemCode] ?? [];
+
+        foreach ($bulkBins as $bin) {
+            if ($remaining <= 0) break;
+
+            $stock = $this->stock[$bin] ?? null;
+            if (!$stock || $stock['quantity'] <= 0) continue;
+
+            $pickQty = min($remaining, $stock['quantity']);
+
+            $picks[] = [
+                'order_no' => $orderNo,
+                'item_code' => $itemCode,
+                'location' => $bin,
+                'quantity' => $pickQty,
+                'type' => 'bulk_remainder',
+                'batch_number' => $stock['batch_number'],
+                'expiry_date' => $stock['expiry_date'],
+            ];
+
             $this->stock[$bin]['quantity'] -= $pickQty;
             $remaining -= $pickQty;
         }
@@ -345,6 +450,7 @@ class Allocator
 
     /**
      * Trigger replenishment from bulk to pickface
+     * Tries all bulk bins — doesn't give up on first failure
      */
     private function triggerReplenishment(string $itemCode, int $upp, string $uomType): ?array
     {
@@ -354,14 +460,14 @@ class Allocator
             $stock = $this->stock[$bin] ?? null;
             if (!$stock || $stock['quantity'] < $upp) continue;
 
-            // Find empty pickface bin
+            // Find empty or partially-filled pickface bin
             $pickfaceBin = $this->findEmptyPickface($itemCode);
             if (!$pickfaceBin) {
-                // Create new pickface location
                 $pickfaceBin = $this->createPickfaceLocation($itemCode);
             }
 
-            if (!$pickfaceBin) return null;
+            // If still no pickface space, try next bulk bin (different pickface might exist)
+            if (!$pickfaceBin) continue;
 
             // Update stock records
             $this->stock[$bin]['quantity'] -= $upp;
@@ -400,17 +506,29 @@ class Allocator
 
     /**
      * Find empty pickface bin for an item
+     * First tries a truly empty bin, then one with room (qty < UPP)
      */
     private function findEmptyPickface(string $itemCode): ?string
     {
-        // Check existing pickface bins
         $pickfaceBins = $this->pickfaceBins[$itemCode] ?? [];
+        $upp = $this->products[$itemCode]['upp'] ?? 44;
+
+        // First pass: truly empty bin (best case)
         foreach ($pickfaceBins as $bin) {
             $stock = $this->stock[$bin] ?? null;
             if (!$stock || $stock['quantity'] <= 0) {
                 return $bin;
             }
         }
+
+        // Second pass: bin with room for more stock
+        foreach ($pickfaceBins as $bin) {
+            $stock = $this->stock[$bin] ?? null;
+            if ($stock && $stock['quantity'] > 0 && $stock['quantity'] < $upp) {
+                return $bin;
+            }
+        }
+
         return null;
     }
 
@@ -471,5 +589,21 @@ class Allocator
     public function getStock(): array
     {
         return $this->stock;
+    }
+
+    /**
+     * Get pickface bins
+     */
+    public function getPickfaceBins(): array
+    {
+        return $this->pickfaceBins;
+    }
+
+    /**
+     * Get bulk bins
+     */
+    public function getBulkBins(): array
+    {
+        return $this->bulkBins;
     }
 }

@@ -8,249 +8,415 @@ session_start();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Allocator — Picklist Generator</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="http://localhost/k-one/includes/wms-style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:'Inter',sans-serif; background:#f1f5f5; color:#111827; }
+        body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+        /* ── Allocator-specific components (not in wms-style.css) ── */
 
-        .header-bar {
-            background:linear-gradient(135deg,#013d3c 0%,#026766 100%);
-            padding:20px 32px;
-            color:#fff;
-            box-shadow:0 4px 20px rgba(2,103,102,.35);
-        }
-        .header-bar h1 { font-size:1.5rem; font-weight:800; }
-        .header-bar p { opacity:.75; font-size:.875rem; margin-top:4px; }
-
-        .container { max-width:800px; margin:24px auto; padding:0 16px; }
-
-        .card {
-            background:#fff;
-            border-radius:12px;
-            box-shadow:0 1px 8px rgba(0,0,0,.08);
-            padding:24px;
-            margin-bottom:20px;
-        }
-        .card h2 {
-            font-size:1rem;
-            font-weight:700;
-            margin-bottom:16px;
-            color:#013d3c;
-            display:flex;
-            align-items:center;
-            gap:8px;
+        .alloc-container {
+            max-width: 800px;
+            margin: 24px auto;
+            padding: 0 16px;
         }
 
-        .drop-zone {
-            border:3px dashed #026766;
-            border-radius:16px;
-            padding:48px;
-            text-align:center;
-            cursor:pointer;
-            transition:.2s;
-            background:#f0fbfb;
+        /* Drop zone */
+        .alloc-dropzone {
+            border: 3px dashed var(--wms-primary);
+            border-radius: var(--radius-lg);
+            padding: 48px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            background: var(--wms-lighter);
         }
-        .drop-zone:hover, .drop-zone.drag { border-color:#5b21b6; background:#e0f7f7; }
-        .drop-zone.has-file { border-color:#059669; background:#e6f7f7; }
-
-        .file-info {
-            display:none;
-            background:#e6f7f7;
-            border-radius:8px;
-            padding:12px 16px;
-            margin-top:12px;
-            align-items:center;
-            justify-content:space-between;
+        .alloc-dropzone:hover,
+        .alloc-dropzone.is-drag {
+            border-color: var(--wms-info);
+            background: var(--wms-light);
         }
-
-        .btn-primary {
-            width:100%;
-            margin-top:16px;
-            padding:14px;
-            background:linear-gradient(135deg,#013d3c,#026766);
-            color:#fff;
-            border:none;
-            border-radius:10px;
-            font-size:1rem;
-            font-weight:700;
-            cursor:pointer;
-            opacity:.5;
+        .alloc-dropzone.has-file {
+            border-color: var(--wms-success);
+            background: var(--wms-light);
         }
-        .btn-primary:disabled { cursor:not-allowed; }
-        .btn-primary:not(:disabled) { opacity:1; }
-
-        .progress-bar-wrap {
-            background:#f3f4f6;
-            border-radius:8px;
-            height:12px;
-            overflow:hidden;
+        .alloc-dropzone:focus-visible {
+            outline: 2px solid var(--wms-primary);
+            outline-offset: 2px;
         }
-        .progress-bar-fill {
-            background:linear-gradient(90deg,#013d3c,#026766);
-            height:100%;
-            width:0%;
-            transition:.3s;
-            border-radius:8px;
+        .alloc-dropzone-icon {
+            font-size: 3rem;
+            color: var(--wms-primary);
+            margin-bottom: 12px;
+            display: block;
+        }
+        .alloc-dropzone-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--wms-gray-600);
+        }
+        .alloc-dropzone-hint {
+            color: var(--wms-gray-400);
+            font-size: 0.875rem;
+            margin-top: 4px;
         }
 
-        .stat-grid {
-            display:grid;
-            grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
-            gap:12px;
-            margin-bottom:20px;
+        /* File info */
+        .alloc-file-info {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            background: var(--wms-light);
+            border-radius: var(--radius-sm);
+            padding: 12px 16px;
+            margin-top: 12px;
         }
-        .stat-card {
-            border-radius:8px;
-            padding:14px;
-            text-align:center;
+        .alloc-file-info.is-visible {
+            display: flex;
         }
-        .stat-card .num { font-size:1.8rem; font-weight:800; }
-        .stat-card .lbl { font-size:.78rem; color:#6b7280; }
-
-        .error-card {
-            background:#fee2e2;
-            border:1px solid #fecaca;
-            border-radius:8px;
-            padding:12px;
-            margin-bottom:8px;
-            color:#991b1b;
-            font-size:.875rem;
+        .alloc-file-info-file {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        .pick-card {
-            background:#f9fafb;
-            border:1px solid #e5e7eb;
-            border-radius:8px;
-            padding:12px;
-            margin-bottom:8px;
-            font-size:.875rem;
+        .alloc-file-info-icon {
+            color: var(--wms-success);
+            font-size: 1.5rem;
         }
-        .pick-card.full-pallet { border-left:4px solid #059669; }
-        .pick-card.pickface { border-left:4px solid #3b82f6; }
-        .pick-card.replenishment { border-left:4px solid #f59e0b; }
-
-        .btn-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
-        .btn-dl {
-            flex:1; min-width:140px;
-            background:linear-gradient(135deg,#059669,#10b981);
-            color:#fff; border:none; padding:10px; border-radius:8px;
-            cursor:pointer; font-weight:700; text-align:center; text-decoration:none;
+        .alloc-file-info-name {
+            font-weight: 600;
+            color: var(--wms-heading);
         }
-        .btn-print {
-            flex:1; min-width:140px;
-            background:linear-gradient(135deg,#3b82f6,#2563eb);
-            color:#fff; border:none; padding:10px; border-radius:8px;
-            cursor:pointer; font-weight:700; text-align:center; text-decoration:none;
+        .alloc-file-info-size {
+            font-size: 0.8rem;
+            color: var(--wms-gray-400);
         }
-        .btn-reset {
-            flex:1; min-width:140px;
-            background:linear-gradient(135deg,#013d3c,#026766);
-            color:#fff; border:none; padding:10px; border-radius:8px;
-            cursor:pointer; font-weight:700;
+        .alloc-file-info-remove {
+            background: none;
+            border: none;
+            color: var(--wms-primary);
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 6px;
+            transition: background 0.15s;
+        }
+        .alloc-file-info-remove:hover {
+            background: var(--wms-lighter);
+        }
+        .alloc-file-info-remove:focus-visible {
+            outline: 2px solid var(--wms-primary);
+            outline-offset: 2px;
         }
 
-        .sheet-chip {
-            display:inline-block;
-            background:#e6f7f7;
-            border:1px solid #b2e5e5;
-            border-radius:6px;
-            padding:4px 10px;
-            font-size:.8rem;
-            color:#013d3c;
-            margin:4px 4px 4px 0;
+        /* Generate button (full-width CTA) */
+        .alloc-generate-btn {
+            width: 100%;
+            margin-top: 16px;
+            padding: 14px;
+            font-size: 1rem;
+        }
+        .alloc-generate-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
-        .section-title {
-            font-size:.9rem;
-            font-weight:700;
-            margin-bottom:8px;
+        /* Sheet chips */
+        .alloc-sheet-chip {
+            display: inline-block;
+            background: var(--wms-light);
+            border: 1px solid var(--wms-gray-200);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 0.8rem;
+            color: var(--wms-primary);
+            margin: 4px 4px 4px 0;
+        }
+        .alloc-sheet-chips {
+            line-height: 1.9;
+        }
+
+        /* Step number badge */
+        .alloc-step-num {
+            background: var(--wms-primary);
+            color: #fff;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        /* Progress bar */
+        .alloc-progress-wrap {
+            background: var(--wms-gray-200);
+            border-radius: var(--radius-sm);
+            height: 12px;
+            overflow: hidden;
+        }
+        .alloc-progress-fill {
+            background: linear-gradient(90deg, var(--wms-dark), var(--wms-primary));
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s;
+            border-radius: var(--radius-sm);
+        }
+        .alloc-progress-text {
+            margin-top: 8px;
+            font-size: 0.875rem;
+            color: var(--wms-gray-400);
+            text-align: center;
+        }
+
+        /* Stat grid in results */
+        .alloc-stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .alloc-stat {
+            border-radius: var(--radius-sm);
+            padding: 14px;
+            text-align: center;
+        }
+        .alloc-stat .num {
+            font-size: 1.8rem;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+        .alloc-stat .lbl {
+            font-size: 0.78rem;
+            color: var(--wms-gray-400);
+            margin-top: 2px;
+        }
+
+        /* Pick card */
+        .alloc-pick {
+            background: var(--wms-gray-50);
+            border: 1px solid var(--wms-gray-200);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            margin-bottom: 8px;
+            font-size: 0.875rem;
+        }
+        .alloc-pick--full {
+            border-left: 4px solid var(--wms-success);
+        }
+        .alloc-pick--pickface {
+            border-left: 4px solid var(--wms-info);
+        }
+        .alloc-pick--replenish {
+            border-left: 4px solid var(--wms-warn);
+        }
+
+        /* Section title (within results card) */
+        .alloc-section-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--wms-heading);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Error card */
+        .alloc-error {
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            margin-bottom: 8px;
+            color: #991b1b;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Picks scroll area */
+        .alloc-picks-scroll {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        /* Action button row */
+        .alloc-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+        .alloc-actions .wms-btn,
+        .alloc-actions a.wms-btn {
+            flex: 1;
+            min-width: 140px;
+            justify-content: center;
+        }
+
+        /* Error grid message */
+        .alloc-error-grid {
+            grid-column: 1 / -1;
+            background: #fee2e2;
+            border-radius: var(--radius-sm);
+            padding: 14px;
+            color: #991b1b;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
         }
     </style>
 </head>
-<body>
+<body style="background:var(--wms-gray-100)">
 
-<div class="header-bar">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
-        <div>
-            <h1><i class="fas fa-magic" style="margin-right:8px"></i>Allocator</h1>
-            <p>Generate picklist dari Excel order dengan alokasi FEFO</p>
-        </div>
+<!-- ── Hero Banner ── -->
+<div class="alloc-container">
+    <div class="wms-banner" style="margin-bottom:20px">
+        <h1><i class="fas fa-magic" style="margin-right:8px"></i>Allocator</h1>
+        <p>Generate picklist dari Excel order dengan alokasi FEFO</p>
     </div>
 </div>
 
-<div class="container">
+<!-- ── Main Content ── -->
+<div class="alloc-container">
 
-    <div class="card">
-        <h2><i class="fas fa-th-list"></i>Sheet yang diproses</h2>
-        <div style="line-height:1.9">
-            <span class="sheet-chip">schedule of the day → Order lines</span>
-            <span class="sheet-chip">data putaway → Stock saat ini</span>
-            <span class="sheet-chip">master sku → UPP & UOM per item</span>
-            <span class="sheet-chip">wms → Lokasi bin & stok</span>
+    <!-- Sheet Info Card -->
+    <div class="wms-card" style="margin-bottom:20px">
+        <div class="wms-card-header">
+            <h2><i class="fas fa-th-list"></i> Sheet yang diproses</h2>
         </div>
-    </div>
-
-    <div class="card">
-        <h2>
-            <span style="background:#013d3c;color:#fff;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem">1</span>
-            Upload File Excel
-        </h2>
-
-        <div id="dropZone" class="drop-zone" onclick="document.getElementById('excelFile').click()">
-            <input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none" onchange="fileSelected(this)">
-            <i class="fas fa-cloud-upload-alt" style="font-size:3rem;color:#026766;margin-bottom:12px;display:block"></i>
-            <p style="font-size:1.1rem;font-weight:600;color:#4b5563">Drag & drop atau klik untuk pilih file</p>
-            <p style="color:#9ca3af;font-size:.875rem;margin-top:4px">Format: .xlsx atau .xls • Max 10MB</p>
-        </div>
-
-        <div id="fileInfo" class="file-info">
-            <div style="display:flex;align-items:center;gap:10px">
-                <i class="fas fa-file-excel" style="color:#059669;font-size:1.5rem"></i>
-                <div>
-                    <div id="fileName" style="font-weight:600"></div>
-                    <div id="fileSize" style="font-size:.8rem;color:#6b7280"></div>
-                </div>
+        <div class="wms-card-body">
+            <div class="alloc-sheet-chips">
+                <span class="alloc-sheet-chip">schedule of the day → Order lines</span>
+                <span class="alloc-sheet-chip">wms → Stock fisik &amp; lokasi bin</span>
+                <span class="alloc-sheet-chip">data putaway → Batch &amp; expiry</span>
+                <span class="alloc-sheet-chip">master sku → UPP &amp; UOM per item</span>
             </div>
-            <button onclick="clearFile()" style="background:none;border:none;color:#026766;cursor:pointer;font-size:.875rem"><i class="fas fa-times"></i> Hapus</button>
         </div>
-
-        <button id="importBtn" class="btn-primary" onclick="startAllocation()" disabled>
-            <i class="fas fa-magic" style="margin-right:8px"></i> Generate Picklist
-        </button>
     </div>
 
-    <div id="progressSection" class="card" style="display:none">
-        <h2><i class="fas fa-spinner fa-spin" style="color:#013d3c;margin-right:8px"></i>Memproses allocation...</h2>
-        <div class="progress-bar-wrap">
-            <div id="progressBar" class="progress-bar-fill"></div>
+    <!-- Upload Card -->
+    <div class="wms-card" style="margin-bottom:20px">
+        <div class="wms-card-header">
+            <h2>
+                <span class="alloc-step-num">1</span>
+                Upload File Excel
+            </h2>
         </div>
-        <p id="progressText" style="margin-top:8px;font-size:.875rem;color:#6b7280;text-align:center">Membaca file...</p>
+        <div class="wms-card-body">
+
+            <div id="dropZone"
+                 class="alloc-dropzone"
+                 tabindex="0"
+                 role="button"
+                 aria-label="Upload file Excel — drag and drop atau klik untuk memilih file"
+                 onclick="document.getElementById('excelFile').click()"
+                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('excelFile').click()}">
+                <input type="file"
+                       id="excelFile"
+                       accept=".xlsx,.xls"
+                       style="display:none"
+                       onchange="fileSelected(this)"
+                       aria-hidden="true">
+                <i class="fas fa-cloud-upload-alt alloc-dropzone-icon" aria-hidden="true"></i>
+                <p class="alloc-dropzone-title">Drag &amp; drop atau klik untuk pilih file</p>
+                <p class="alloc-dropzone-hint">Format: .xlsx atau .xls &bull; Max 10MB</p>
+            </div>
+
+            <div id="fileInfo" class="alloc-file-info" role="status">
+                <div class="alloc-file-info-file">
+                    <i class="fas fa-file-excel alloc-file-info-icon" aria-hidden="true"></i>
+                    <div>
+                        <div id="fileName" class="alloc-file-info-name"></div>
+                        <div id="fileSize" class="alloc-file-info-size"></div>
+                    </div>
+                </div>
+                <button class="alloc-file-info-remove"
+                        onclick="clearFile()"
+                        aria-label="Hapus file yang dipilih">
+                    <i class="fas fa-times" aria-hidden="true"></i> Hapus
+                </button>
+            </div>
+
+            <button id="importBtn"
+                    class="wms-btn wms-btn-primary alloc-generate-btn"
+                    onclick="startAllocation()"
+                    disabled>
+                <i class="fas fa-magic" aria-hidden="true"></i> Generate Picklist
+            </button>
+
+        </div>
     </div>
 
-    <div id="resultsSection" class="card" style="display:none">
-        <h2 style="color:#013d3c"><i class="fas fa-check-circle" style="margin-right:8px"></i>Allocation Selesai</h2>
-
-        <div id="statsCards" class="stat-grid"></div>
-
-        <div id="errorsSection" style="display:none;margin-bottom:16px">
-            <h3 style="font-size:.9rem;font-weight:600;color:#dc2626;margin-bottom:8px"><i class="fas fa-exclamation-triangle" style="margin-right:8px"></i>Errors</h3>
-            <div id="errorsList"></div>
+    <!-- Progress Card (hidden by default) -->
+    <div id="progressSection" class="wms-card" style="margin-bottom:20px;display:none">
+        <div class="wms-card-header">
+            <h2><i class="fas fa-spinner fa-spin"></i> Memproses allocation...</h2>
         </div>
-
-        <div id="picksSection" style="margin-bottom:16px">
-            <h3 class="section-title" style="color:#013d3c"><i class="fas fa-list" style="margin-right:8px"></i>Picks</h3>
-            <div id="picksList" style="max-height:400px;overflow-y:auto"></div>
+        <div class="wms-card-body">
+            <div class="alloc-progress-wrap"
+                 role="progressbar"
+                 aria-valuenow="0"
+                 aria-valuemin="0"
+                 aria-valuemax="100"
+                 aria-label="Progres allocation">
+                <div id="progressBar" class="alloc-progress-fill"></div>
+            </div>
+            <p id="progressText" class="alloc-progress-text">Membaca file...</p>
         </div>
+    </div>
 
-        <div id="replenishmentsSection" style="display:none;margin-bottom:16px">
-            <h3 class="section-title" style="color:#f59e0b"><i class="fas fa-exchange-alt" style="margin-right:8px"></i>Replenishments</h3>
-            <div id="replenishmentsList"></div>
+    <!-- Results Card (hidden by default) -->
+    <div id="resultsSection" class="wms-card" style="margin-bottom:20px;display:none">
+        <div class="wms-card-header">
+            <h2><i class="fas fa-check-circle"></i> Allocation Selesai</h2>
         </div>
+        <div class="wms-card-body">
 
-        <div class="btn-row">
-            <a id="downloadBtn" href="#" class="btn-dl"><i class="fas fa-download" style="margin-right:8px"></i>Download Excel</a>
-            <a id="printBtn" href="#" target="_blank" class="btn-print"><i class="fas fa-print" style="margin-right:8px"></i>Print Picklist</a>
-            <button onclick="resetAllocation()" class="btn-reset"><i class="fas fa-redo" style="margin-right:8px"></i>Allocation Lagi</button>
+            <div id="statsCards" class="alloc-stat-grid"></div>
+
+            <div id="errorsSection" style="display:none;margin-bottom:16px">
+                <div class="alloc-section-title" style="color:var(--wms-danger)">
+                    <i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Errors
+                </div>
+                <div id="errorsList" role="alert"></div>
+            </div>
+
+            <div id="picksSection" style="margin-bottom:16px">
+                <div class="alloc-section-title">
+                    <i class="fas fa-list" style="color:var(--wms-primary)" aria-hidden="true"></i> Picks
+                </div>
+                <div id="picksList" class="alloc-picks-scroll"></div>
+            </div>
+
+            <div id="replenishmentsSection" style="display:none;margin-bottom:16px">
+                <div class="alloc-section-title" style="color:var(--wms-warn)">
+                    <i class="fas fa-exchange-alt" aria-hidden="true"></i> Replenishments
+                </div>
+                <div id="replenishmentsList"></div>
+            </div>
+
+            <div class="alloc-actions">
+                <a id="downloadBtn" href="#" class="wms-btn wms-btn-success">
+                    <i class="fas fa-download" aria-hidden="true"></i> Download Excel
+                </a>
+                <a id="printBtn" href="#" target="_blank" class="wms-btn wms-btn-primary">
+                    <i class="fas fa-print" aria-hidden="true"></i> Print Picklist
+                </a>
+                <button onclick="resetAllocation()" class="wms-btn wms-btn-ghost">
+                    <i class="fas fa-redo" aria-hidden="true"></i> Allocation Lagi
+                </button>
+            </div>
+
         </div>
     </div>
 
@@ -260,10 +426,10 @@ session_start();
 let selectedFile = null;
 
 const dz = document.getElementById('dropZone');
-dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
-dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('is-drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('is-drag'));
 dz.addEventListener('drop', e => {
-  e.preventDefault(); dz.classList.remove('drag');
+  e.preventDefault(); dz.classList.remove('is-drag');
   const f = e.dataTransfer.files[0];
   if (f && (f.name.endsWith('.xlsx') || f.name.endsWith('.xls'))) setFile(f);
   else alert('Pilih file .xlsx atau .xls');
@@ -275,7 +441,7 @@ function setFile(file) {
   selectedFile = file;
   document.getElementById('fileName').textContent = file.name;
   document.getElementById('fileSize').textContent = (file.size/1024).toFixed(1) + ' KB';
-  document.getElementById('fileInfo').style.display = 'flex';
+  document.getElementById('fileInfo').classList.add('is-visible');
   dz.classList.add('has-file');
   document.getElementById('importBtn').disabled = false;
 }
@@ -283,10 +449,9 @@ function setFile(file) {
 function clearFile() {
   selectedFile = null;
   document.getElementById('excelFile').value = '';
-  document.getElementById('fileInfo').style.display = 'none';
+  document.getElementById('fileInfo').classList.remove('is-visible');
   dz.classList.remove('has-file');
   document.getElementById('importBtn').disabled = true;
-  document.getElementById('importBtn').style.opacity = '.5';
 }
 
 async function startAllocation() {
@@ -295,37 +460,43 @@ async function startAllocation() {
   document.getElementById('progressSection').style.display = 'block';
   document.getElementById('resultsSection').style.display = 'none';
   document.getElementById('importBtn').disabled = true;
-  document.getElementById('progressBar').style.width = '20%';
+  const progressBar = document.getElementById('progressBar');
+  const progressWrap = progressBar.parentElement;
+  progressBar.style.width = '20%';
+  progressWrap.setAttribute('aria-valuenow', '20');
   document.getElementById('progressText').textContent = 'Mengirim file...';
 
   const fd = new FormData();
   fd.append('excel_file', selectedFile);
 
   try {
-    document.getElementById('progressBar').style.width = '50%';
+    progressBar.style.width = '50%';
+    progressWrap.setAttribute('aria-valuenow', '50');
     document.getElementById('progressText').textContent = 'Memproses allocation...';
 
     const resp = await fetch('api.php', { method: 'POST', body: fd });
     const data = await resp.json();
 
-    document.getElementById('progressBar').style.width = '100%';
+    progressBar.style.width = '100%';
+    progressWrap.setAttribute('aria-valuenow', '100');
     document.getElementById('progressSection').style.display = 'none';
     document.getElementById('resultsSection').style.display = 'block';
 
     if (data.success) {
       const s = data.summary;
       document.getElementById('statsCards').innerHTML = `
-        <div class="stat-card" style="background:#e6f7f7"><div class="num" style="color:#013d3c">${s.total_orders}</div><div class="lbl">Orders</div></div>
-        <div class="stat-card" style="background:#e0f7f7"><div class="num" style="color:#013d3c">${s.total_items}</div><div class="lbl">Items</div></div>
-        <div class="stat-card" style="background:#e6f7f7"><div class="num" style="color:#059669">${s.full_pallet_picks}</div><div class="lbl">Full Pallet</div></div>
-        <div class="stat-card" style="background:#e0f7f7"><div class="num" style="color:#3b82f6">${s.pickface_picks}</div><div class="lbl">Pickface</div></div>
-        <div class="stat-card" style="background:#fef3c7"><div class="num" style="color:#f59e0b">${s.replenishments}</div><div class="lbl">Replenish</div></div>
+        <div class="alloc-stat" style="background:var(--wms-light)"><div class="num" style="color:var(--wms-primary)">${s.total_orders}</div><div class="lbl">Shipments</div></div>
+        <div class="alloc-stat" style="background:var(--wms-lighter)"><div class="num" style="color:var(--wms-primary)">${s.total_deliveries}</div><div class="lbl">Deliveries</div></div>
+        <div class="alloc-stat" style="background:var(--wms-light)"><div class="num" style="color:var(--wms-primary)">${s.total_items}</div><div class="lbl">Items</div></div>
+        <div class="alloc-stat" style="background:var(--wms-lighter)"><div class="num" style="color:var(--wms-success)">${s.full_pallet_picks}</div><div class="lbl">Full Pallet</div></div>
+        <div class="alloc-stat" style="background:var(--wms-light)"><div class="num" style="color:var(--wms-info)">${s.pickface_picks}</div><div class="lbl">Pickface</div></div>
+        <div class="alloc-stat" style="background:#fef9c3"><div class="num" style="color:var(--wms-warn)">${s.replenishments}</div><div class="lbl">Replenish</div></div>
       `;
 
       if (data.errors && data.errors.length > 0) {
         document.getElementById('errorsSection').style.display = 'block';
         document.getElementById('errorsList').innerHTML = data.errors.map(e =>
-          `<div class="error-card"><i class="fas fa-exclamation-circle" style="margin-right:8px"></i>${e}</div>`
+          `<div class="alloc-error"><i class="fas fa-exclamation-circle" aria-hidden="true"></i>${e}</div>`
         ).join('');
       }
 
@@ -335,8 +506,8 @@ async function startAllocation() {
       }
     } else {
       document.getElementById('statsCards').innerHTML = `
-        <div style="grid-column:1/-1;background:#ffebee;border-radius:8px;padding:14px;color:#c62828">
-          <i class="fas fa-exclamation-triangle" style="margin-right:8px"></i>${data.message || 'Allocation gagal'}
+        <div class="alloc-error-grid">
+          <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>${data.message || 'Allocation gagal'}
         </div>
       `;
     }
@@ -350,6 +521,7 @@ function resetAllocation() {
   clearFile();
   document.getElementById('resultsSection').style.display = 'none';
   document.getElementById('progressBar').style.width = '0%';
+  document.getElementById('progressBar').parentElement.setAttribute('aria-valuenow', '0');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 </script>

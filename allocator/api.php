@@ -12,6 +12,12 @@ require_once __DIR__ . '/classes/PicklistGenerator.php';
 
 // Standalone — no auth required
 
+// Suppress HTML error output — we need clean JSON
+error_reporting(E_ERROR | E_PARSE);
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+ob_start();
+
 // Set JSON response header
 header('Content-Type: application/json');
 
@@ -34,7 +40,7 @@ try {
 
     // Step 1: Parse Excel
     $parser = new ExcelParser();
-    if (!$parser->load($file['tmp_name'])) {
+    if (!$parser->load($file['tmp_name'], $file['name'])) {
         throw new Exception('Gagal membaca file: ' . implode(', ', $parser->getErrors()));
     }
 
@@ -47,8 +53,8 @@ try {
     // Step 3: Initialize allocator
     $allocator = new Allocator();
     $allocator->loadProducts($masterSku);
-    $allocator->loadStock($putaway);
-    $allocator->loadWmsLocations($wmsLocations);
+    $allocator->loadWmsLocations($wmsLocations);  // WMS = primary stock source
+    $allocator->loadStock($putaway);              // Putaway fills in batch/expiry details
 
     // Step 4: Run allocation
     $result = $allocator->allocate($schedule);
@@ -88,8 +94,10 @@ try {
     ];
 
     echo json_encode($response);
+    ob_end_flush();
 
 } catch (\Throwable $e) {
+    ob_end_clean();
     http_response_code(500);
     echo json_encode([
         'success' => false,

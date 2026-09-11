@@ -39,11 +39,14 @@ class ExcelParser
 
     /**
      * Load Excel file and parse all sheets
+     * @param string $filePath Path to file (usually a temp path)
+     * @param string|null $originalName Original filename used for extension check
      */
-    public function load(string $filePath): bool
+    public function load(string $filePath, ?string $originalName = null): bool
     {
         try {
-            $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+            $checkName = $originalName ?? $filePath;
+            $ext = strtolower(pathinfo($checkName, PATHINFO_EXTENSION));
             if (!in_array($ext, ['xlsx', 'xls'])) {
                 $this->errors[] = 'Format file harus .xlsx atau .xls';
                 return false;
@@ -100,7 +103,7 @@ class ExcelParser
 
     /**
      * Parse "Schedule of the day" sheet → order lines
-     * Columns: A=Order No, G=Material, I=Delivery quantity, V=UPP (from Master SKU lookup)
+     * Columns: A=Order No, D=Shipment Number, G=Material, I=Delivery quantity
      */
     public function parseSchedule(): array
     {
@@ -119,16 +122,26 @@ class ExcelParser
             }
 
             // Parse data rows
+            $lastNo = '';
             for ($i = $headerIdx + 1; $i < count($rows); $i++) {
                 $row = $rows[$i];
                 $orderNo = trim((string)($row[0] ?? ''));
+                $shipmentNo = trim((string)($row[3] ?? '')); // Column D
+                $destination = trim((string)($row[4] ?? '')); // Column E
+                $shipToLocation = trim((string)($row[5] ?? '')); // Column F
                 $material = trim((string)($row[6] ?? '')); // Column G
                 $qty = (int)($row[8] ?? 0); // Column I
+                $no = trim((string)($row[17] ?? '')); // Column R (NO)
+                if ($no !== '') $lastNo = $no;
 
                 if ($orderNo === '' || $material === '' || $qty <= 0) continue;
 
                 $orders[] = [
                     'order_no' => $orderNo,
+                    'shipment_no' => $shipmentNo,
+                    'no' => $lastNo,
+                    'destination' => $destination,
+                    'ship_to_location' => $shipToLocation,
                     'material' => $material,
                     'quantity' => $qty,
                 ];
@@ -241,7 +254,7 @@ class ExcelParser
 
     /**
      * Parse "WMS" sheet → bin locations with stock
-     * Column H=Location, L=Item Code, AL=UOM, AE=On Hand Qty
+     * Columns: H=Location, I=Batch, K=Expired Date, L=Item Code, AE=On Hand Qty, AL=UOM
      */
     public function parseWmsLocations(): array
     {
@@ -255,10 +268,12 @@ class ExcelParser
             // Parse data rows
             for ($i = $headerIdx + 1; $i < count($rows); $i++) {
                 $row = $rows[$i];
-                $location = trim((string)($row[7] ?? '')); // Column H
-                $itemCode = trim((string)($row[11] ?? '')); // Column L
-                $uom = trim((string)($row[37] ?? '')); // Column AL
-                $onHand = (int)($row[30] ?? 0); // Column AE
+                $location = trim((string)($row[7] ?? '')); // Column H (Lokasi)
+                $batch = trim((string)($row[8] ?? '')); // Column I (Batch)
+                $expiry = $this->parseDate($row[10] ?? null); // Column K (Expired Date)
+                $itemCode = trim((string)($row[11] ?? '')); // Column L (Item)
+                $onHand = (int)($row[13] ?? 0); // Column N (Qty)
+                $uom = trim((string)($row[37] ?? '')); // Column AL (UOM)
 
                 // Validate location format (e.g., CA01A01)
                 if (!preg_match('/^[A-Z]{2}\d+[A-E]\d{2}$/', $location)) continue;
@@ -270,6 +285,8 @@ class ExcelParser
                     'location' => $location,
                     'level' => $level,
                     'item_code' => $itemCode,
+                    'batch_number' => $batch ?: null,
+                    'expiry_date' => $expiry,
                     'uom' => $uom,
                     'on_hand' => $onHand,
                     'is_pickface' => ($level === 'A'),
