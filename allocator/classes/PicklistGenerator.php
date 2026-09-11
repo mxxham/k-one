@@ -45,7 +45,7 @@ class PicklistGenerator
      */
     private function createSummarySheet(array $summary): void
     {
-        $sheet = $this->spreadsheet->createSheet('Summary');
+        $sheet = $this->spreadsheet->createSheet();
         $sheet->setTitle('Summary');
 
         // Headers
@@ -82,7 +82,7 @@ class PicklistGenerator
      */
     private function createPicksSheet(array $picks): void
     {
-        $sheet = $this->spreadsheet->createSheet('Picks');
+        $sheet = $this->spreadsheet->createSheet();
         $sheet->setTitle('Picks');
 
         // Headers
@@ -117,7 +117,7 @@ class PicklistGenerator
      */
     private function createReplenishmentsSheet(array $replenishments): void
     {
-        $sheet = $this->spreadsheet->createSheet('Replenishments');
+        $sheet = $this->spreadsheet->createSheet();
         $sheet->setTitle('Replenishments');
 
         // Headers
@@ -150,7 +150,7 @@ class PicklistGenerator
      */
     private function createErrorsSheet(array $errors): void
     {
-        $sheet = $this->spreadsheet->createSheet('Errors');
+        $sheet = $this->spreadsheet->createSheet();
         $sheet->setTitle('Errors');
 
         // Headers
