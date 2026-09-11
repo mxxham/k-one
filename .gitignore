@@ -16,8 +16,6 @@ api_stdout.log
 debug_api.log
 debug_test2.log
 test_write.log
-server_stderr.log
-server_stdout.log
 
 # Cache & build
 .codegraph/

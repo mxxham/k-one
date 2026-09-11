@@ -247,9 +247,6 @@ class PickfaceSplitter
 
             $taskId = (int)$db->lastInsertId();
 
-            // 6. Enqueue BullMQ job (stub for now)
-            self::_enqueueBullMqJob($taskId, $skuId, $sourceBinId, $pickfaceBinId, (int)round($pickfaceQty));
-
             return $taskId;
         } finally {
             // 7. Release Redis lock
@@ -615,49 +612,6 @@ class PickfaceSplitter
     private static function _releasePickfaceLock(int $pickfaceBinId, int $skuId, \PDO $db): void
     {
         // Lock is released on transaction commit/rollback — no explicit action needed
-    }
-
-    /**
-     * Enqueue a BullMQ job for the replenishment task via the Node.js API.
-     *
-     * @param int      $taskId         The replen_task ID
-     * @param int      $skuId          The product/SKU ID
-     * @param int      $sourceBinId    Source bin location ID
-     * @param int      $pickfaceBinId  Destination pickface bin location ID
-     * @param int      $qty            Quantity to replenish
-     */
-    private static function _enqueueBullMqJob(
-        int $taskId,
-        int $skuId,
-        int $sourceBinId,
-        int $pickfaceBinId,
-        int $qty
-    ): void {
-        $nodeApiUrl = defined('NODE_API_URL') ? NODE_API_URL : 'http://localhost:4000';
-        $url = $nodeApiUrl . '/api/replenishment/enqueue';
-
-        $payload = json_encode([
-            'task_id'           => $taskId,
-            'sku_id'            => $skuId,
-            'source_bin_id'     => $sourceBinId,
-            'destination_bin_id' => $pickfaceBinId,
-            'qty'               => $qty,
-        ], JSON_THROW_ON_ERROR);
-
-        $ctx = stream_context_create([
-            'http' => [
-                'method'  => 'POST',
-                'header'  => "Content-Type: application/json\r\n",
-                'content' => $payload,
-                'timeout' => 5,
-                'ignore_errors' => true,
-            ],
-        ]);
-
-        $result = @file_get_contents($url, false, $ctx);
-        if ($result === false) {
-            error_log("[PickfaceSplitter] Failed to enqueue BullMQ job for task #{$taskId}: HTTP request failed");
-        }
     }
 
     /**

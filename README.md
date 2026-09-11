@@ -150,7 +150,6 @@ K-one is a comprehensive warehouse management system designed for **Shell CKB** 
 |-------------|---------|
 | PHP | 8.2+ (PDO MySQL, GD, Zip, OpenSSL) |
 | MySQL / MariaDB | 5.7+ / 10.3+ |
-| Node.js | 18+ |
 | Composer | Latest |
 
 ### Installation
@@ -189,15 +188,10 @@ npm run build
 
 Then open `http://localhost/k-one` in your browser.
 
-### Default Credentials
+### First Login
 
-> [!WARNING]
-> **Change the default password immediately after first login.**
-> Do not use these credentials in production.
-
-| Username | Password |
-|----------|----------|
-| `admin` | `admin123` |
+> [!NOTE]
+> Create your first administrator account during installation using the seed data or database migration.
 
 ---
 

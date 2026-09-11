@@ -18,7 +18,6 @@ define('JWT_SECRET', Kone\Config\Env::get('JWT_SECRET', 'k-one-dev-secret-change
 define('JWT_EXPIRES_HOURS', Kone\Config\Env::int('JWT_EXPIRES_HOURS', 12));
 define('TIMEZONE', Kone\Config\Env::get('TIMEZONE', 'Asia/Jakarta'));
 define('API_ENV', Kone\Config\Env::get('API_ENV', 'dev'));
-define('NODE_API_URL', Kone\Config\Env::get('NODE_API_URL', 'http://localhost:4000'));
 
 require_once __DIR__ . '/business_rules.php';
 
