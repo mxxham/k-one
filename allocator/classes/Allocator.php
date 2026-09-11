@@ -209,19 +209,13 @@ class Allocator
 
                 // Step 2: Check if replenishment needed for remainder
                 if ($remainder > 0) {
-                    $minStock = self::REPLENISH_MIN[$uomType] ?? 0;
-                    
-                    if ($minStock > 0) {
-                        // Check pickface stock
-                        $pickfaceStock = $this->getPickfaceStock($material);
-                        
-                        if ($pickfaceStock < $minStock) {
-                            // Trigger replenishment (full pallet from bulk to pickface)
-                            $replenishment = $this->triggerReplenishment($material, $upp, $uomType);
-                            if ($replenishment) {
-                                $result['replenishments'][] = $replenishment;
-                                $result['summary']['replenishments']++;
-                            }
+                    $pickfaceStock = $this->getPickfaceStock($material);
+
+                    if ($pickfaceStock < $remainder) {
+                        $replenishment = $this->triggerReplenishment($material, $upp, $uomType);
+                        if ($replenishment) {
+                            $result['replenishments'][] = $replenishment;
+                            $result['summary']['replenishments']++;
                         }
                     }
 
@@ -229,6 +223,11 @@ class Allocator
                     $pickfacePicks = $this->pickFromPickface($material, $remainder, $orderNo);
                     $result['picks'] = array_merge($result['picks'], $pickfacePicks);
                     $result['summary']['pickface_picks'] += count($pickfacePicks);
+
+                    $totalPicked = array_sum(array_column($pickfacePicks, 'quantity'));
+                    if ($totalPicked < $remainder) {
+                        $result['errors'][] = "Order {$orderNo}: {$material} shortfall — needed {$remainder}, only {$totalPicked} picked even after replenishment.";
+                    }
                 }
             }
         }

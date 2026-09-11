@@ -12,6 +12,26 @@ class ExcelParser
     private $sheets = [];
     private $errors = [];
 
+    private const EXPECTED_UPP = [
+        'Drum'     => [4],
+        'Carton'   => [36, 44, 48],
+        'Pail'     => [24],
+        'Fluidbag' => [1],
+        'IBC'      => [1],
+        'EA'       => [4],
+        'Bags'     => [1],
+    ];
+
+    private const DEFAULT_UPP = [
+        'Drum'     => 4,
+        'Carton'   => 44,
+        'Pail'     => 24,
+        'Fluidbag' => 1,
+        'IBC'      => 1,
+        'EA'       => 4,
+        'Bags'     => 1,
+    ];
+
     public function __construct()
     {
         $this->db = db();
@@ -168,28 +188,6 @@ class ExcelParser
      */
     public function parseMasterSku(): array
     {
-        // Expected UPP values per UOM type (from config/business_rules.php)
-        const EXPECTED_UPP = [
-            'Drum'     => [4],
-            'Carton'   => [36, 44, 48],
-            'Pail'     => [24],
-            'Fluidbag' => [1],
-            'IBC'      => [1],
-            'EA'       => [4],
-            'Bags'     => [1],
-        ];
-
-        // Default UPP per UOM type when Excel value is invalid
-        const DEFAULT_UPP = [
-            'Drum'     => 4,
-            'Carton'   => 44,
-            'Pail'     => 24,
-            'Fluidbag' => 1,
-            'IBC'      => 1,
-            'EA'       => 4,
-            'Bags'     => 1,
-        ];
-
         $products = [];
         foreach ($this->sheets as $name => $rows) {
             // Specifically look for "Master SKU" sheet, not just any sheet with "master"
@@ -225,9 +223,9 @@ class ExcelParser
                 };
 
                 // Validate UPP against UOM type — fix mismatches from Excel source data
-                $validUpps = EXPECTED_UPP[$uomType] ?? [];
+                $validUpps = self::EXPECTED_UPP[$uomType] ?? [];
                 if ($upp <= 0 || !in_array($upp, $validUpps, true)) {
-                    $upp = DEFAULT_UPP[$uomType] ?? 4;
+                    $upp = self::DEFAULT_UPP[$uomType] ?? 4;
                 }
 
                 $products[$material] = [
