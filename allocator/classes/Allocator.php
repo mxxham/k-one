@@ -233,6 +233,8 @@ class Allocator
                 }
 
                 // Step 2: Check if replenishment needed for remainder
+                $lineReplenishment = null; // Track replenishment triggered for THIS line
+
                 if ($remainder > 0) {
                     $pickfaceStock = $this->getPickfaceStock($material);
 
@@ -242,11 +244,27 @@ class Allocator
                             $result['replenishments'][] = $replenishment;
                             $result['summary']['replenishments']++;
                             $replenishDest[$material] = $replenishment['to_location'];
+                            $lineReplenishment = $replenishment;
                         }
                     }
 
                     // Step 3: Pick remainder from pickface
                     $pickfacePicks = $this->pickFromPickface($material, $remainder, $orderNo);
+
+                    // Annotate bin-to-bin only for picks served by THIS line's replenishment.
+                    // If the pickface already had enough surplus, no replenishment was
+                    // triggered for this line, so bin_to_bin stays empty.
+                    foreach ($pickfacePicks as &$pick) {
+                        $pick['bin_to_bin'] = '';
+                        if ($lineReplenishment && $pick['location'] === $lineReplenishment['to_location']) {
+                            $sourceLevel = substr($lineReplenishment['from_location'], -2, 1);
+                            if ($sourceLevel !== 'A') {
+                                $pick['bin_to_bin'] = $lineReplenishment['from_location'] . ' → ' . $lineReplenishment['to_location'];
+                            }
+                        }
+                    }
+                    unset($pick);
+
                     $result['picks'] = array_merge($result['picks'], $pickfacePicks);
                     $result['summary']['pickface_picks'] += count($pickfacePicks);
 
@@ -274,28 +292,6 @@ class Allocator
             $pick['no'] = $meta['no'] ?? '';
             $pick['destination'] = $meta['destination'] ?? '';
             $pick['ship_to_location'] = $meta['ship_to_location'] ?? '';
-        }
-        unset($pick);
-
-        // Enrich picks with bin-to-bin replenishment destination
-        // Only applies to pickface picks when item had replenishment (remainder < full pallet)
-        foreach ($result['picks'] as &$pick) {
-            $itemCode = $pick['item_code'] ?? '';
-            $pickLocation = $pick['location'] ?? '';
-            $pick['bin_to_bin'] = '';
-            // Only for pickface picks — full pallets come directly from bulk
-            if (($pick['type'] ?? '') !== 'pickface') continue;
-            // Find replenishment that fills THIS specific pickface location
-            foreach ($result['replenishments'] as $rep) {
-                if ($rep['item_code'] === $itemCode && $rep['to_location'] === $pickLocation) {
-                    // Verify source is bulk (level B+), not another pickface (level A)
-                    $sourceLevel = substr($rep['from_location'], -2, 1);
-                    if ($sourceLevel !== 'A') {
-                        $pick['bin_to_bin'] = $rep['from_location'] . ' → ' . $rep['to_location'];
-                    }
-                    break;
-                }
-            }
         }
         unset($pick);
 
